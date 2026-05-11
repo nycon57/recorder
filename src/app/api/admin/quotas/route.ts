@@ -12,7 +12,7 @@ import { NextRequest } from 'next/server';
 
 import {
   apiHandler,
-  requireAdmin,
+  requireSystemAdmin,
   successResponse,
   errors,
   parseBody,
@@ -25,8 +25,8 @@ import { adminUpdateQuotaSchema } from '@/lib/validations/api';
  * List organizations with quota usage
  */
 export const GET = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  await requireAdmin();
+  // SECURITY: Cross-org quota data — require Tribora staff (system admin)
+  await requireSystemAdmin();
 
   const { searchParams } = new URL(request.url);
   const planTier = searchParams.get('planTier') || null;
@@ -202,8 +202,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * Update organization quota limits
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  await requireAdmin();
+  // SECURITY: Cross-org quota data — require Tribora staff (system admin)
+  await requireSystemAdmin();
 
   const body = await parseBody(request, adminUpdateQuotaSchema);
 
@@ -280,8 +280,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
  * Reset usage counters for an organization
  */
 export const PUT = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  await requireAdmin();
+  // SECURITY: Cross-org quota data — require Tribora staff (system admin)
+  await requireSystemAdmin();
 
   const { orgId, quotaType } = await request.json();
 

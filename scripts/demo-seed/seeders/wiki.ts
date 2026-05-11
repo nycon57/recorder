@@ -17,30 +17,31 @@ const VALID_FROM = '2026-02-01T00:00:00.000Z';
 
 export async function seedWiki(
   client: PoolClient,
-  opts: { dryRun: boolean }
+  opts: { dryRun: boolean },
 ): Promise<void> {
   const now = new Date().toISOString();
   const pages = loadWikiPageFixtures();
 
-  for (const page of pages) {
-    if (opts.dryRun) {
-      console.log(
-        `[dry-run] Would upsert wiki page: ${page.slug} (confidence=${page.confidence}, published=${page.isPublished})`
-      );
-      continue;
-    }
+  await Promise.all(
+    pages.map(async (page) => {
+      if (opts.dryRun) {
+        console.log(
+          `[dry-run] Would upsert wiki page: ${page.slug} (confidence=${page.confidence}, published=${page.isPublished})`,
+        );
+        return;
+      }
 
-    const compilationLog = JSON.stringify([
-      {
-        ...SEED_METADATA,
-        compiled_at: VALID_FROM,
-        source_count: page.sourceRecordingIds.length,
-        is_published: page.isPublished,
-      },
-    ]);
+      const compilationLog = JSON.stringify([
+        {
+          ...SEED_METADATA,
+          compiled_at: VALID_FROM,
+          source_count: page.sourceRecordingIds.length,
+          is_published: page.isPublished,
+        },
+      ]);
 
-    await client.query(
-      `INSERT INTO org_wiki_pages (
+      await client.query(
+        `INSERT INTO org_wiki_pages (
         id, org_id, app, topic, content, confidence, valid_from, valid_until,
         compilation_log, embedding, created_at, updated_at
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::vector,$11,$12)
@@ -54,50 +55,53 @@ export async function seedWiki(
         compilation_log = org_wiki_pages.compilation_log || EXCLUDED.compilation_log,
         embedding      = EXCLUDED.embedding,
         updated_at     = EXCLUDED.updated_at`,
-      [
-        page.id,
-        DEMO_ORG_ID,
-        page.app,
-        page.topic,
-        page.content,
-        page.confidence,
-        VALID_FROM,
-        null,
-        compilationLog,
-        ZERO_VECTOR_1536,
-        VALID_FROM,
-        now,
-      ]
-    );
+        [
+          page.id,
+          DEMO_ORG_ID,
+          page.app,
+          page.topic,
+          page.content,
+          page.confidence,
+          VALID_FROM,
+          null,
+          compilationLog,
+          ZERO_VECTOR_1536,
+          VALID_FROM,
+          now,
+        ],
+      );
 
-    // ── wiki_page_sources ────────────────────────────────────────────────────
+      // ── wiki_page_sources ────────────────────────────────────────────────────
 
-    for (const recSlug of page.sourceRecordingSlugs) {
-      const sourceId = page.sourceRecordingIds[page.sourceRecordingSlugs.indexOf(recSlug)];
-      if (!sourceId) continue;
+      await Promise.all(
+        page.sourceRecordingSlugs.map(async (recSlug, sourceIndex) => {
+          const sourceId = page.sourceRecordingIds[sourceIndex];
+          if (!sourceId) return;
 
-      const wikiSourceId = deriveWikiSourceId(page.slug, recSlug);
+          const wikiSourceId = deriveWikiSourceId(page.slug, recSlug);
 
-      await client.query(
-        `INSERT INTO wiki_page_sources (id, page_id, source_type, source_id, contributed_at, contribution_summary)
+          await client.query(
+            `INSERT INTO wiki_page_sources (id, page_id, source_type, source_id, contributed_at, contribution_summary)
          VALUES ($1,$2,$3,$4,$5,$6)
          ON CONFLICT (id) DO UPDATE SET
            source_type          = EXCLUDED.source_type,
            contributed_at       = EXCLUDED.contributed_at,
            contribution_summary = EXCLUDED.contribution_summary`,
-        [
-          wikiSourceId,
-          page.id,
-          'recording',
-          sourceId,
-          VALID_FROM,
-          `Source recording contributing to: ${page.topic}`,
-        ]
+            [
+              wikiSourceId,
+              page.id,
+              'recording',
+              sourceId,
+              VALID_FROM,
+              `Source recording contributing to: ${page.topic}`,
+            ],
+          );
+        }),
       );
-    }
 
-    console.log(
-      `[seed] wiki page upserted: ${page.slug} (confidence=${page.confidence}, sources=${page.sourceRecordingSlugs.length})`
-    );
-  }
+      console.log(
+        `[seed] wiki page upserted: ${page.slug} (confidence=${page.confidence}, sources=${page.sourceRecordingSlugs.length})`,
+      );
+    }),
+  );
 }

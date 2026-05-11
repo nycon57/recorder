@@ -4,7 +4,6 @@ import * as React from 'react';
 import { toast } from 'sonner';
 
 import { editRecordingFormSchema } from '@/lib/validations/api';
-
 import { FormDialog } from '@/app/components/ui/form-dialog';
 import {
   FormControl,
@@ -35,29 +34,41 @@ interface EditRecordingModalProps {
   onRecordingUpdated?: () => void;
 }
 
-export default function EditRecordingModal({
+const EMPTY_TAGS: Tag[] = [];
+
+export default function EditRecordingModal(props: EditRecordingModalProps) {
+  const tagKey = props.initialTags?.map((tag) => tag.id).join(',') ?? '';
+
+  return (
+    <EditRecordingModalContent
+      key={`${props.recording.id}:${tagKey}`}
+      {...props}
+    />
+  );
+}
+
+function EditRecordingModalContent({
   open,
   onOpenChange,
   recording,
-  initialTags = [],
+  initialTags = EMPTY_TAGS,
   onTagsChange,
   onRecordingUpdated,
 }: EditRecordingModalProps) {
-  const [tags, setTags] = React.useState<Tag[]>(initialTags);
-
-  // Update tags when initialTags changes
-  React.useEffect(() => {
-    setTags(initialTags);
-  }, [initialTags]);
+  const [tagDraft, setTagDraft] = React.useState<Tag[] | null>(null);
+  const tags = tagDraft ?? initialTags;
 
   const handleTagsChange = (newTags: Tag[]) => {
-    setTags(newTags);
+    setTagDraft(newTags);
     if (onTagsChange) {
       onTagsChange(newTags);
     }
   };
 
-  const handleSubmit = async (data: { title: string; description?: string }) => {
+  const handleSubmit = async (data: {
+    title: string;
+    description?: string;
+  }) => {
     const response = await fetch(`/api/recordings/${recording.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -88,7 +99,7 @@ export default function EditRecordingModal({
   };
 
   const handleCleanup = () => {
-    setTags(initialTags);
+    setTagDraft(null);
   };
 
   return (

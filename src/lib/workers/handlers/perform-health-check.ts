@@ -19,24 +19,19 @@ export async function handlePerformHealthCheck(job: Job): Promise<void> {
   logger.info('Starting health check', { context: { jobId: job.id } });
 
   try {
-    // Check database health
-    const dbHealth = await checkDatabaseHealth(supabase);
-
-    // Check storage health
-    const storageHealth = await checkStorageHealth(supabase);
-
-    // Check API health
-    const apiHealth = await checkAPIHealth();
-
-    // Check jobs health
-    const jobsHealth = await checkJobsHealth(supabase);
+    const [dbHealth, storageHealth, apiHealth, jobsHealth] = await Promise.all([
+      checkDatabaseHealth(supabase),
+      checkStorageHealth(supabase),
+      checkAPIHealth(),
+      checkJobsHealth(supabase),
+    ]);
 
     // Calculate overall score (weighted average)
     const overallScore = Math.round(
-      (dbHealth.score * 0.3 +
+      dbHealth.score * 0.3 +
         storageHealth.score * 0.2 +
         apiHealth.score * 0.2 +
-        jobsHealth.score * 0.3)
+        jobsHealth.score * 0.3,
     );
 
     logger.info('Health check completed', {
@@ -89,16 +84,21 @@ interface HealthCheckResult {
 }
 
 async function checkDatabaseHealth(
-  supabase: ReturnType<typeof createAdminClient>
+  supabase: ReturnType<typeof createAdminClient>,
 ): Promise<HealthCheckResult> {
   const start = Date.now();
 
   try {
     // Simple query to test database connectivity
-    const { error } = await supabase.from('organizations').select('id').limit(1);
+    const { error } = await supabase
+      .from('organizations')
+      .select('id')
+      .limit(1);
 
     if (error) {
-      logger.error('Database health check failed', { error: new Error(error.message) });
+      logger.error('Database health check failed', {
+        error: new Error(error.message),
+      });
       return { score: 0, latency: 0 };
     }
 
@@ -122,16 +122,20 @@ async function checkDatabaseHealth(
 }
 
 async function checkStorageHealth(
-  supabase: ReturnType<typeof createAdminClient>
+  supabase: ReturnType<typeof createAdminClient>,
 ): Promise<HealthCheckResult> {
   const start = Date.now();
 
   try {
     // Try to list files in storage
-    const { data, error } = await supabase.storage.from('content').list('', { limit: 1 });
+    const { data, error } = await supabase.storage
+      .from('content')
+      .list('', { limit: 1 });
 
     if (error) {
-      logger.error('Storage health check failed', { error: new Error(error.message) });
+      logger.error('Storage health check failed', {
+        error: new Error(error.message),
+      });
       return { score: 0, latency: 0 };
     }
 
@@ -188,7 +192,9 @@ async function checkAPIHealth(): Promise<HealthCheckResult> {
 
     const throughput = responseTime > 0 ? 1000 / responseTime : 0; // requests per second
 
-    logger.debug('API health check', { data: { score, responseTime, throughput } });
+    logger.debug('API health check', {
+      data: { score, responseTime, throughput },
+    });
 
     return { score, responseTime, throughput };
   } catch (error) {
@@ -198,7 +204,7 @@ async function checkAPIHealth(): Promise<HealthCheckResult> {
 }
 
 async function checkJobsHealth(
-  supabase: ReturnType<typeof createAdminClient>
+  supabase: ReturnType<typeof createAdminClient>,
 ): Promise<HealthCheckResult> {
   try {
     // Check recent job completion rate (last hour)
@@ -216,23 +222,23 @@ async function checkJobsHealth(
       return { score: 100, avgProcessingTime: 0 };
     }
 
-    const completedJobs = recentJobs.filter(j => j.status === 'completed');
-    const failedJobs = recentJobs.filter(j => j.status === 'failed');
+    const completedJobs = recentJobs.filter((j) => j.status === 'completed');
+    const failedJobs = recentJobs.filter((j) => j.status === 'failed');
 
     const successRate = (completedJobs.length / recentJobs.length) * 100;
 
     // Calculate average processing time for completed jobs
-    const processingTimes = completedJobs
-      .filter(j => j.completed_at)
-      .map(j => {
-        const created = new Date(j.created_at).getTime();
-        const completed = new Date(j.completed_at!).getTime();
-        return (completed - created) / 1000; // seconds
-      });
+    const processingTimes = completedJobs.flatMap((j) => {
+      if (!j.completed_at) return [];
+      const created = new Date(j.created_at).getTime();
+      const completed = new Date(j.completed_at!).getTime();
+      return [(completed - created) / 1000]; // seconds
+    });
 
     const avgProcessingTime =
       processingTimes.length > 0
-        ? processingTimes.reduce((sum, t) => sum + t, 0) / processingTimes.length
+        ? processingTimes.reduce((sum, t) => sum + t, 0) /
+          processingTimes.length
         : 0;
 
     // Score based on success rate and processing time
@@ -279,7 +285,7 @@ interface HealthLogData {
 
 async function insertHealthLog(
   supabase: ReturnType<typeof createAdminClient>,
-  data: HealthLogData
+  data: HealthLogData,
 ): Promise<void> {
   try {
     const { error } = await supabase.from('system_health_log' as any).insert({

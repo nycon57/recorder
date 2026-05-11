@@ -1,10 +1,19 @@
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Terms of Service | Tribora',
+  description: 'Terms that govern your use of Tribora.',
+};
+
+const LAST_UPDATED = 'May 10, 2026';
+
 export default function TermsPage() {
   return (
     <div className="container px-4 py-16 mx-auto max-w-4xl">
-      <h1 className="text-4xl font-bold mb-8">Terms of Service</h1>
+      <h1 className="text-4xl font-semibold mb-8">Terms of Service</h1>
       <div className="prose prose-gray dark:prose-invert max-w-none">
         <p className="text-muted-foreground mb-8">
-          Last updated: {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+          Last updated: {LAST_UPDATED}
         </p>
 
         <section className="mb-8">

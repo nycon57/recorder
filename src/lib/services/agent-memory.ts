@@ -109,7 +109,7 @@ export async function recallMemory(params: {
  * Semantic search for memories using embedding similarity.
  * Uses cosine distance via match_agent_memories RPC.
  */
-export async function searchMemory(params: {
+async function searchMemory(params: {
   orgId: string;
   agentType: string;
   query: string;
@@ -145,7 +145,7 @@ export async function searchMemory(params: {
 /**
  * Delete a memory entry by key.
  */
-export async function deleteMemory(params: {
+async function deleteMemory(params: {
   orgId: string;
   agentType: string;
   key: string;
@@ -168,7 +168,7 @@ export async function deleteMemory(params: {
  * Delete memories where expires_at is in the past.
  * Returns the count of deleted rows.
  */
-export async function pruneExpiredMemories(orgId: string): Promise<number> {
+async function pruneExpiredMemories(orgId: string): Promise<number> {
   const { data, error } = await supabaseAdmin
     .from('agent_memory')
     .delete()
@@ -187,7 +187,7 @@ export async function pruneExpiredMemories(orgId: string): Promise<number> {
  * List agent memories with pagination.
  * Ordered by importance DESC then updated_at DESC.
  */
-export async function getAgentMemories(params: {
+async function getAgentMemories(params: {
   orgId: string;
   agentType: string;
   limit?: number;

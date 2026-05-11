@@ -85,27 +85,30 @@ export function FeatureProblem({ data }: FeatureProblemProps) {
             {data.painPoints.map((point, index) => {
               return (
                 <motion.div
-                  key={index}
+                  key={JSON.stringify(point)}
                   variants={itemVariants}
                   className={cn(
                     'relative p-6 sm:p-8 rounded-2xl',
                     'bg-card/30 backdrop-blur-sm',
                     'border border-red-500/10 hover:border-red-500/20',
                     'transition-all duration-300',
-                    'group'
+                    'group',
                   )}
                 >
                   {/* Icon */}
                   <div
                     className={cn(
-                      'w-12 h-12 rounded-xl mb-4',
+                      'size-12 rounded-xl mb-4',
                       'bg-red-500/10',
                       'flex items-center justify-center',
                       'transition-all duration-300',
-                      'group-hover:bg-red-500/15 group-hover:scale-110'
+                      'group-hover:bg-red-500/15 group-hover:scale-110',
                     )}
                   >
-                    <FeatureIcon name={point.icon} className="h-6 w-6 text-red-400" />
+                    <FeatureIcon
+                      name={point.icon}
+                      className="size-6 text-red-400"
+                    />
                   </div>
 
                   {/* Title */}
@@ -129,10 +132,10 @@ export function FeatureProblem({ data }: FeatureProblemProps) {
               className={cn(
                 'relative max-w-3xl mx-auto p-8 sm:p-10 rounded-2xl',
                 'bg-card/50 backdrop-blur-sm',
-                'border border-border/50'
+                'border border-border/50',
               )}
             >
-              <Quote className="absolute top-4 left-4 h-8 w-8 text-red-400/30" />
+              <Quote className="absolute top-4 left-4 size-8 text-red-400/30" />
 
               <blockquote className="text-center">
                 <p className="text-xl sm:text-2xl text-foreground/90 font-light italic mb-4">
@@ -145,7 +148,7 @@ export function FeatureProblem({ data }: FeatureProblemProps) {
                 </footer>
               </blockquote>
 
-              <Quote className="absolute bottom-4 right-4 h-8 w-8 text-red-400/30 rotate-180" />
+              <Quote className="absolute bottom-4 right-4 size-8 text-red-400/30 rotate-180" />
             </motion.div>
           )}
         </motion.div>

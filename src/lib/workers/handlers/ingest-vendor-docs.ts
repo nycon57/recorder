@@ -21,7 +21,11 @@
 import { createHash } from 'crypto';
 
 import * as cheerio from 'cheerio';
-import type { AnyNode, Element as DomElement, Text as DomText } from 'domhandler';
+import type {
+  AnyNode,
+  Element as DomElement,
+  Text as DomText,
+} from 'domhandler';
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { withAgentLogging } from '@/lib/services/agent-logger';
@@ -210,7 +214,7 @@ async function fetchRobotsTxt(baseUrl: string): Promise<RobotsRules> {
 
 function isAllowedByRobots(pathname: string, rules: RobotsRules): boolean {
   return !rules.disallowedPaths.some((disallowed) =>
-    pathname.startsWith(disallowed)
+    pathname.startsWith(disallowed),
   );
 }
 
@@ -257,7 +261,9 @@ function buildSourceAcquisitionPlan(
 ): SourceAcquisitionPlan {
   const syncBlockReason = getVendorSourceSyncBlockReason(source);
   if (syncBlockReason) {
-    throw new Error(`Vendor source ${source.id} cannot be ingested: ${syncBlockReason}`);
+    throw new Error(
+      `Vendor source ${source.id} cannot be ingested: ${syncBlockReason}`,
+    );
   }
 
   const seed = new URL(source.source_url);
@@ -312,7 +318,10 @@ function deriveScreen(urlPath: string): string {
   const cleaned = urlPath
     .replace(/^\/+/, '')
     .replace(/\/+$/, '')
-    .replace(/^(docs|documentation|help|guide|guides|api|reference|manual)\/?/i, '')
+    .replace(
+      /^(docs|documentation|help|guide|guides|api|reference|manual)\/?/i,
+      '',
+    )
     .replace(/\.(html?|md|mdx)$/i, '');
 
   if (!cleaned) return 'index';
@@ -331,7 +340,10 @@ function deriveScreen(urlPath: string): string {
 // HTML -> Markdown conversion
 // ---------------------------------------------------------------------------
 
-function htmlToMarkdown($: cheerio.CheerioAPI, $el: cheerio.Cheerio<AnyNode>): string {
+function htmlToMarkdown(
+  $: cheerio.CheerioAPI,
+  $el: cheerio.Cheerio<AnyNode>,
+): string {
   const lines: string[] = [];
 
   function processNode(node: AnyNode): void {
@@ -341,7 +353,8 @@ function htmlToMarkdown($: cheerio.CheerioAPI, $el: cheerio.Cheerio<AnyNode>): s
       return;
     }
 
-    if (node.type !== 'tag' && node.type !== 'script' && node.type !== 'style') return;
+    if (node.type !== 'tag' && node.type !== 'script' && node.type !== 'style')
+      return;
 
     const el = node as DomElement;
     const tagName = el.name?.toLowerCase();
@@ -487,7 +500,7 @@ function extractElementSelectors($: cheerio.CheerioAPI): string[] {
 
     // Match CSS selector patterns: .class, #id, [data-attr], element.class
     const selectorPatterns = text.match(
-      /(?:^|\s)((?:[.#][a-zA-Z][\w-]*|(?:\[[\w-]+(?:=[^\]]+)?\]))+(?:\s+[>+~]\s+(?:[.#]?[a-zA-Z][\w-]*|\[[\w-]+(?:=[^\]]+)?\]))*)/g
+      /(?:^|\s)((?:[.#][a-zA-Z][\w-]*|(?:\[[\w-]+(?:=[^\]]+)?\]))+(?:\s+[>+~]\s+(?:[.#]?[a-zA-Z][\w-]*|\[[\w-]+(?:=[^\]]+)?\]))*)/g,
     );
     if (selectorPatterns) {
       for (const sel of selectorPatterns) {
@@ -500,7 +513,9 @@ function extractElementSelectors($: cheerio.CheerioAPI): string[] {
     }
 
     // Match data-testid or data-cy attributes (common in modern docs)
-    const dataAttrs = text.match(/data-(?:testid|cy|test|qa)=["']([^"']+)["']/g);
+    const dataAttrs = text.match(
+      /data-(?:testid|cy|test|qa)=["']([^"']+)["']/g,
+    );
     if (dataAttrs) {
       for (const attr of dataAttrs) {
         const match = attr.match(/data-(?:testid|cy|test|qa)=["']([^"']+)["']/);
@@ -566,7 +581,7 @@ async function crawlSite(
   maxPages: number,
   robotsRules: RobotsRules,
   scope: CrawlScope,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<CrawlSiteResult> {
   const parsed = new URL(seedUrl);
   const baseOrigin = parsed.origin;
@@ -574,17 +589,23 @@ async function crawlSite(
 
   const visited = new Set<string>();
   const queue: string[] = [seedUrl];
+  const queued = new Set(queue);
   const pages: CrawledPage[] = [];
   let incompleteReason: string | null = null;
 
-  while (queue.length > 0 && pages.length < maxPages) {
-    const url = queue.shift()!;
+  const crawlNext = async (): Promise<void> => {
+    if (queue.length === 0 || pages.length >= maxPages) {
+      return;
+    }
 
-    if (visited.has(url)) continue;
+    const url = queue.shift()!;
+    queued.delete(url);
+
+    if (visited.has(url)) return crawlNext();
     visited.add(url);
     if (!isWithinCrawlScope(url, scope)) {
       logger.debug('Skipping out-of-scope URL', { context: { url } });
-      continue;
+      return crawlNext();
     }
 
     // Check robots.txt
@@ -592,7 +613,7 @@ async function crawlSite(
     if (!isAllowedByRobots(urlPath, robotsRules)) {
       logger.debug('Skipping disallowed URL', { context: { url } });
       incompleteReason ??= `Robots.txt disallowed ${url}`;
-      continue;
+      return crawlNext();
     }
 
     // Report progress
@@ -600,7 +621,7 @@ async function crawlSite(
       const percent = Math.round((pages.length / maxPages) * 80) + 5;
       progressCallback(
         percent,
-        `Crawling page ${pages.length + 1}/${maxPages}: ${url}`
+        `Crawling page ${pages.length + 1}/${maxPages}: ${url}`,
       );
     }
 
@@ -620,13 +641,16 @@ async function crawlSite(
           context: { url, status: response.status },
         });
         incompleteReason ??= `Fetch failed for ${url} with status ${response.status}`;
-        continue;
+        return crawlNext();
       }
 
       const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('text/html') && !contentType.includes('xhtml')) {
+      if (
+        contentType.search('text/html') === -1 &&
+        contentType.search('xhtml') === -1
+      ) {
         incompleteReason ??= `Skipped non-HTML response for ${url}`;
-        continue;
+        return crawlNext();
       }
 
       html = await response.text();
@@ -635,7 +659,7 @@ async function crawlSite(
         error instanceof Error
           ? `Fetch failed for ${url}: ${error.message}`
           : `Fetch failed for ${url}`;
-      continue;
+      return crawlNext();
     }
 
     // Parse the page content
@@ -649,7 +673,8 @@ async function crawlSite(
     // Extract and enqueue links
     const links = extractLinks(html, url, baseOrigin, scope);
     for (const link of links) {
-      if (!visited.has(link) && !queue.includes(link)) {
+      if (!visited.has(link) && !queued.has(link)) {
+        queued.add(link);
         queue.push(link);
       }
     }
@@ -658,7 +683,11 @@ async function crawlSite(
     if (queue.length > 0 && pages.length < maxPages) {
       await sleep(crawlDelay);
     }
-  }
+
+    return crawlNext();
+  };
+
+  await crawlNext();
 
   if (queue.length > 0 && pages.length >= maxPages) {
     incompleteReason ??= `Crawl reached maxPages=${maxPages} with ${queue.length} queued URLs remaining`;
@@ -678,7 +707,7 @@ async function crawlSite(
 function parseFetchedPage(
   html: string,
   url: string,
-  app: string
+  app: string,
 ): CrawledPage | null {
   try {
     const $ = cheerio.load(html);
@@ -764,7 +793,7 @@ async function upsertPages(
     jobId?: string | null;
     crawlComplete?: boolean;
   },
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<PageWriteManifest> {
   const supabase = createAdminClient();
   let inserted = 0;
@@ -776,56 +805,120 @@ async function upsertPages(
   const seenSourceUrls = new Set(pages.map((page) => page.url));
   const now = () => new Date().toISOString();
 
-  for (let i = 0; i < pages.length; i++) {
-    const page = pages[i];
+  await Promise.all(
+    pages.map(async (page, i) => {
+      if (progressCallback) {
+        const percent = 85 + Math.round((i / pages.length) * 14);
+        progressCallback(
+          percent,
+          `Saving page ${i + 1}/${pages.length}: ${page.screen}`,
+        );
+      }
 
-    if (progressCallback) {
-      const percent = 85 + Math.round((i / pages.length) * 14);
-      progressCallback(percent, `Saving page ${i + 1}/${pages.length}: ${page.screen}`);
-    }
+      // Source-scoped identity first. Legacy app+screen lookup is retained only
+      // for old non-source jobs, which are now rejected before execution.
+      type VendorRow = Database['public']['Tables']['vendor_wiki_pages']['Row'];
+      let existingQuery = supabase.from('vendor_wiki_pages').select('*');
+      if (options?.vendorSourceId) {
+        existingQuery = existingQuery
+          .eq('vendor_source_id', options.vendorSourceId)
+          .eq('source_url', page.url);
+      } else {
+        existingQuery = existingQuery.eq('app', app).eq('screen', page.screen);
+      }
+      const { data: existing } = (await existingQuery.maybeSingle()) as {
+        data: VendorRow | null;
+      };
 
-    // Source-scoped identity first. Legacy app+screen lookup is retained only
-    // for old non-source jobs, which are now rejected before execution.
-    type VendorRow = Database['public']['Tables']['vendor_wiki_pages']['Row'];
-    let existingQuery = supabase.from('vendor_wiki_pages').select('*');
-    if (options?.vendorSourceId) {
-      existingQuery = existingQuery
-        .eq('vendor_source_id', options.vendorSourceId)
-        .eq('source_url', page.url);
-    } else {
-      existingQuery = existingQuery.eq('app', app).eq('screen', page.screen);
-    }
-    const { data: existing } = await existingQuery.maybeSingle() as {
-      data: VendorRow | null;
-    };
+      if (existing) {
+        // Skip only when both the page content and the registry mapping already match.
+        if (
+          shouldSkipVendorWikiPageUpdate({
+            existingContentHash: existing.content_hash,
+            nextContentHash: page.contentHash,
+            existingVendorSourceId: existing.vendor_source_id,
+            nextVendorSourceId: options?.vendorSourceId,
+          })
+        ) {
+          const { error: provenanceError } = await (
+            supabase
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              .from('vendor_wiki_pages') as any
+          )
+            .update({
+              source_url: page.url,
+              vendor_source_id:
+                options?.vendorSourceId ?? existing.vendor_source_id,
+              curated_by: options?.triggeredByUserId ?? null,
+              ingest_job_id: options?.jobId ?? null,
+              last_seen_at: now(),
+              retired_at: null,
+              retired_by: null,
+              retirement_reason: null,
+              updated_at: now(),
+            })
+            .eq('id', existing.id);
 
-    if (existing) {
-      // Skip only when both the page content and the registry mapping already match.
-      if (
-        shouldSkipVendorWikiPageUpdate({
-          existingContentHash: existing.content_hash,
-          nextContentHash: page.contentHash,
-          existingVendorSourceId: existing.vendor_source_id,
-          nextVendorSourceId: options?.vendorSourceId,
-        })
-      ) {
-        const { error: provenanceError } = await (supabase
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .from('vendor_wiki_pages') as any)
+          if (provenanceError) {
+            failed++;
+            outcomes.push({
+              sourceUrl: page.url,
+              screen: page.screen,
+              contentHash: page.contentHash,
+              status: 'failed',
+              pageId: existing.id,
+              error: provenanceError.message,
+            });
+            logger.error(
+              'Failed to refresh unchanged vendor wiki page provenance',
+              {
+                context: { app, screen: page.screen },
+                error: provenanceError,
+              },
+            );
+            return;
+          }
+
+          skipped++;
+          outcomes.push({
+            sourceUrl: page.url,
+            screen: page.screen,
+            contentHash: page.contentHash,
+            status: 'unchanged',
+            pageId: existing.id,
+          });
+          logger.debug('Skipping unchanged page', {
+            context: { app, screen: page.screen },
+          });
+          return;
+        }
+
+        // Update changed page (type assertion needed — Supabase JS PostgREST
+        // builder resolves vendor_wiki_pages to `never` due to missing
+        // Relationships metadata in the generated types)
+        const { error } = await (
+          supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .from('vendor_wiki_pages') as any
+        )
           .update({
+            content: page.markdownContent,
+            element_selectors: page.elementSelectors,
             source_url: page.url,
-            vendor_source_id: options?.vendorSourceId ?? existing.vendor_source_id,
+            content_hash: page.contentHash,
+            vendor_source_id:
+              options?.vendorSourceId ?? existing.vendor_source_id,
+            last_seen_at: now(),
+            updated_at: now(),
             curated_by: options?.triggeredByUserId ?? null,
             ingest_job_id: options?.jobId ?? null,
-            last_seen_at: now(),
             retired_at: null,
             retired_by: null,
             retirement_reason: null,
-            updated_at: now(),
           })
           .eq('id', existing.id);
 
-        if (provenanceError) {
+        if (error) {
           failed++;
           outcomes.push({
             sourceUrl: page.url,
@@ -833,130 +926,82 @@ async function upsertPages(
             contentHash: page.contentHash,
             status: 'failed',
             pageId: existing.id,
-            error: provenanceError.message,
+            error: error.message,
           });
-          logger.error('Failed to refresh unchanged vendor wiki page provenance', {
+          logger.error('Failed to update vendor wiki page', {
             context: { app, screen: page.screen },
-            error: provenanceError,
+            error,
           });
-          continue;
+        } else {
+          updated++;
+          outcomes.push({
+            sourceUrl: page.url,
+            screen: page.screen,
+            contentHash: page.contentHash,
+            status: 'updated',
+            pageId: existing.id,
+          });
         }
-
-        skipped++;
-        outcomes.push({
-          sourceUrl: page.url,
-          screen: page.screen,
-          contentHash: page.contentHash,
-          status: 'unchanged',
-          pageId: existing.id,
-        });
-        logger.debug('Skipping unchanged page', {
-          context: { app, screen: page.screen },
-        });
-        continue;
-      }
-
-      // Update changed page (type assertion needed — Supabase JS PostgREST
-      // builder resolves vendor_wiki_pages to `never` due to missing
-      // Relationships metadata in the generated types)
-      const { error } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_wiki_pages') as any)
-        .update({
-          content: page.markdownContent,
-          element_selectors: page.elementSelectors,
-          source_url: page.url,
-          content_hash: page.contentHash,
-          vendor_source_id: options?.vendorSourceId ?? existing.vendor_source_id,
-          last_seen_at: now(),
-          updated_at: now(),
-          curated_by: options?.triggeredByUserId ?? null,
-          ingest_job_id: options?.jobId ?? null,
-          retired_at: null,
-          retired_by: null,
-          retirement_reason: null,
-        })
-        .eq('id', existing.id);
-
-      if (error) {
-        failed++;
-        outcomes.push({
-          sourceUrl: page.url,
-          screen: page.screen,
-          contentHash: page.contentHash,
-          status: 'failed',
-          pageId: existing.id,
-          error: error.message,
-        });
-        logger.error('Failed to update vendor wiki page', {
-          context: { app, screen: page.screen },
-          error,
-        });
       } else {
-        updated++;
-        outcomes.push({
-          sourceUrl: page.url,
-          screen: page.screen,
-          contentHash: page.contentHash,
-          status: 'updated',
-          pageId: existing.id,
-        });
-      }
-    } else {
-      // Insert new page
-      const { data: insertedRow, error } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_wiki_pages') as any)
-        .insert({
-          app,
-          screen: page.screen,
-          content: page.markdownContent,
-          element_selectors: page.elementSelectors,
-          source_url: page.url,
-          content_hash: page.contentHash,
-          vendor_source_id: options?.vendorSourceId ?? null,
-          curated_by: options?.triggeredByUserId ?? null,
-          ingest_job_id: options?.jobId ?? null,
-          last_seen_at: now(),
-          retired_at: null,
-          retired_by: null,
-          retirement_reason: null,
-        })
-        .select('id')
-        .single();
+        // Insert new page
+        const { data: insertedRow, error } = await (
+          supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .from('vendor_wiki_pages') as any
+        )
+          .insert({
+            app,
+            screen: page.screen,
+            content: page.markdownContent,
+            element_selectors: page.elementSelectors,
+            source_url: page.url,
+            content_hash: page.contentHash,
+            vendor_source_id: options?.vendorSourceId ?? null,
+            curated_by: options?.triggeredByUserId ?? null,
+            ingest_job_id: options?.jobId ?? null,
+            last_seen_at: now(),
+            retired_at: null,
+            retired_by: null,
+            retirement_reason: null,
+          })
+          .select('id')
+          .single();
 
-      if (error) {
-        failed++;
-        outcomes.push({
-          sourceUrl: page.url,
-          screen: page.screen,
-          contentHash: page.contentHash,
-          status: 'failed',
-          pageId: null,
-          error: error.message,
-        });
-        logger.error('Failed to insert vendor wiki page', {
-          context: { app, screen: page.screen },
-          error,
-        });
-      } else {
-        inserted++;
-        outcomes.push({
-          sourceUrl: page.url,
-          screen: page.screen,
-          contentHash: page.contentHash,
-          status: 'inserted',
-          pageId: insertedRow?.id ?? null,
-        });
+        if (error) {
+          failed++;
+          outcomes.push({
+            sourceUrl: page.url,
+            screen: page.screen,
+            contentHash: page.contentHash,
+            status: 'failed',
+            pageId: null,
+            error: error.message,
+          });
+          logger.error('Failed to insert vendor wiki page', {
+            context: { app, screen: page.screen },
+            error,
+          });
+        } else {
+          inserted++;
+          outcomes.push({
+            sourceUrl: page.url,
+            screen: page.screen,
+            contentHash: page.contentHash,
+            status: 'inserted',
+            pageId: insertedRow?.id ?? null,
+          });
+        }
       }
-    }
-  }
+    }),
+  );
 
   if (options?.vendorSourceId && options.crawlComplete) {
     const retiredAt = now();
-    const { data: stalePages, error: stalePagesError } = await (supabase
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .from('vendor_wiki_pages') as any)
+    const { data: stalePages, error: stalePagesError } = await (
+      supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .from('vendor_wiki_pages') as any
+    )
       .select('id, screen, source_url, content_hash')
       .eq('vendor_source_id', options.vendorSourceId)
       .is('retired_at', null);
@@ -972,46 +1017,58 @@ async function upsertPages(
         error: stalePagesError.message,
       });
     } else {
-      for (const stalePage of stalePages ?? []) {
-        const sourceUrl =
-          typeof stalePage.source_url === 'string' ? stalePage.source_url : '';
-        if (!sourceUrl || seenSourceUrls.has(sourceUrl)) {
-          continue;
-        }
+      await Promise.all(
+        (stalePages ?? []).map(async (stalePage: {
+          id?: string | null;
+          source_url?: unknown;
+          screen?: string | null;
+          content_hash?: string | null;
+        }) => {
+          const sourceUrl =
+            typeof stalePage.source_url === 'string'
+              ? stalePage.source_url
+              : '';
+          if (!sourceUrl || seenSourceUrls.has(sourceUrl)) {
+            return;
+          }
 
-        const { error: retireError } = await (supabase
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .from('vendor_wiki_pages') as any)
-          .update({
-            retired_at: retiredAt,
-            retired_by: options.triggeredByUserId ?? null,
-            retirement_reason: 'Missing from latest complete vendor source sync',
-            updated_at: retiredAt,
-          })
-          .eq('id', stalePage.id);
+          const { error: retireError } = await (
+            supabase
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              .from('vendor_wiki_pages') as any
+          )
+            .update({
+              retired_at: retiredAt,
+              retired_by: options.triggeredByUserId ?? null,
+              retirement_reason:
+                'Missing from latest complete vendor source sync',
+              updated_at: retiredAt,
+            })
+            .eq('id', stalePage.id);
 
-        if (retireError) {
-          failed++;
+          if (retireError) {
+            failed++;
+            outcomes.push({
+              sourceUrl,
+              screen: stalePage.screen ?? '',
+              contentHash: stalePage.content_hash ?? '',
+              status: 'failed',
+              pageId: stalePage.id ?? null,
+              error: retireError.message,
+            });
+            return;
+          }
+
+          retired++;
           outcomes.push({
             sourceUrl,
             screen: stalePage.screen ?? '',
             contentHash: stalePage.content_hash ?? '',
-            status: 'failed',
+            status: 'retired',
             pageId: stalePage.id ?? null,
-            error: retireError.message,
           });
-          continue;
-        }
-
-        retired++;
-        outcomes.push({
-          sourceUrl,
-          screen: stalePage.screen ?? '',
-          contentHash: stalePage.content_hash ?? '',
-          status: 'retired',
-          pageId: stalePage.id ?? null,
-        });
-      }
+        }),
+      );
     }
   }
 
@@ -1029,7 +1086,9 @@ async function recordVendorIngestJobResult(
     .eq('id', jobId);
 
   if (error) {
-    throw new Error(`Failed to record vendor ingest manifest: ${error.message}`);
+    throw new Error(
+      `Failed to record vendor ingest manifest: ${error.message}`,
+    );
   }
 }
 
@@ -1039,7 +1098,7 @@ async function recordVendorIngestJobResult(
 
 export async function handleIngestVendorDocs(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as unknown as IngestVendorDocsPayload;
 
@@ -1130,7 +1189,7 @@ export async function handleIngestVendorDocs(
           maxPages,
           robotsRules,
           acquisitionPlan.scope,
-          progressCallback
+          progressCallback,
         );
         const { pages } = crawlResult;
 
@@ -1165,7 +1224,7 @@ export async function handleIngestVendorDocs(
             jobId: job.id,
             crawlComplete: crawlResult.complete,
           },
-          progressCallback
+          progressCallback,
         );
 
         await recordVendorIngestJobResult(job.id, result);
@@ -1176,7 +1235,10 @@ export async function handleIngestVendorDocs(
           );
         }
 
-        if (result.inserted + result.updated + result.skipped + result.retired === 0) {
+        if (
+          result.inserted + result.updated + result.skipped + result.retired ===
+          0
+        ) {
           throw new Error('Vendor source ingestion did not persist any pages');
         }
 
@@ -1191,20 +1253,21 @@ export async function handleIngestVendorDocs(
         });
 
         const combinedHashInput = hashVendorSourcePages(
-          result.outcomes
-            .filter(
-              (outcome) =>
-                outcome.status !== 'failed' && outcome.status !== 'retired',
-            )
-            .map((outcome) => ({
-              screen: outcome.screen,
-              contentHash: outcome.contentHash,
-            }))
+          result.outcomes.flatMap((__item, __index, __array) =>
+            __item.status !== 'failed' && __item.status !== 'retired'
+              ? [
+                  {
+                    screen: __item.screen,
+                    contentHash: __item.contentHash,
+                  },
+                ]
+              : [],
+          ),
         );
 
         const sourceContentHash = combinedHashInput
           ? createHash('sha256').update(combinedHashInput).digest('hex')
-          : registrySource.content_hash ?? '';
+          : (registrySource.content_hash ?? '');
 
         await registry.recordSuccess(registrySource.id, {
           attemptedAt,
@@ -1229,7 +1292,7 @@ export async function handleIngestVendorDocs(
         if (progressCallback) {
           progressCallback(
             100,
-            `Done: ${result.inserted} new, ${result.updated} updated, ${result.skipped} unchanged, ${result.retired} retired`
+            `Done: ${result.inserted} new, ${result.updated} updated, ${result.skipped} unchanged, ${result.retired} retired`,
           );
         }
       } catch (error) {
@@ -1239,7 +1302,9 @@ export async function handleIngestVendorDocs(
               attemptedAt,
               failedAt: new Date().toISOString(),
               errorMessage:
-                error instanceof Error ? error.message : 'Unknown vendor ingestion error',
+                error instanceof Error
+                  ? error.message
+                  : 'Unknown vendor ingestion error',
             });
           } catch (recordError) {
             logger.error('Failed to record vendor source ingestion failure', {
@@ -1251,7 +1316,7 @@ export async function handleIngestVendorDocs(
 
         throw error;
       }
-    }
+    },
   );
 }
 

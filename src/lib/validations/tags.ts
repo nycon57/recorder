@@ -40,7 +40,7 @@ export const TAG_COLORS = [
  */
 const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
 
-export const colorSchema = z
+const colorSchema = z
   .string()
   .regex(hexColorRegex, 'Invalid hex color format')
   .refine(
@@ -111,7 +111,7 @@ export type SetItemTagsInput = z.infer<typeof setItemTagsSchema>;
 /**
  * Create tags inline schema (for creating tags while assigning)
  */
-export const createTagsInlineSchema = z.object({
+const createTagsInlineSchema = z.object({
   tags: z.array(
     z.union([
       z.string().uuid(), // Existing tag ID
@@ -123,7 +123,7 @@ export const createTagsInlineSchema = z.object({
   ).min(1).max(20),
 });
 
-export type CreateTagsInlineInput = z.infer<typeof createTagsInlineSchema>;
+type CreateTagsInlineInput = z.infer<typeof createTagsInlineSchema>;
 
 // ============================================================================
 // Tag Query Schemas
@@ -145,12 +145,12 @@ export type ListTagsQueryInput = z.infer<typeof listTagsQuerySchema>;
 /**
  * Filter by tags schema (for content filtering)
  */
-export const filterByTagsSchema = z.object({
+const filterByTagsSchema = z.object({
   tagIds: z.array(z.string().uuid()).min(1).max(20),
   mode: z.enum(['and', 'or']).default('or'), // AND = all tags, OR = any tag
 });
 
-export type FilterByTagsInput = z.infer<typeof filterByTagsSchema>;
+type FilterByTagsInput = z.infer<typeof filterByTagsSchema>;
 
 // ============================================================================
 // Batch Operations Schemas
@@ -159,23 +159,23 @@ export type FilterByTagsInput = z.infer<typeof filterByTagsSchema>;
 /**
  * Batch delete tags schema
  */
-export const batchDeleteTagsSchema = z.object({
+const batchDeleteTagsSchema = z.object({
   tagIds: z.array(z.string().uuid()).min(1).max(50),
   removeFromItems: z.boolean().default(true), // Remove tag associations
 });
 
-export type BatchDeleteTagsInput = z.infer<typeof batchDeleteTagsSchema>;
+type BatchDeleteTagsInput = z.infer<typeof batchDeleteTagsSchema>;
 
 /**
  * Batch tag items schema
  */
-export const batchTagItemsSchema = z.object({
+const batchTagItemsSchema = z.object({
   itemIds: z.array(z.string().uuid()).min(1).max(100),
   tagIds: z.array(z.string().uuid()).min(1).max(20),
   mode: z.enum(['add', 'replace']).default('add'), // Add to existing or replace all
 });
 
-export type BatchTagItemsInput = z.infer<typeof batchTagItemsSchema>;
+type BatchTagItemsInput = z.infer<typeof batchTagItemsSchema>;
 
 // ============================================================================
 // Tag Merge Schema
@@ -184,13 +184,13 @@ export type BatchTagItemsInput = z.infer<typeof batchTagItemsSchema>;
 /**
  * Merge tags schema (combine multiple tags into one)
  */
-export const mergeTagsSchema = z.object({
+const mergeTagsSchema = z.object({
   sourceTagIds: z.array(z.string().uuid()).min(2).max(10),
   targetTagId: z.string().uuid(), // Tag to merge into
   deleteSourceTags: z.boolean().default(true),
 });
 
-export type MergeTagsInput = z.infer<typeof mergeTagsSchema>;
+type MergeTagsInput = z.infer<typeof mergeTagsSchema>;
 
 // ============================================================================
 // Validation Helpers
@@ -206,7 +206,7 @@ export function normalizeTagName(name: string): string {
 /**
  * Check if color is from predefined palette
  */
-export function isPredefinedColor(color: string): boolean {
+function isPredefinedColor(color: string): boolean {
   return TAG_COLORS.includes(color as any);
 }
 
@@ -224,7 +224,7 @@ export function getDefaultTagColor(index?: number): string {
 // Export all schemas
 // ============================================================================
 
-export const tagSchemas = {
+const tagSchemas = {
   createTag: createTagSchema,
   updateTag: updateTagSchema,
   addTagsToItem: addTagsToItemSchema,

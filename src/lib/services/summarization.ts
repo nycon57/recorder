@@ -5,12 +5,13 @@
  * Uses Google Gemini 2.5 Flash for summarization.
  */
 
-import { getGoogleAI, GOOGLE_CONFIG } from '@/lib/google/client';
 import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
+import { getGoogleAI, GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { withTimeout } from '@/lib/utils/timeout';
 
-export interface SummarizationInput {
+interface SummarizationInput {
   contentId: string;
   orgId: string;
 }

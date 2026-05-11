@@ -36,7 +36,7 @@ const KnowledgeGraph3D = dynamic(
   {
     ssr: false,
     loading: () => <KnowledgeGraph3DSkeleton />,
-  }
+  },
 );
 
 // Storage key for persisting user preference
@@ -58,6 +58,9 @@ export interface KnowledgeGraphContainerProps {
   defaultMode?: GraphViewMode;
 }
 
+const EMPTY_GRAPH_NODES: GraphNode[] = [];
+const EMPTY_GRAPH_EDGES: GraphEdge[] = [];
+
 /**
  * Check if WebGL is available and capable
  */
@@ -71,7 +74,10 @@ function checkWebGLSupport(): { supported: boolean; reason?: string } {
     const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
 
     if (!gl) {
-      return { supported: false, reason: 'WebGL is not supported in your browser' };
+      return {
+        supported: false,
+        reason: 'WebGL is not supported in your browser',
+      };
     }
 
     // Check for software renderer (usually poor performance)
@@ -81,7 +87,8 @@ function checkWebGLSupport(): { supported: boolean; reason?: string } {
       if (renderer.includes('SwiftShader') || renderer.includes('Software')) {
         return {
           supported: false,
-          reason: 'Hardware acceleration is not available. 3D view requires a GPU.'
+          reason:
+            'Hardware acceleration is not available. 3D view requires a GPU.',
         };
       }
     }
@@ -122,7 +129,7 @@ function ViewToggle({
             aria-label="2D view"
             aria-pressed={mode === '2d'}
           >
-            <Layers className="h-3.5 w-3.5" />
+            <Layers className="size-3.5" />
             <span className="text-xs">2D</span>
           </Button>
         </TooltipTrigger>
@@ -139,13 +146,13 @@ function ViewToggle({
             onClick={() => webglSupported && onModeChange('3d')}
             className={cn(
               'gap-1.5 h-8 px-3',
-              !webglSupported && 'opacity-50 cursor-not-allowed'
+              !webglSupported && 'opacity-50 cursor-not-allowed',
             )}
             aria-label="3D view"
             aria-pressed={mode === '3d'}
             disabled={!webglSupported}
           >
-            <Box className="h-3.5 w-3.5" />
+            <Box className="size-3.5" />
             <span className="text-xs">3D</span>
           </Button>
         </TooltipTrigger>
@@ -162,8 +169,8 @@ function ViewToggle({
 }
 
 export function KnowledgeGraphContainer({
-  nodes = [],
-  edges = [],
+  nodes = EMPTY_GRAPH_NODES,
+  edges = EMPTY_GRAPH_EDGES,
   onNodeClick,
   selectedNodeId,
   className,
@@ -173,8 +180,9 @@ export function KnowledgeGraphContainer({
   defaultMode = '2d',
 }: KnowledgeGraphContainerProps) {
   // View mode state
-  const [viewMode, setViewMode] = useState<GraphViewMode>(defaultMode);
-  const [hasHydrated, setHasHydrated] = useState(false);
+  const [viewModeOverride, setViewModeOverride] =
+    useState<GraphViewMode | null>(null);
+  const viewMode = viewModeOverride ?? defaultMode;
 
   // WebGL support check
   const [webglStatus, setWebglStatus] = useState<{
@@ -192,22 +200,28 @@ export function KnowledgeGraphContainer({
 
       // Load persisted preference
       try {
-        const stored = localStorage.getItem(STORAGE_KEY) as GraphViewMode | null;
+        const stored = localStorage.getItem(
+          STORAGE_KEY,
+        ) as GraphViewMode | null;
         if (stored === '2d' || stored === '3d') {
           // Only use 3D if WebGL is supported
-          setViewMode(stored === '3d' && status.supported ? '3d' : stored === '3d' ? '2d' : stored);
+          setViewModeOverride(
+            stored === '3d' && status.supported
+              ? '3d'
+              : stored === '3d'
+                ? '2d'
+                : stored,
+          );
         }
       } catch {
         // localStorage not available
       }
-
-      setHasHydrated(true);
     });
   }, []);
 
   // Handle mode change
   const handleModeChange = useCallback((newMode: GraphViewMode) => {
-    setViewMode(newMode);
+    setViewModeOverride(newMode);
     try {
       localStorage.setItem(STORAGE_KEY, newMode);
     } catch {
@@ -226,7 +240,7 @@ export function KnowledgeGraphContainer({
   }, [height]);
 
   // Show loading state during hydration
-  if (!hasHydrated) {
+  if (!webglStatus.checked) {
     return viewMode === '3d' ? (
       <KnowledgeGraph3DSkeleton height={heightNum} className={className} />
     ) : (
@@ -251,7 +265,7 @@ export function KnowledgeGraphContainer({
       {/* WebGL warning for 3D mode */}
       {viewMode === '3d' && !webglStatus.supported && webglStatus.checked && (
         <Alert variant="destructive" className="mb-4">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="size-4" />
           <AlertDescription>
             {webglStatus.reason} Falling back to 2D view.
           </AlertDescription>
@@ -281,5 +295,3 @@ export function KnowledgeGraphContainer({
     </div>
   );
 }
-
-export default KnowledgeGraphContainer;

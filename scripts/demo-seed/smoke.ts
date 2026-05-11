@@ -50,7 +50,9 @@ function printResult(result: AssertionResult): void {
     console.log(line);
   } else {
     console.error(line);
-    console.error(`         actual=${result.actual} expected=${result.expected}`);
+    console.error(
+      `         actual=${result.actual} expected=${result.expected}`,
+    );
   }
   if (result.advisory) {
     console.log(`         NOTE: ${result.advisory}`);
@@ -62,11 +64,11 @@ function printResult(result: AssertionResult): void {
 // These are exported so unit tests can call them with a mocked client.
 
 export async function assertDemoOrgExists(
-  client: pg.PoolClient
+  client: pg.PoolClient,
 ): Promise<AssertionResult> {
   const row = await client.query<{ id: string; name: string }>(
     `SELECT id, name FROM organizations WHERE id = $1`,
-    [DEMO_ORG_ID]
+    [DEMO_ORG_ID],
   );
   const exists = row.rowCount === 1;
   const result: AssertionResult = {
@@ -80,12 +82,12 @@ export async function assertDemoOrgExists(
 }
 
 export async function assertUsersExistWithRoles(
-  client: pg.PoolClient
+  client: pg.PoolClient,
 ): Promise<AssertionResult> {
   const userIds = Object.values(DEMO_USER_IDS);
   const row = await client.query<{ id: string; role: string; email: string }>(
     `SELECT id, role, email FROM users WHERE id = ANY($1::uuid[]) ORDER BY email`,
-    [userIds]
+    [userIds],
   );
   const found = row.rowCount ?? 0;
   const expected = DEMO_USERS.length;
@@ -95,7 +97,9 @@ export async function assertUsersExistWithRoles(
   for (const u of DEMO_USERS) {
     const actualRole = roleMap.get(u.id);
     if (actualRole !== u.role) {
-      roleErrors.push(`${u.email}: expected ${u.role}, got ${actualRole ?? 'missing'}`);
+      roleErrors.push(
+        `${u.email}: expected ${u.role}, got ${actualRole ?? 'missing'}`,
+      );
     }
   }
 
@@ -103,7 +107,10 @@ export async function assertUsersExistWithRoles(
   const result: AssertionResult = {
     name: `All ${expected} demo users exist with correct roles`,
     passed,
-    actual: roleErrors.length > 0 ? `role mismatches: ${roleErrors.join('; ')}` : `${found} users`,
+    actual:
+      roleErrors.length > 0
+        ? `role mismatches: ${roleErrors.join('; ')}`
+        : `${found} users`,
     expected: `${expected} users with correct roles`,
   };
   printResult(result);
@@ -111,14 +118,16 @@ export async function assertUsersExistWithRoles(
 }
 
 export async function assertRecordingCountsByUser(
-  client: pg.PoolClient
+  client: pg.PoolClient,
 ): Promise<AssertionResult> {
   // Expected: 18 lead (Marcus) / 10 agent (Sofía) / 2 admin (Priya) / 0 owner / 0 reader
   const row = await client.query<{ created_by: string; cnt: string }>(
     `SELECT created_by, COUNT(*)::text AS cnt FROM content WHERE metadata->>'seed' = 'demo' GROUP BY created_by`,
-    []
+    [],
   );
-  const countMap = new Map(row.rows.map((r) => [r.created_by, parseInt(r.cnt, 10)]));
+  const countMap = new Map(
+    row.rows.map((r) => [r.created_by, parseInt(r.cnt, 10)]),
+  );
 
   const expected: Record<string, number> = {
     [DEMO_USER_IDS.lead]: 18,
@@ -127,9 +136,10 @@ export async function assertRecordingCountsByUser(
   };
 
   const errors: string[] = [];
+  const userNameById = new Map(DEMO_USERS.map((user) => [user.id, user.name]));
   for (const [userId, expectedCount] of Object.entries(expected)) {
     const actual = countMap.get(userId) ?? 0;
-    const userName = DEMO_USERS.find((u) => u.id === userId)?.name ?? userId;
+    const userName = userNameById.get(userId) ?? userId;
     if (actual !== expectedCount) {
       errors.push(`${userName}: expected ${expectedCount}, got ${actual}`);
     }
@@ -138,8 +148,10 @@ export async function assertRecordingCountsByUser(
   // Owner and reader should have 0 recordings
   for (const uid of [DEMO_USER_IDS.owner, DEMO_USER_IDS.reader]) {
     if (countMap.has(uid)) {
-      const userName = DEMO_USERS.find((u) => u.id === uid)?.name ?? uid;
-      errors.push(`${userName}: expected 0 recordings, got ${countMap.get(uid)}`);
+      const userName = userNameById.get(uid) ?? uid;
+      errors.push(
+        `${userName}: expected 0 recordings, got ${countMap.get(uid)}`,
+      );
     }
   }
 
@@ -148,7 +160,8 @@ export async function assertRecordingCountsByUser(
   const result: AssertionResult = {
     name: 'Recording counts per user (18 lead / 10 agent / 2 admin)',
     passed,
-    actual: errors.length > 0 ? errors.join('; ') : `${totalActual} total recordings`,
+    actual:
+      errors.length > 0 ? errors.join('; ') : `${totalActual} total recordings`,
     expected: '18 lead + 10 agent + 2 admin = 30 total',
   };
   printResult(result);
@@ -156,7 +169,7 @@ export async function assertRecordingCountsByUser(
 }
 
 export async function assertTranscriptChunkCount(
-  client: pg.PoolClient
+  client: pg.PoolClient,
 ): Promise<AssertionResult> {
   // 30 recordings × 6 chunks = 180 expected
   const row = await client.query<{ cnt: string }>(
@@ -166,7 +179,7 @@ export async function assertTranscriptChunkCount(
       JOIN content c ON c.id = t.content_id
       WHERE c.metadata->>'seed' = 'demo'
     )`,
-    []
+    [],
   );
   const actual = parseInt(row.rows[0]?.cnt ?? '0', 10);
   // Allow range 150–210 (some recordings may have fewer splits)
@@ -182,16 +195,20 @@ export async function assertTranscriptChunkCount(
 }
 
 export async function assertWikiPageCounts(
-  client: pg.PoolClient
+  client: pg.PoolClient,
 ): Promise<AssertionResult> {
-  const row = await client.query<{ total: string; published: string; draft: string }>(
+  const row = await client.query<{
+    total: string;
+    published: string;
+    draft: string;
+  }>(
     `SELECT
       COUNT(*)::text AS total,
       COUNT(*) FILTER (WHERE is_published = true)::text AS published,
       COUNT(*) FILTER (WHERE is_published = false)::text AS draft
      FROM org_wiki_pages
      WHERE metadata->>'seed' = 'demo'`,
-    []
+    [],
   );
   const total = parseInt(row.rows[0]?.total ?? '0', 10);
   const published = parseInt(row.rows[0]?.published ?? '0', 10);
@@ -210,25 +227,25 @@ export async function assertWikiPageCounts(
 }
 
 export async function assertVendorDemoOrgExists(
-  client: pg.PoolClient
+  client: pg.PoolClient,
 ): Promise<AssertionResult> {
   // Check vendor org + white_label_configs row + Acme link
-  const orgRow = await client.query<{ id: string; vendor_org_id: string }>(
-    `SELECT id,
+  const [orgRow, wlRow, acmeRow] = await Promise.all([
+    client.query<{ id: string; vendor_org_id: string }>(
+      `SELECT id,
       (SELECT id FROM organizations WHERE id = $2 LIMIT 1) AS vendor_org_id
      FROM organizations WHERE id = $1`,
-    [DEMO_ORG_ID, DEMO_VENDOR_ORG_ID]
-  );
-
-  const wlRow = await client.query<{ id: string }>(
-    `SELECT id FROM white_label_configs WHERE id = $1`,
-    [DEMO_WHITE_LABEL_CONFIG_ID]
-  );
-
-  const acmeRow = await client.query<{ vendor_org_id: string }>(
-    `SELECT vendor_org_id::text FROM organizations WHERE id = $1`,
-    [DEMO_ORG_ID]
-  );
+      [DEMO_ORG_ID, DEMO_VENDOR_ORG_ID],
+    ),
+    client.query<{ id: string }>(
+      `SELECT id FROM white_label_configs WHERE id = $1`,
+      [DEMO_WHITE_LABEL_CONFIG_ID],
+    ),
+    client.query<{ vendor_org_id: string }>(
+      `SELECT vendor_org_id::text FROM organizations WHERE id = $1`,
+      [DEMO_ORG_ID],
+    ),
+  ]);
 
   const vendorExists = !!orgRow.rows[0]?.vendor_org_id;
   const wlExists = (wlRow.rowCount ?? 0) === 1;
@@ -246,7 +263,7 @@ export async function assertVendorDemoOrgExists(
 }
 
 export async function assertDepartmentFKResolution(
-  client: pg.PoolClient
+  client: pg.PoolClient,
 ): Promise<AssertionResult> {
   // Join users → departments → expected dept names
   const expectedDeptNames = new Set(['Executive', 'Support Ops', 'Support']);
@@ -255,13 +272,16 @@ export async function assertDepartmentFKResolution(
      FROM users u
      JOIN departments d ON d.id = u.department_id
      WHERE u.id = ANY($1::uuid[])`,
-    [Object.values(DEMO_USER_IDS)]
+    [Object.values(DEMO_USER_IDS)],
   );
   const foundDeptNames = new Set(row.rows.map((r) => r.dept_name));
-  const missingDepts = [...expectedDeptNames].filter((n) => !foundDeptNames.has(n));
+  const missingDepts = [...expectedDeptNames].filter(
+    (n) => !foundDeptNames.has(n),
+  );
   const usersWithDept = row.rowCount ?? 0;
 
-  const passed = missingDepts.length === 0 && usersWithDept === DEMO_USERS.length;
+  const passed =
+    missingDepts.length === 0 && usersWithDept === DEMO_USERS.length;
   const result: AssertionResult = {
     name: 'Department FK resolution (users → departments)',
     passed,
@@ -273,26 +293,32 @@ export async function assertDepartmentFKResolution(
 }
 
 export async function assertSeedMetadataPresent(
-  client: pg.PoolClient
+  client: pg.PoolClient,
 ): Promise<AssertionResult> {
   // Check that seed-owned rows with metadata column carry metadata.seed = 'demo'
   const checks: Array<{ table: string; count: number; seedCount: number }> = [];
 
-  for (const table of ['content', 'org_wiki_pages', 'organizations']) {
-    const totalRow = await client.query<{ cnt: string }>(
-      `SELECT COUNT(*)::text AS cnt FROM ${table} WHERE id IN (
-        SELECT id FROM ${table} WHERE metadata IS NOT NULL LIMIT 1000
-      )`
-    );
-    const seedRow = await client.query<{ cnt: string }>(
-      `SELECT COUNT(*)::text AS cnt FROM ${table} WHERE metadata->>'seed' = 'demo'`
-    );
-    checks.push({
-      table,
-      count: parseInt(totalRow.rows[0]?.cnt ?? '0', 10),
-      seedCount: parseInt(seedRow.rows[0]?.cnt ?? '0', 10),
-    });
-  }
+  await Promise.all(
+    Array.from(['content', 'org_wiki_pages', 'organizations']).map(
+      async (table) => {
+        const [totalRow, seedRow] = await Promise.all([
+          client.query<{ cnt: string }>(
+            `SELECT COUNT(*)::text AS cnt FROM ${table} WHERE id IN (
+                SELECT id FROM ${table} WHERE metadata IS NOT NULL LIMIT 1000
+              )`,
+          ),
+          client.query<{ cnt: string }>(
+            `SELECT COUNT(*)::text AS cnt FROM ${table} WHERE metadata->>'seed' = 'demo'`,
+          ),
+        ]);
+        checks.push({
+          table,
+          count: parseInt(totalRow.rows[0]?.cnt ?? '0', 10),
+          seedCount: parseInt(seedRow.rows[0]?.cnt ?? '0', 10),
+        });
+      },
+    ),
+  );
 
   // All demo content rows must have metadata.seed = 'demo'
   const contentCheck = checks.find((c) => c.table === 'content');
@@ -318,7 +344,7 @@ export async function assertSeedMetadataPresent(
 }
 
 export async function assertForceReseedFKSafety(
-  client: pg.PoolClient
+  client: pg.PoolClient,
 ): Promise<AssertionResult> {
   /**
    * TRIB-145 advisory: the --force-reseed path in seeders/users.ts uses
@@ -353,7 +379,7 @@ export async function assertForceReseedFKSafety(
        AND c.table_name = 'users'
        AND c.column_name = 'org_id'
      LIMIT 1`,
-    []
+    [],
   );
 
   const isNullable = constraintRow.rows[0]?.is_nullable === 'YES';
@@ -364,7 +390,7 @@ export async function assertForceReseedFKSafety(
   const placeholderUserId = DEMO_USER_IDS.owner; // DEMO_USERS[0].id
   const orgExistsRow = await client.query<{ exists: boolean }>(
     `SELECT EXISTS(SELECT 1 FROM organizations WHERE id = $1) AS exists`,
-    [placeholderUserId]
+    [placeholderUserId],
   );
   const placeholderIsValidOrg = orgExistsRow.rows[0]?.exists === true;
 
@@ -421,7 +447,9 @@ function parseArgs(argv: string[]): {
       if (val === 'local' || val === 'staging') {
         env = val;
       } else {
-        console.error(`[error] Unknown --env value: "${val}". Use local or staging.`);
+        console.error(
+          `[error] Unknown --env value: "${val}". Use local or staging.`,
+        );
         process.exit(1);
       }
     } else if (arg.startsWith('--confirm=')) {
@@ -455,9 +483,11 @@ async function main(): Promise<void> {
 
   try {
     const smoke = await client.query<{ current_database: string }>(
-      `SELECT current_database()`
+      `SELECT current_database()`,
     );
-    console.log(`\n[demo:smoke] Connected to database: ${smoke.rows[0]?.current_database}`);
+    console.log(
+      `\n[demo:smoke] Connected to database: ${smoke.rows[0]?.current_database}`,
+    );
     console.log('[demo:smoke] Running assertions...\n');
 
     // Run all assertions — collect results but don't stop on failure.
@@ -503,7 +533,8 @@ async function main(): Promise<void> {
 const isMain =
   typeof require !== 'undefined'
     ? require.main === module
-    : process.argv[1]?.endsWith('smoke.ts') || process.argv[1]?.endsWith('smoke.js');
+    : process.argv[1]?.endsWith('smoke.ts') ||
+      process.argv[1]?.endsWith('smoke.js');
 
 if (isMain) {
   main().catch((err) => {

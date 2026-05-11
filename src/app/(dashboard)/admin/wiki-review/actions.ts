@@ -28,7 +28,11 @@
 import { revalidatePath, updateTag } from 'next/cache';
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { requireAdmin } from '@/lib/utils/api';
+import {
+  requireAdmin,
+  requireAdminForUser,
+  requireAuth,
+} from '@/lib/utils/api';
 import { logger } from '@/lib/utils/logger';
 import type { Database, Json } from '@/lib/types/database';
 import { reviewApproval } from '@/lib/services/agent-permissions';
@@ -56,8 +60,10 @@ import {
   type OrgWikiPageRow,
 } from '@/lib/services/wiki-review';
 
-type OrgWikiPageInsert = Database['public']['Tables']['org_wiki_pages']['Insert'];
-type AgentApprovalRow = Database['public']['Tables']['agent_approval_queue']['Row'];
+type OrgWikiPageInsert =
+  Database['public']['Tables']['org_wiki_pages']['Insert'];
+type AgentApprovalRow =
+  Database['public']['Tables']['agent_approval_queue']['Row'];
 type ContentRow = Database['public']['Tables']['content']['Row'];
 
 const WIKI_REVIEW_PATH = '/admin/wiki-review';
@@ -80,9 +86,18 @@ interface LoadedTarget {
 interface LoadedRoutingApprovalTarget {
   approval: Pick<
     AgentApprovalRow,
-    'id' | 'org_id' | 'action_type' | 'content_id' | 'proposed_action' | 'status' | 'created_at'
+    | 'id'
+    | 'org_id'
+    | 'action_type'
+    | 'content_id'
+    | 'proposed_action'
+    | 'status'
+    | 'created_at'
   >;
-  content: Pick<ContentRow, 'id' | 'org_id' | 'metadata' | 'title' | 'updated_at'>;
+  content: Pick<
+    ContentRow,
+    'id' | 'org_id' | 'metadata' | 'title' | 'updated_at'
+  >;
 }
 
 interface ReviewAuditLogInput {
@@ -116,7 +131,7 @@ async function loadAndValidateTarget(input: {
   const { data, error } = await supabaseAdmin
     .from('org_wiki_pages')
     .select(
-      'id, org_id, app, screen, topic, content, confidence, valid_from, valid_until, supersedes_id, compilation_log, created_at, updated_at'
+      'id, org_id, app, screen, topic, content, confidence, valid_from, valid_until, supersedes_id, compilation_log, created_at, updated_at',
     )
     .eq('id', pageId)
     .single();
@@ -162,7 +177,9 @@ async function loadAndValidateRoutingApproval(input: {
 
   const { data: approvalData, error: approvalError } = await supabaseAdmin
     .from('agent_approval_queue')
-    .select('id, org_id, action_type, content_id, proposed_action, status, created_at')
+    .select(
+      'id, org_id, action_type, content_id, proposed_action, status, created_at',
+    )
     .eq('id', approvalId)
     .single();
 
@@ -352,9 +369,15 @@ async function persistRoutingDecisionState(input: {
   routingState: RoutingReviewState;
   decisionAction: RoutingReviewDecisionAction;
 }> {
-  let content = input.content;
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const persistAttempt = async (
+    content: LoadedRoutingApprovalTarget['content'],
+    attempt = 0,
+  ): Promise<{
+    content: LoadedRoutingApprovalTarget['content'];
+    previousRoutingState: RoutingReviewState | null;
+    routingState: RoutingReviewState;
+    decisionAction: RoutingReviewDecisionAction;
+  }> => {
     const nowIso = new Date().toISOString();
     const previousRoutingState = parseRoutingReviewState(content.metadata);
     const { state: routingState, decisionAction } = buildRoutingDecisionState({
@@ -371,19 +394,23 @@ async function persistRoutingDecisionState(input: {
       approvedRoute: input.approvedRoute,
       decisionHint: input.decisionHint ?? null,
     });
-    const nextMetadata = writeRoutingReviewState(content.metadata, routingState);
+    const nextMetadata = writeRoutingReviewState(
+      content.metadata,
+      routingState,
+    );
 
-    const { data: updatedContent, error: contentUpdateError } = await supabaseAdmin
-      .from('content')
-      .update({
-        metadata: nextMetadata,
-        updated_at: nowIso,
-      } as never)
-      .eq('id', content.id)
-      .eq('org_id', input.orgId)
-      .eq('updated_at', content.updated_at)
-      .select('id')
-      .maybeSingle();
+    const { data: updatedContent, error: contentUpdateError } =
+      await supabaseAdmin
+        .from('content')
+        .update({
+          metadata: nextMetadata,
+          updated_at: nowIso,
+        } as never)
+        .eq('id', content.id)
+        .eq('org_id', input.orgId)
+        .eq('updated_at', content.updated_at)
+        .select('id')
+        .maybeSingle();
 
     if (contentUpdateError) {
       throw new Error(
@@ -401,24 +428,32 @@ async function persistRoutingDecisionState(input: {
     }
 
     if (attempt === 1) {
-      throw new Error('Failed to persist routing decision: content changed during review');
+      throw new Error(
+        'Failed to persist routing decision: content changed during review',
+      );
     }
 
-    const { data: latestContent, error: latestContentError } = await supabaseAdmin
-      .from('content')
-      .select('id, org_id, metadata, title, updated_at')
-      .eq('id', content.id)
-      .eq('org_id', input.orgId)
-      .single();
+    const { data: latestContent, error: latestContentError } =
+      await supabaseAdmin
+        .from('content')
+        .select('id, org_id, metadata, title, updated_at')
+        .eq('id', content.id)
+        .eq('org_id', input.orgId)
+        .single();
 
     if (latestContentError || !latestContent) {
-      throw new Error('Failed to reload content after routing metadata conflict');
+      throw new Error(
+        'Failed to reload content after routing metadata conflict',
+      );
     }
 
-    content = latestContent as LoadedRoutingApprovalTarget['content'];
-  }
+    return persistAttempt(
+      latestContent as LoadedRoutingApprovalTarget['content'],
+      attempt + 1,
+    );
+  };
 
-  throw new Error('Failed to persist routing decision');
+  return persistAttempt(input.content);
 }
 
 /**
@@ -434,7 +469,8 @@ async function supersedeWithContent(input: {
   userId: string;
   nowIso: string;
 }): Promise<{ newPageId: string }> {
-  const { existingPage, existingLog, entryIndex, newContent, userId, nowIso } = input;
+  const { existingPage, existingLog, entryIndex, newContent, userId, nowIso } =
+    input;
   const originalEntry = existingLog[entryIndex];
 
   const { error: supersedeError } = await supabaseAdmin
@@ -443,7 +479,9 @@ async function supersedeWithContent(input: {
     .eq('id', existingPage.id);
 
   if (supersedeError) {
-    throw new Error(`Failed to supersede page ${existingPage.id}: ${supersedeError.message}`);
+    throw new Error(
+      `Failed to supersede page ${existingPage.id}: ${supersedeError.message}`,
+    );
   }
 
   // Preserve the full prior history, but swap the flagged entry for its
@@ -459,7 +497,7 @@ async function supersedeWithContent(input: {
   carriedLog[entryIndex] = resolvedEntry;
 
   const newConfidence = clampConfidence(
-    (existingPage.confidence ?? 0.5) + (originalEntry.confidence_delta ?? 0)
+    (existingPage.confidence ?? 0.5) + (originalEntry.confidence_delta ?? 0),
   );
 
   const newPageInsert: OrgWikiPageInsert = {
@@ -480,7 +518,9 @@ async function supersedeWithContent(input: {
     .single();
 
   if (insertError) {
-    throw new Error(`Failed to insert superseding page for ${existingPage.id}: ${insertError.message}`);
+    throw new Error(
+      `Failed to insert superseding page for ${existingPage.id}: ${insertError.message}`,
+    );
   }
 
   return { newPageId: (insertedPage as { id: string }).id };
@@ -506,7 +546,9 @@ async function patchLogEntryInPlace(input: {
     .eq('id', pageId);
 
   if (error) {
-    throw new Error(`Failed to patch compilation_log on page ${pageId}: ${error.message}`);
+    throw new Error(
+      `Failed to patch compilation_log on page ${pageId}: ${error.message}`,
+    );
   }
 }
 
@@ -523,8 +565,16 @@ async function recordReviewOutcome(input: {
   userId: string;
   pageId: string;
   logEntryIndex: number;
-  action: 'approveContradiction' | 'rejectContradiction' | 'editAndApproveContradiction';
-  outcome: 'approved' | 'rejected' | 'edited_and_approved' | 'auto_rejected_noop' | 'error';
+  action:
+    | 'approveContradiction'
+    | 'rejectContradiction'
+    | 'editAndApproveContradiction';
+  outcome:
+    | 'approved'
+    | 'rejected'
+    | 'edited_and_approved'
+    | 'auto_rejected_noop'
+    | 'error';
   contentLength?: number;
   errorMessage?: string | null;
 }): Promise<void> {
@@ -559,14 +609,18 @@ export async function approveContradiction(input: {
 }): Promise<ActionResult> {
   let authContext: { orgId: string; userId: string } | null = null;
   try {
-    const { userId, orgId } = await requireAdmin();
+    const { userId, orgId } = await requireAuth().then(requireAdminForUser);
     authContext = { orgId, userId };
-    const { page, log, entry } = await loadAndValidateTarget({ ...input, orgId });
+    const { page, log, entry } = await loadAndValidateTarget({
+      ...input,
+      orgId,
+    });
 
     const mergedContent = entry.merged_content?.trim();
-    const nextContent = mergedContent && mergedContent.length > 0
-      ? mergedContent
-      : applyContradictionsToContent(page.content, entry.contradictions);
+    const nextContent =
+      mergedContent && mergedContent.length > 0
+        ? mergedContent
+        : applyContradictionsToContent(page.content, entry.contradictions);
 
     if (nextContent === page.content) {
       // Nothing would actually change — treat as a no-op and reject the
@@ -576,10 +630,19 @@ export async function approveContradiction(input: {
         pageId: page.id,
         existingLog: log,
         entryIndex: input.logEntryIndex,
-        patch: { action: 'rejected', resolved_at: resolvedAt, resolved_by: userId },
+        patch: {
+          action: 'rejected',
+          resolved_at: resolvedAt,
+          resolved_by: userId,
+        },
       });
       logger.warn('Approve resulted in no content change; auto-rejected', {
-        context: { orgId, userId, pageId: page.id, logEntryIndex: input.logEntryIndex },
+        context: {
+          orgId,
+          userId,
+          pageId: page.id,
+          logEntryIndex: input.logEntryIndex,
+        },
       });
       await writeReviewAuditLog({
         orgId,
@@ -627,7 +690,12 @@ export async function approveContradiction(input: {
     });
 
     logger.info('Wiki contradiction approved', {
-      context: { orgId, userId, pageId: page.id, logEntryIndex: input.logEntryIndex },
+      context: {
+        orgId,
+        userId,
+        pageId: page.id,
+        logEntryIndex: input.logEntryIndex,
+      },
     });
     await writeReviewAuditLog({
       orgId,
@@ -689,14 +757,16 @@ export async function approveRoutingReview(input: {
   decisionAction?: 'approve' | 'edit_and_approve' | 'reroute';
 }): Promise<ActionResult> {
   try {
-    const { orgId, userId } = await requireAdmin();
+    const { orgId, userId } = await requireAuth().then(requireAdminForUser);
     const { approval, content } = await loadAndValidateRoutingApproval({
       approvalId: input.approvalId,
       contentId: input.contentId,
       orgId,
     });
 
-    const proposedAction = parseRoutingReviewProposedAction(approval.proposed_action);
+    const proposedAction = parseRoutingReviewProposedAction(
+      approval.proposed_action,
+    );
     if (!proposedAction) {
       return { ok: false, error: 'Routing review payload is invalid' };
     }
@@ -712,7 +782,7 @@ export async function approveRoutingReview(input: {
       approval.id,
       orgId,
       userId,
-      'approved'
+      'approved',
     );
 
     if (!reviewed) {
@@ -754,10 +824,13 @@ export async function approveRoutingReview(input: {
           action: 'approved',
         });
       } catch (resetError) {
-        logger.error('Failed to reset routing approval after admin approve failure', {
-          error: resetError instanceof Error ? resetError : undefined,
-          context: { approvalId: approval.id, orgId, userId },
-        });
+        logger.error(
+          'Failed to reset routing approval after admin approve failure',
+          {
+            error: resetError instanceof Error ? resetError : undefined,
+            context: { approvalId: approval.id, orgId, userId },
+          },
+        );
       }
       throw error;
     }
@@ -808,14 +881,16 @@ export async function rejectRoutingReview(input: {
   rejectionReason?: string | null;
 }): Promise<ActionResult> {
   try {
-    const { orgId, userId } = await requireAdmin();
+    const { orgId, userId } = await requireAuth().then(requireAdminForUser);
     const { approval, content } = await loadAndValidateRoutingApproval({
       approvalId: input.approvalId,
       contentId: input.contentId,
       orgId,
     });
 
-    const proposedAction = parseRoutingReviewProposedAction(approval.proposed_action);
+    const proposedAction = parseRoutingReviewProposedAction(
+      approval.proposed_action,
+    );
     if (!proposedAction) {
       return { ok: false, error: 'Routing review payload is invalid' };
     }
@@ -828,7 +903,7 @@ export async function rejectRoutingReview(input: {
       orgId,
       userId,
       'rejected',
-      rejectionReason
+      rejectionReason,
     );
 
     if (!reviewed) {
@@ -860,10 +935,13 @@ export async function rejectRoutingReview(input: {
           action: 'rejected',
         });
       } catch (resetError) {
-        logger.error('Failed to reset routing rejection after admin reject failure', {
-          error: resetError instanceof Error ? resetError : undefined,
-          context: { approvalId: approval.id, orgId, userId },
-        });
+        logger.error(
+          'Failed to reset routing rejection after admin reject failure',
+          {
+            error: resetError instanceof Error ? resetError : undefined,
+            context: { approvalId: approval.id, orgId, userId },
+          },
+        );
       }
       throw error;
     }
@@ -915,9 +993,12 @@ export async function rejectContradiction(input: {
 }): Promise<ActionResult> {
   let authContext: { orgId: string; userId: string } | null = null;
   try {
-    const { userId, orgId } = await requireAdmin();
+    const { userId, orgId } = await requireAuth().then(requireAdminForUser);
     authContext = { orgId, userId };
-    const { page, log, entry } = await loadAndValidateTarget({ ...input, orgId });
+    const { page, log, entry } = await loadAndValidateTarget({
+      ...input,
+      orgId,
+    });
     const resolvedAt = new Date().toISOString();
 
     await patchLogEntryInPlace({
@@ -932,7 +1013,12 @@ export async function rejectContradiction(input: {
     });
 
     logger.info('Wiki contradiction rejected', {
-      context: { orgId, userId, pageId: page.id, logEntryIndex: input.logEntryIndex },
+      context: {
+        orgId,
+        userId,
+        pageId: page.id,
+        logEntryIndex: input.logEntryIndex,
+      },
     });
     await writeReviewAuditLog({
       orgId,
@@ -996,7 +1082,7 @@ export async function editAndApproveContradiction(input: {
 }): Promise<ActionResult> {
   let authContext: { orgId: string; userId: string } | null = null;
   try {
-    const { userId, orgId } = await requireAdmin();
+    const { userId, orgId } = await requireAuth().then(requireAdminForUser);
     authContext = { orgId, userId };
     const { page, log, entry } = await loadAndValidateTarget({
       pageId: input.pageId,

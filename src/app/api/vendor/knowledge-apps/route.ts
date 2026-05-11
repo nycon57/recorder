@@ -30,7 +30,7 @@ export const GET = apiHandler(async () => {
   }
 
   // Extract distinct app names
-  const apps = [...new Set((data ?? []).map((row) => row.app as string))].sort();
+  const apps = Array.from(new Set((data ?? []).map((row) => row.app as string))).toSorted();
 
   return successResponse(apps);
 });

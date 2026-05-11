@@ -11,20 +11,33 @@
  */
 
 import { revalidateTag } from 'next/cache';
+import type { NextRequest } from 'next/server';
 
 import { apiHandler, requireSystemAdmin } from '@/lib/utils/api';
 
-export const POST = apiHandler(async (_req, context) => {
-  await requireSystemAdmin();
+export const POST = apiHandler(
+  async (
+    _req: NextRequest,
+    context: { params: Promise<{ slug: string }> },
+  ) => {
+    await requireSystemAdmin();
 
-  const { slug } = await context.params;
+    const { slug } = await context.params;
 
-  if (!slug || typeof slug !== 'string') {
-    return Response.json({ ok: false, error: 'Missing slug' }, { status: 400 });
-  }
+    if (!slug || typeof slug !== 'string') {
+      return Response.json(
+        { ok: false, error: 'Missing slug' },
+        { status: 400 },
+      );
+    }
 
-  revalidateTag('docs:db', 'everything');
-  revalidateTag(`docs:db:body:${slug}`, 'everything');
+    revalidateTag('docs:db', 'everything');
+    revalidateTag(`docs:db:body:${slug}`, 'everything');
 
-  return Response.json({ ok: true, slug, revalidated: ['docs:db', `docs:db:body:${slug}`] });
-});
+    return Response.json({
+      ok: true,
+      slug,
+      revalidated: ['docs:db', `docs:db:body:${slug}`],
+    });
+  },
+);

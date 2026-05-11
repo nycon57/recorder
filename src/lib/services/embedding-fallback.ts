@@ -32,7 +32,7 @@ function getOpenAIClient(): OpenAI {
  */
 export async function generateEmbeddingWithFallback(
   text: string,
-  taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_QUERY'
+  taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_QUERY',
 ): Promise<{
   embedding: number[];
   provider: 'google' | 'openai';
@@ -74,14 +74,12 @@ export async function generateEmbeddingWithFallback(
  */
 async function generateGoogleEmbedding(
   text: string,
-  taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT'
+  taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT',
 ): Promise<number[]> {
   const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
   const maxRetries = 2; // Reduced retries since we have fallback
-  let lastError: Error | null = null;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  const runAttempt = async (attempt: number): Promise<number[]> => {
     try {
       const result = await genai.models.embedContent({
         model: GOOGLE_CONFIG.EMBEDDING_MODEL,
@@ -98,24 +96,23 @@ async function generateGoogleEmbedding(
 
       return result.embeddings[0].values;
     } catch (error: any) {
-      lastError = error;
-
       // Only retry on temporary errors
-      const is503 = error.message?.includes('503') || error.status === 503;
-      const is429 = error.message?.includes('429') || error.status === 429;
+      const errorMessage = error.message ?? '';
+      const is503 = errorMessage.search('503') !== -1 || error.status === 503;
+      const is429 = errorMessage.search('429') !== -1 || error.status === 429;
 
       if ((is503 || is429) && attempt < maxRetries) {
         const waitTime = 1000; // 1 second (reduced since we have fallback)
         console.log(`[Embeddings] Retrying Google in ${waitTime}ms...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
+        return runAttempt(attempt + 1);
       }
 
       throw error;
     }
-  }
+  };
 
-  throw lastError || new Error('Failed to generate Google embedding');
+  return runAttempt(1);
 }
 
 /**
@@ -142,26 +139,34 @@ async function generateOpenAIEmbedding(text: string): Promise<number[]> {
  * Batch generate embeddings with fallback
  * Useful for processing multiple texts efficiently
  */
-export async function batchGenerateEmbeddings(
+async function batchGenerateEmbeddings(
   texts: string[],
-  taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_DOCUMENT'
-): Promise<Array<{
-  text: string;
-  embedding: number[];
-  provider: 'google' | 'openai';
-}>> {
+  taskType: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' = 'RETRIEVAL_DOCUMENT',
+): Promise<
+  Array<{
+    text: string;
+    embedding: number[];
+    provider: 'google' | 'openai';
+  }>
+> {
   const results = await Promise.all(
     texts.map(async (text) => {
-      const { embedding, provider } = await generateEmbeddingWithFallback(text, taskType);
+      const { embedding, provider } = await generateEmbeddingWithFallback(
+        text,
+        taskType,
+      );
       return { text, embedding, provider };
-    })
+    }),
   );
 
   // Log provider distribution
-  const providerCounts = results.reduce((acc, r) => {
-    acc[r.provider] = (acc[r.provider] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const providerCounts = results.reduce(
+    (acc, r) => {
+      acc[r.provider] = (acc[r.provider] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   console.log('[Embeddings] Batch results:', providerCounts);
 

@@ -230,67 +230,69 @@ export class URLImportConnector implements Connector {
       }
 
       // Process each URL
-      for (const urlData of urlsToProcess) {
-        try {
-          filesProcessed++;
+      await Promise.all(
+        Array.from(urlsToProcess).map(async (urlData) => {
+          try {
+            filesProcessed++;
 
-          // Fetch and extract content
-          const result = await this.fetchAndExtract(
-            urlData.url,
-            urlData.metadata?.extractionOptions,
-          );
+            // Fetch and extract content
+            const result = await this.fetchAndExtract(
+              urlData.url,
+              urlData.metadata?.extractionOptions,
+            );
 
-          if (!result.success) {
-            throw new Error(result.error || 'Failed to fetch URL');
-          }
-
-          // Update URL data
-          urlData.title = result.title;
-          urlData.content = result.content;
-          urlData.markdown = result.markdown;
-          urlData.fetchedAt = new Date();
-          urlData.status = 'success';
-          urlData.metadata = {
-            ...urlData.metadata,
-            contentLength: result.content?.length || 0,
-            markdownLength: result.markdown?.length || 0,
-            description: result.description,
-          };
-
-          // Save to Supabase storage
-          if (result.markdown) {
-            const storagePath = this.batchId
-              ? `org_${this.orgId}/imports/${this.batchId}/${urlData.id}.md`
-              : `org_${this.orgId}/imports/${urlData.id}.md`;
-
-            const { error: uploadError } = await supabaseAdmin.storage
-              .from('recordings')
-              .upload(storagePath, result.markdown, {
-                contentType: 'text/markdown',
-                upsert: false,
-                cacheControl: '3600',
-              });
-
-            if (uploadError) {
-              throw new Error(`Upload failed: ${uploadError.message}`);
+            if (!result.success) {
+              throw new Error(result.error || 'Failed to fetch URL');
             }
+
+            // Update URL data
+            urlData.title = result.title;
+            urlData.content = result.content;
+            urlData.markdown = result.markdown;
+            urlData.fetchedAt = new Date();
+            urlData.status = 'success';
+            urlData.metadata = {
+              ...urlData.metadata,
+              contentLength: result.content?.length || 0,
+              markdownLength: result.markdown?.length || 0,
+              description: result.description,
+            };
+
+            // Save to Supabase storage
+            if (result.markdown) {
+              const storagePath = this.batchId
+                ? `org_${this.orgId}/imports/${this.batchId}/${urlData.id}.md`
+                : `org_${this.orgId}/imports/${urlData.id}.md`;
+
+              const { error: uploadError } = await supabaseAdmin.storage
+                .from('recordings')
+                .upload(storagePath, result.markdown, {
+                  contentType: 'text/markdown',
+                  upsert: false,
+                  cacheControl: '3600',
+                });
+
+              if (uploadError) {
+                throw new Error(`Upload failed: ${uploadError.message}`);
+              }
+            }
+
+            filesUpdated++;
+          } catch (error) {
+            filesFailed++;
+            urlData.status = 'failed';
+            urlData.error =
+              error instanceof Error ? error.message : 'Unknown error';
+
+            errors.push({
+              fileId: urlData.id,
+              fileName: urlData.url,
+              error: urlData.error,
+              retryable: this.isRetryableError(error),
+            });
           }
-
-          filesUpdated++;
-        } catch (error) {
-          filesFailed++;
-          urlData.status = 'failed';
-          urlData.error =
-            error instanceof Error ? error.message : 'Unknown error';
-
-          errors.push({
-            fileId: urlData.id,
-            fileName: urlData.url,
-            error: urlData.error,
-            retryable: this.isRetryableError(error),
-          });
-        }
-      }
+        }),
+      );
 
       return {
         success: filesFailed === 0,
@@ -602,11 +604,10 @@ export class URLImportConnector implements Connector {
    * Retry failed URLs
    */
   async retryFailed(): Promise<void> {
-    Array.from(this.urls.values())
-      .filter((u) => u.status === 'failed')
-      .forEach((u) => {
-        u.status = 'pending';
-        u.error = undefined;
-      });
+    Array.from(this.urls.values()).forEach((u) => {
+      if (u.status !== 'failed') return;
+      u.status = 'pending';
+      u.error = undefined;
+    });
   }
 }

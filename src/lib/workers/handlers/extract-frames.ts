@@ -12,6 +12,7 @@ import { indexRecordingFrames } from '@/lib/services/visual-indexing';
 import { extractFrameText } from '@/lib/services/ocr-service';
 import { createClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/lib/types/database';
+import { mapBatchesSequentially } from '@/lib/utils/async';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger({ service: 'extract-frames' });
@@ -50,7 +51,7 @@ function getFrameNumber(metadata: Json): number | null {
 }
 
 export async function handleExtractFrames(
-  job: TypedJob<ExtractFramesPayload>
+  job: TypedJob<ExtractFramesPayload>,
 ): Promise<void> {
   // Validate payload structure at runtime
   const payload = job.payload;
@@ -60,7 +61,9 @@ export async function handleExtractFrames(
   }
 
   if (!payload.recordingId || typeof payload.recordingId !== 'string') {
-    throw new Error('Invalid payload: recordingId is required and must be a string');
+    throw new Error(
+      'Invalid payload: recordingId is required and must be a string',
+    );
   }
 
   if (!payload.orgId || typeof payload.orgId !== 'string') {
@@ -100,7 +103,9 @@ export async function handleExtractFrames(
         .download(videoUrl);
 
       if (downloadError || !videoData) {
-        throw new Error(`Failed to download video: ${downloadError?.message || 'Unknown error'}`);
+        throw new Error(
+          `Failed to download video: ${downloadError?.message || 'Unknown error'}`,
+        );
       }
 
       // Save to temp file
@@ -189,7 +194,6 @@ export async function handleExtractFrames(
         frameCount: extraction.totalFrames,
       },
     });
-
   } catch (error) {
     logger.error('Frame extraction failed', {
       context: { recordingId, orgId },
@@ -203,10 +207,7 @@ export async function handleExtractFrames(
 /**
  * Perform OCR on extracted frames
  */
-async function performOCR(
-  recordingId: string,
-  orgId: string
-): Promise<void> {
+async function performOCR(recordingId: string, orgId: string): Promise<void> {
   const supabase = createClient();
 
   // Get frames from database
@@ -232,10 +233,8 @@ async function performOCR(
 
   // Process frames in batches
   const batchSize = 5;
-  for (let i = 0; i < dbFrames.length; i += batchSize) {
-    const batch = dbFrames.slice(i, i + batchSize);
-
-    await Promise.all(
+  await mapBatchesSequentially(dbFrames, batchSize, (batch) =>
+    Promise.all(
       batch.map(async (dbFrame) => {
         try {
           if (!dbFrame.frame_url) {
@@ -285,7 +284,10 @@ async function performOCR(
                 frameNumber: getFrameNumber(dbFrame.metadata) ?? 'unknown',
                 recordingId,
               },
-              data: { textLength: ocrResult.text.length, confidence: ocrResult.confidence },
+              data: {
+                textLength: ocrResult.text.length,
+                confidence: ocrResult.confidence,
+              },
             });
           }
 
@@ -297,9 +299,9 @@ async function performOCR(
             error: error as Error,
           });
         }
-      })
-    );
-  }
+      }),
+    ),
+  );
 
   logger.info('OCR processing complete', {
     context: { recordingId, orgId },

@@ -185,5 +185,3 @@ export function NodeInstances({
     />
   );
 }
-
-export default NodeInstances;

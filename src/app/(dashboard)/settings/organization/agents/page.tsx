@@ -286,6 +286,10 @@ interface AgentPermissionRow {
 // ---------------------------------------------------------------------------
 
 export default function AgentsSettingsPage() {
+  return useAgentsSettingsPageImplementation();
+}
+
+function useAgentsSettingsPageImplementation() {
   const queryClient = useQueryClient();
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(
     {
@@ -484,11 +488,11 @@ export default function AgentsSettingsPage() {
       <div className="flex items-center justify-center py-16" role="status">
         <div className="text-center">
           <div
-            className="inline-flex h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]"
+            className="inline-flex size-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]"
             aria-hidden="true"
           />
           <p className="mt-2 text-sm text-muted-foreground">
-            Loading agent settings...
+            Loading agent settings…
           </p>
         </div>
       </div>
@@ -559,14 +563,14 @@ export default function AgentsSettingsPage() {
           </p>
         </div>
         <div className="trbd-icon-chip" aria-hidden="true">
-          <Bot className="h-5 w-5" />
+          <Bot className="size-5" />
         </div>
       </div>
 
       <UsageAlertBanner />
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
           <div>
             <CardTitle className="text-base font-medium">
               Enable all agents
@@ -661,9 +665,9 @@ export default function AgentsSettingsPage() {
 
       {costEstimate && (
         <Card>
-          <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center gap-3 gap-y-0 pb-2">
             <DollarSign
-              className="h-5 w-5 text-muted-foreground"
+              className="size-5 text-muted-foreground"
               aria-hidden="true"
             />
             <div>
@@ -683,7 +687,7 @@ export default function AgentsSettingsPage() {
 
       {!globalEnabled && (
         <Alert variant="warning">
-          <Pause className="h-4 w-4" />
+          <Pause className="size-4" />
           <AlertDescription>
             All agents are paused. Individual settings are preserved but
             inactive until you re-enable agents.
@@ -743,18 +747,18 @@ export default function AgentsSettingsPage() {
                           >
                             {isExpanded ? (
                               <ChevronDown
-                                className="h-4 w-4 flex-shrink-0"
+                                className="size-4 flex-shrink-0"
                                 aria-hidden="true"
                               />
                             ) : (
                               <ChevronRight
-                                className="h-4 w-4 flex-shrink-0"
+                                className="size-4 flex-shrink-0"
                                 aria-hidden="true"
                               />
                             )}
                             <div>
                               <div className="flex items-center gap-2">
-                                <Bot className="h-4 w-4" aria-hidden="true" />
+                                <Bot className="size-4" aria-hidden="true" />
                                 <span className="text-sm font-medium">
                                   {agent.name}
                                 </span>
@@ -865,11 +869,11 @@ export default function AgentsSettingsPage() {
               >
                 <div className="text-center">
                   <div
-                    className="inline-flex h-6 w-6 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"
+                    className="inline-flex size-6 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"
                     aria-hidden="true"
                   />
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Loading approvals...
+                    Loading approvals…
                   </p>
                 </div>
               </div>
@@ -877,7 +881,7 @@ export default function AgentsSettingsPage() {
               <Card>
                 <CardContent className="py-12 text-center">
                   <Clock
-                    className="mx-auto h-8 w-8 text-muted-foreground/50"
+                    className="mx-auto size-8 text-muted-foreground/50"
                     aria-hidden="true"
                   />
                   <p className="mt-3 text-sm text-muted-foreground">
@@ -920,7 +924,7 @@ export default function AgentsSettingsPage() {
                                 title={cost.breakdown}
                               >
                                 <DollarSign
-                                  className="h-3 w-3"
+                                  className="size-3"
                                   aria-hidden="true"
                                 />
                                 {formatCostUsd(cost.estimatedCostUsd)}
@@ -972,7 +976,7 @@ export default function AgentsSettingsPage() {
                               aria-label="Approve this action"
                             >
                               <Check
-                                className="h-3.5 w-3.5 mr-1"
+                                className="size-3.5 mr-1"
                                 aria-hidden="true"
                               />
                               Approve
@@ -984,10 +988,7 @@ export default function AgentsSettingsPage() {
                               disabled={approvalMutation.isPending}
                               aria-label="Reject this action"
                             >
-                              <X
-                                className="h-3.5 w-3.5 mr-1"
-                                aria-hidden="true"
-                              />
+                              <X className="size-3.5 mr-1" aria-hidden="true" />
                               Reject
                             </Button>
                           </div>

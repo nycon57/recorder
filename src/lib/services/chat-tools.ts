@@ -82,8 +82,13 @@ function formatDuration(seconds: number): string {
  * and source precedence from the dashboard chat experience.
  */
 export async function executeAnswerQuestion(
-  { question, app, screen, limit }: { question: string; app?: string; screen?: string; limit?: number },
-  { orgId, userId }: ToolContext
+  {
+    question,
+    app,
+    screen,
+    limit,
+  }: { question: string; app?: string; screen?: string; limit?: number },
+  { orgId, userId }: ToolContext,
 ): Promise<ToolResponse> {
   try {
     if (!orgId) {
@@ -144,111 +149,108 @@ export async function executeAnswerQuestion(
  * after a user chooses a specific content item.
  */
 export async function executeSearchRecordings(
-  {
-    query,
-    limit,
-  }: { query: string; limit?: number },
-  { orgId, userId, contentIds }: ToolContext
+  { query, limit }: { query: string; limit?: number },
+  { orgId, userId, contentIds }: ToolContext,
 ): Promise<ToolResponse> {
-    try {
-      // Input validation
-      if (!orgId) {
-        return {
-          success: false,
-          error: 'Organization context is required for search operations',
-        };
-      }
+  try {
+    // Input validation
+    if (!orgId) {
+      return {
+        success: false,
+        error: 'Organization context is required for search operations',
+      };
+    }
 
-      const scopedContentIds = Array.isArray(contentIds)
-        ? contentIds.filter(Boolean)
-        : [];
-      const scopedContext =
-        scopedContentIds.length > 0
-          ? await resolveScopedCompiledMemoryAnswerContext({
-              orgId,
-              userId,
-              question: query,
-              sourceIds: scopedContentIds,
-              limit: limit || 5,
-            })
-          : null;
-      const pages =
-        scopedContext != null
-          ? scopedContext.sources.map((source) => ({
-              id: source.sourceId,
-              title: source.title,
-              snippet: source.excerpt,
-              content: source.content,
-              app: null,
-              screen: null,
-              similarity: source.confidence,
-            }))
-          : await searchCompiledOrgWikiPages({
-              orgId,
-              query,
-              limit: limit || 5,
-            });
+    const scopedContentIds = Array.isArray(contentIds)
+      ? contentIds.filter(Boolean)
+      : [];
+    const scopedContext =
+      scopedContentIds.length > 0
+        ? await resolveScopedCompiledMemoryAnswerContext({
+            orgId,
+            userId,
+            question: query,
+            sourceIds: scopedContentIds,
+            limit: limit || 5,
+          })
+        : null;
+    const pages =
+      scopedContext != null
+        ? scopedContext.sources.map((source) => ({
+            id: source.sourceId,
+            title: source.title,
+            snippet: source.excerpt,
+            content: source.content,
+            app: null,
+            screen: null,
+            similarity: source.confidence,
+          }))
+        : await searchCompiledOrgWikiPages({
+            orgId,
+            query,
+            limit: limit || 5,
+          });
 
-      // Check if results found
-      if (pages.length === 0) {
-        return {
-          success: true,
-          data: {
-            message:
-              scopedContentIds.length > 0
-                ? 'No compiled Wiki knowledge is linked to the selected recording yet.'
-                : 'No compiled Wiki knowledge matched your query yet. Try a different topic or inspect a specific recording/document.',
-            results: [],
-            searchMetadata: {
-              searchMode:
-                scopedContentIds.length > 0
-                  ? 'compiled_wiki_scoped'
-                  : 'compiled_wiki',
-              cacheHit: false,
-            },
-          },
-          sources: [],
-        };
-      }
-
-      // Format results for the assistant
-      const formattedResults = pages.map((page, index) => ({
-        rank: index + 1,
-        title: page.title,
-        excerpt: page.snippet,
-        relevanceScore: Math.round(page.similarity * 100),
-        type: 'compiled_wiki',
-        contentId: page.id,
-        url: `/dashboard/knowledge/wiki-pages/${page.id}`,
-        app: page.app,
-        screen: page.screen,
-      }));
-
-      const sources = pages.map((page) => ({
-        title: page.title,
-        excerpt: page.snippet,
-        relevanceScore: page.similarity,
-        type: 'compiled_wiki' as const,
-        contentId: page.id,
-        url: `/dashboard/knowledge/wiki-pages/${page.id}`,
-      }));
-
+    // Check if results found
+    if (pages.length === 0) {
       return {
         success: true,
         data: {
-          message: `Found ${pages.length} compiled Wiki result(s)`,
-          results: formattedResults,
+          message:
+            scopedContentIds.length > 0
+              ? 'No compiled Wiki knowledge is linked to the selected recording yet.'
+              : 'No compiled Wiki knowledge matched your query yet. Try a different topic or inspect a specific recording/document.',
+          results: [],
           searchMetadata: {
             searchMode:
               scopedContentIds.length > 0
                 ? 'compiled_wiki_scoped'
                 : 'compiled_wiki',
-            scopedContentIds,
             cacheHit: false,
           },
         },
-        sources,
+        sources: [],
       };
+    }
+
+    // Format results for the assistant
+    const formattedResults = pages.map((page, index) => ({
+      rank: index + 1,
+      title: page.title,
+      excerpt: page.snippet,
+      relevanceScore: Math.round(page.similarity * 100),
+      type: 'compiled_wiki',
+      contentId: page.id,
+      url: `/dashboard/knowledge/wiki-pages/${page.id}`,
+      app: page.app,
+      screen: page.screen,
+    }));
+
+    const sources = pages.map((page) => ({
+      title: page.title,
+      excerpt: page.snippet,
+      relevanceScore: page.similarity,
+      type: 'compiled_wiki' as const,
+      contentId: page.id,
+      url: `/dashboard/knowledge/wiki-pages/${page.id}`,
+    }));
+
+    return {
+      success: true,
+      data: {
+        message: `Found ${pages.length} compiled Wiki result(s)`,
+        results: formattedResults,
+        searchMetadata: {
+          searchMode:
+            scopedContentIds.length > 0
+              ? 'compiled_wiki_scoped'
+              : 'compiled_wiki',
+          scopedContentIds,
+          cacheHit: false,
+        },
+      },
+      sources,
+    };
   } catch (error) {
     console.error('[ChatTools] searchRecordings error:', error);
     return {
@@ -268,15 +270,18 @@ export async function executeSearchRecordings(
  * Verifies user has access via organization membership.
  */
 export async function executeGetDocument(
-  { documentId, includeMetadata }: { documentId: string; includeMetadata?: boolean },
-  { orgId }: ToolContext
+  {
+    documentId,
+    includeMetadata,
+  }: { documentId: string; includeMetadata?: boolean },
+  { orgId }: ToolContext,
 ): Promise<ToolResponse> {
-    try {
-      // Use admin client - auth already verified in API route
-      const { data: document, error } = await supabaseAdmin
-        .from('documents')
-        .select(
-          `
+  try {
+    // Use admin client - auth already verified in API route
+    const { data: document, error } = await supabaseAdmin
+      .from('documents')
+      .select(
+        `
           id,
           content_id,
           org_id,
@@ -295,54 +300,56 @@ export async function executeGetDocument(
             duration_sec,
             created_at
           )
-        `
-        )
-        .eq('id', documentId)
-        .eq('org_id', orgId)
-        .single();
+        `,
+      )
+      .eq('id', documentId)
+      .eq('org_id', orgId)
+      .single();
 
-      if (error || !document) {
-        return {
-          success: false,
-          error: error
-            ? 'Document not found or you do not have permission to access it'
-            : 'Document not found',
-        };
-      }
-
-      // Format response
-      const joinedDocument = document as typeof document & {
-        content?: { title?: string; duration_sec?: number | null } | Array<{ title?: string; duration_sec?: number | null }>;
-      };
-      const content = Array.isArray(joinedDocument.content)
-        ? joinedDocument.content[0]
-        : joinedDocument.content;
-
-      const result: Record<string, unknown> = {
-        documentId: document.id,
-        content: document.markdown,
-        summary: document.summary,
-        contentTitle: content?.title || 'Untitled Content',
-        status: document.status,
-      };
-
-      if (includeMetadata !== false) {
-        result.metadata = {
-          contentId: document.content_id,
-          version: document.version,
-          model: document.model,
-          duration: content?.duration_sec
-            ? formatDuration(content.duration_sec)
-            : undefined,
-          createdAt: new Date(document.created_at).toLocaleString(),
-          updatedAt: new Date(document.updated_at).toLocaleString(),
-        };
-      }
-
+    if (error || !document) {
       return {
-        success: true,
-        data: result,
+        success: false,
+        error: error
+          ? 'Document not found or you do not have permission to access it'
+          : 'Document not found',
       };
+    }
+
+    // Format response
+    const joinedDocument = document as typeof document & {
+      content?:
+        | { title?: string; duration_sec?: number | null }
+        | Array<{ title?: string; duration_sec?: number | null }>;
+    };
+    const content = Array.isArray(joinedDocument.content)
+      ? joinedDocument.content[0]
+      : joinedDocument.content;
+
+    const result: Record<string, unknown> = {
+      documentId: document.id,
+      content: document.markdown,
+      summary: document.summary,
+      contentTitle: content?.title || 'Untitled Content',
+      status: document.status,
+    };
+
+    if (includeMetadata !== false) {
+      result.metadata = {
+        contentId: document.content_id,
+        version: document.version,
+        model: document.model,
+        duration: content?.duration_sec
+          ? formatDuration(content.duration_sec)
+          : undefined,
+        createdAt: new Date(document.created_at).toLocaleString(),
+        updatedAt: new Date(document.updated_at).toLocaleString(),
+      };
+    }
+
+    return {
+      success: true,
+      data: result,
+    };
   } catch (error) {
     console.error('[ChatTools] getDocument error:', error);
     return {
@@ -362,23 +369,33 @@ export async function executeGetDocument(
  * Returns formatted transcript with word-level timing information.
  */
 export async function executeGetTranscript(
-  { contentId, recordingId, includeTimestamps, formatTimestamps }: { contentId?: string; recordingId?: string; includeTimestamps?: boolean; formatTimestamps?: boolean },
-  { orgId }: ToolContext
+  {
+    contentId,
+    recordingId,
+    includeTimestamps,
+    formatTimestamps,
+  }: {
+    contentId?: string;
+    recordingId?: string;
+    includeTimestamps?: boolean;
+    formatTimestamps?: boolean;
+  },
+  { orgId }: ToolContext,
 ): Promise<ToolResponse> {
-    try {
-      const scopedContentId = contentId ?? recordingId;
-      if (!scopedContentId) {
-        return {
-          success: false,
-          error: 'A content ID is required to retrieve a transcript',
-        };
-      }
+  try {
+    const scopedContentId = contentId ?? recordingId;
+    if (!scopedContentId) {
+      return {
+        success: false,
+        error: 'A content ID is required to retrieve a transcript',
+      };
+    }
 
-      // Use admin client - auth already verified in API route
-      const { data: transcript, error } = await supabaseAdmin
-        .from('transcripts')
-        .select(
-          `
+    // Use admin client - auth already verified in API route
+    const { data: transcript, error } = await supabaseAdmin
+      .from('transcripts')
+      .select(
+        `
           id,
           content_id,
           language,
@@ -395,122 +412,137 @@ export async function executeGetTranscript(
             duration_sec,
             status
           )
-        `
-        )
-        .eq('content_id', scopedContentId)
-        .single();
+        `,
+      )
+      .eq('content_id', scopedContentId)
+      .single();
 
-      if (error || !transcript) {
-        return {
-          success: false,
-          error: error
-            ? 'Transcript not found or you do not have permission to access it'
-            : 'Transcript not found for this content',
-        };
-      }
-
-      // Verify organization access
-      const joinedTranscript = transcript as typeof transcript & {
-        content?: { org_id?: string; title?: string; content_type?: string; duration_sec?: number | null; status?: string | null } | Array<{ org_id?: string; title?: string; content_type?: string; duration_sec?: number | null; status?: string | null }>;
+    if (error || !transcript) {
+      return {
+        success: false,
+        error: error
+          ? 'Transcript not found or you do not have permission to access it'
+          : 'Transcript not found for this content',
       };
-      const content = Array.isArray(joinedTranscript.content)
-        ? joinedTranscript.content[0]
-        : joinedTranscript.content;
+    }
 
-      if (content?.org_id !== orgId) {
-        return {
-          success: false,
-          error: 'You do not have permission to access this transcript',
-        };
-      }
+    // Verify organization access
+    const joinedTranscript = transcript as typeof transcript & {
+      content?:
+        | {
+            org_id?: string;
+            title?: string;
+            content_type?: string;
+            duration_sec?: number | null;
+            status?: string | null;
+          }
+        | Array<{
+            org_id?: string;
+            title?: string;
+            content_type?: string;
+            duration_sec?: number | null;
+            status?: string | null;
+          }>;
+    };
+    const content = Array.isArray(joinedTranscript.content)
+      ? joinedTranscript.content[0]
+      : joinedTranscript.content;
 
-      // Format transcript text
-      let formattedText = transcript.text;
+    if (content?.org_id !== orgId) {
+      return {
+        success: false,
+        error: 'You do not have permission to access this transcript',
+      };
+    }
 
-      // Add timestamps if requested and available
-      if (includeTimestamps && transcript.words_json) {
-        try {
-          const words = Array.isArray(transcript.words_json)
-            ? transcript.words_json
-            : JSON.parse(transcript.words_json as string);
+    // Format transcript text
+    let formattedText = transcript.text;
 
-          if (Array.isArray(words) && words.length > 0) {
-            // Group words into sentences or chunks with timestamps
-            const chunks: string[] = [];
-            let currentChunk = '';
-            let currentTime = 0;
+    // Add timestamps if requested and available
+    if (includeTimestamps && transcript.words_json) {
+      try {
+        const words = Array.isArray(transcript.words_json)
+          ? transcript.words_json
+          : JSON.parse(transcript.words_json as string);
 
-            words.forEach((wordValue, index: number) => {
-              const word = wordValue && typeof wordValue === 'object'
-                ? wordValue as Record<string, unknown>
+        if (Array.isArray(words) && words.length > 0) {
+          // Group words into sentences or chunks with timestamps
+          const chunks: string[] = [];
+          let currentChunk = '';
+          let currentTime = 0;
+
+          words.forEach((wordValue, index: number) => {
+            const word =
+              wordValue && typeof wordValue === 'object'
+                ? (wordValue as Record<string, unknown>)
                 : {};
-              const timestamp =
-                typeof word.start === 'number'
-                  ? word.start
-                  : typeof word.timestamp === 'number'
-                    ? word.timestamp
-                    : 0;
-              const wordText =
-                typeof word.word === 'string'
-                  ? word.word
-                  : typeof word.text === 'string'
-                    ? word.text
-                    : '';
+            const timestamp =
+              typeof word.start === 'number'
+                ? word.start
+                : typeof word.timestamp === 'number'
+                  ? word.timestamp
+                  : 0;
+            const wordText =
+              typeof word.word === 'string'
+                ? word.word
+                : typeof word.text === 'string'
+                  ? word.text
+                  : '';
 
-              // Add timestamp marker every 30 seconds or at sentence boundaries
-              if (
-                timestamp - currentTime >= 30 ||
-                (index > 0 && /[.!?]$/.test(wordText))
-              ) {
-                if (currentChunk) {
-                  const timeStr = formatTimestamps
-                    ? formatTimestamp(currentTime)
-                    : `${currentTime}s`;
-                  chunks.push(`[${timeStr}] ${currentChunk.trim()}`);
-                  currentChunk = '';
-                }
-                currentTime = timestamp;
+            // Add timestamp marker every 30 seconds or at sentence boundaries
+            if (
+              timestamp - currentTime >= 30 ||
+              (index > 0 && /[.!?]$/.test(wordText))
+            ) {
+              if (currentChunk) {
+                const timeStr = formatTimestamps
+                  ? formatTimestamp(currentTime)
+                  : `${currentTime}s`;
+                chunks.push(`[${timeStr}] ${currentChunk.trim()}`);
+                currentChunk = '';
               }
-
-              currentChunk += `${wordText} `;
-            });
-
-            // Add remaining chunk
-            if (currentChunk) {
-              const timeStr = formatTimestamps
-                ? formatTimestamp(currentTime)
-                : `${currentTime}s`;
-              chunks.push(`[${timeStr}] ${currentChunk.trim()}`);
+              currentTime = timestamp;
             }
 
-            formattedText = chunks.join('\n\n');
+            currentChunk += `${wordText} `;
+          });
+
+          // Add remaining chunk
+          if (currentChunk) {
+            const timeStr = formatTimestamps
+              ? formatTimestamp(currentTime)
+              : `${currentTime}s`;
+            chunks.push(`[${timeStr}] ${currentChunk.trim()}`);
           }
-        } catch (parseError) {
-          console.error('[ChatTools] Error parsing words_json:', parseError);
-          // Fall back to plain text
+
+          formattedText = chunks.join('\n\n');
         }
+      } catch (parseError) {
+        console.error('[ChatTools] Error parsing words_json:', parseError);
+        // Fall back to plain text
       }
+    }
 
-      const result = {
-        contentId: transcript.content_id,
-        contentTitle: content.title || 'Untitled Content',
-        transcript: formattedText,
-        language: transcript.language || 'en',
-        confidence: transcript.confidence
-          ? Math.round(transcript.confidence * 100)
-          : undefined,
-        provider: transcript.provider,
-        duration: content.duration_sec
-          ? formatDuration(content.duration_sec)
-          : undefined,
-        status: content.status,
-        createdAt: new Date(transcript.created_at).toLocaleString(),
-      };
+    const result = {
+      contentId: transcript.content_id,
+      contentTitle: content.title || 'Untitled Content',
+      transcript: formattedText,
+      language: transcript.language || 'en',
+      confidence: transcript.confidence
+        ? Math.round(transcript.confidence * 100)
+        : undefined,
+      provider: transcript.provider,
+      duration: content.duration_sec
+        ? formatDuration(content.duration_sec)
+        : undefined,
+      status: content.status,
+      createdAt: new Date(transcript.created_at).toLocaleString(),
+    };
 
-      return {
-        success: true,
-        data: result,
-      };
+    return {
+      success: true,
+      data: result,
+    };
   } catch (error) {
     console.error('[ChatTools] getTranscript error:', error);
     return {
@@ -530,23 +562,27 @@ export async function executeGetTranscript(
  * status, and creation date.
  */
 export async function executeGetRecordingMetadata(
-  { contentId, recordingId, includeStats }: { contentId?: string; recordingId?: string; includeStats?: boolean },
-  { orgId }: ToolContext
+  {
+    contentId,
+    recordingId,
+    includeStats,
+  }: { contentId?: string; recordingId?: string; includeStats?: boolean },
+  { orgId }: ToolContext,
 ): Promise<ToolResponse> {
-    try {
-      const scopedContentId = contentId ?? recordingId;
-      if (!scopedContentId) {
-        return {
-          success: false,
-          error: 'A content ID is required to retrieve recording metadata',
-        };
-      }
+  try {
+    const scopedContentId = contentId ?? recordingId;
+    if (!scopedContentId) {
+      return {
+        success: false,
+        error: 'A content ID is required to retrieve recording metadata',
+      };
+    }
 
-      // Use admin client - auth already verified in API route
-      const { data: content, error } = await supabaseAdmin
-        .from('content')
-        .select(
-          `
+    // Use admin client - auth already verified in API route
+    const { data: content, error } = await supabaseAdmin
+      .from('content')
+      .select(
+        `
           id,
           title,
           description,
@@ -557,83 +593,83 @@ export async function executeGetRecordingMetadata(
           updated_at,
           completed_at,
           metadata
-        `
-        )
-        .eq('id', scopedContentId)
-        .eq('org_id', orgId)
+        `,
+      )
+      .eq('id', scopedContentId)
+      .eq('org_id', orgId)
+      .single();
+
+    if (error || !content) {
+      return {
+        success: false,
+        error: error
+          ? 'Content not found or you do not have permission to access it'
+          : 'Content not found',
+      };
+    }
+
+    const result: Record<string, unknown> = {
+      contentId: content.id,
+      title: content.title || 'Untitled Content',
+      description: content.description,
+      status: content.status,
+      duration: content.duration_sec
+        ? formatDuration(content.duration_sec)
+        : undefined,
+      thumbnailUrl: content.thumbnail_url,
+      createdAt: new Date(content.created_at).toLocaleString(),
+      lastUpdated: new Date(content.updated_at).toLocaleString(),
+      completedAt: content.completed_at
+        ? new Date(content.completed_at).toLocaleString()
+        : undefined,
+    };
+
+    // Include additional stats if requested
+    if (includeStats !== false) {
+      const stats: Record<string, unknown> = {
+        durationSeconds: content.duration_sec,
+      };
+
+      // Get transcript word count if available
+      const { data: transcript } = await supabaseAdmin
+        .from('transcripts')
+        .select('text')
+        .eq('content_id', scopedContentId)
         .single();
 
-      if (error || !content) {
-        return {
-          success: false,
-          error: error
-            ? 'Content not found or you do not have permission to access it'
-            : 'Content not found',
-        };
+      if (transcript?.text) {
+        stats.wordCount = transcript.text.split(/\s+/).length;
       }
 
-      const result: Record<string, unknown> = {
-        contentId: content.id,
-        title: content.title || 'Untitled Content',
-        description: content.description,
-        status: content.status,
-        duration: content.duration_sec
-          ? formatDuration(content.duration_sec)
-          : undefined,
-        thumbnailUrl: content.thumbnail_url,
-        createdAt: new Date(content.created_at).toLocaleString(),
-        lastUpdated: new Date(content.updated_at).toLocaleString(),
-        completedAt: content.completed_at
-          ? new Date(content.completed_at).toLocaleString()
-          : undefined,
-      };
+      // Get chunk count
+      const { count: chunkCount } = await supabaseAdmin
+        .from('transcript_chunks')
+        .select('*', { count: 'exact', head: true })
+        .eq('content_id', scopedContentId);
 
-      // Include additional stats if requested
-      if (includeStats !== false) {
-        const stats: Record<string, unknown> = {
-          durationSeconds: content.duration_sec,
-        };
-
-        // Get transcript word count if available
-        const { data: transcript } = await supabaseAdmin
-          .from('transcripts')
-          .select('text')
-          .eq('content_id', scopedContentId)
-          .single();
-
-        if (transcript?.text) {
-          stats.wordCount = transcript.text.split(/\s+/).length;
-        }
-
-        // Get chunk count
-        const { count: chunkCount } = await supabaseAdmin
-          .from('transcript_chunks')
-          .select('*', { count: 'exact', head: true })
-          .eq('content_id', scopedContentId);
-
-        if (chunkCount !== null) {
-          stats.chunks = chunkCount;
-        }
-
-        // Get document status
-        const { data: document } = await supabaseAdmin
-          .from('documents')
-          .select('status, version')
-          .eq('content_id', scopedContentId)
-          .single();
-
-        if (document) {
-          stats.documentStatus = document.status;
-          stats.documentVersion = document.version;
-        }
-
-        result.stats = stats;
+      if (chunkCount !== null) {
+        stats.chunks = chunkCount;
       }
 
-      return {
-        success: true,
-        data: result,
-      };
+      // Get document status
+      const { data: document } = await supabaseAdmin
+        .from('documents')
+        .select('status, version')
+        .eq('content_id', scopedContentId)
+        .single();
+
+      if (document) {
+        stats.documentStatus = document.status;
+        stats.documentVersion = document.version;
+      }
+
+      result.stats = stats;
+    }
+
+    return {
+      success: true,
+      data: result,
+    };
   } catch (error) {
     console.error('[ChatTools] getRecordingMetadata error:', error);
     return {
@@ -653,16 +689,26 @@ export async function executeGetRecordingMetadata(
  * Useful for browsing available content.
  */
 export async function executeListRecordings(
-  { limit, status, sortBy, sortOrder }: { limit?: number; status?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' },
-  { orgId }: ToolContext
+  {
+    limit,
+    status,
+    sortBy,
+    sortOrder,
+  }: {
+    limit?: number;
+    status?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  },
+  { orgId }: ToolContext,
 ): Promise<ToolResponse> {
-    try {
-      // Use admin client - auth already verified in API route
-      // Build query
-      let query = supabaseAdmin
-        .from('content')
-        .select(
-          `
+  try {
+    // Use admin client - auth already verified in API route
+    // Build query
+    let query = supabaseAdmin
+      .from('content')
+      .select(
+        `
           id,
           title,
           description,
@@ -672,66 +718,68 @@ export async function executeListRecordings(
           created_at,
           updated_at
         `,
-          { count: 'exact' }
-        )
-        .eq('org_id', orgId);
+        { count: 'exact' },
+      )
+      .eq('org_id', orgId);
 
-      // Apply status filter if provided
-      if (status) {
-        query = query.eq('status', status);
-      }
+    // Apply status filter if provided
+    if (status) {
+      query = query.eq('status', status);
+    }
 
-      // Apply sorting
-      const sortField = sortBy || 'created_at';
-      const sortAsc = sortOrder === 'asc';
-      query = query.order(sortField, { ascending: sortAsc });
+    // Apply sorting
+    const sortField = sortBy || 'created_at';
+    const sortAsc = sortOrder === 'asc';
+    query = query.order(sortField, { ascending: sortAsc });
 
-      // Apply limit
-      query = query.limit(limit || 10);
+    // Apply limit
+    query = query.limit(limit || 10);
 
-      const { data: contentItems, error, count } = await query;
+    const { data: contentItems, error, count } = await query;
 
-      if (error) {
-        return {
-          success: false,
-          error: `Failed to retrieve content: ${error.message}`,
-        };
-      }
+    if (error) {
+      return {
+        success: false,
+        error: `Failed to retrieve content: ${error.message}`,
+      };
+    }
 
-      if (!contentItems || contentItems.length === 0) {
-        return {
-          success: true,
-          data: {
-            message: status
-              ? `No content found with status "${status}"`
-              : 'No content found. Create your first content item to get started.',
-            content: [],
-            total: 0,
-          },
-        };
-      }
-
-      // Format content items
-      const formattedContent = contentItems.map((item) => ({
-        id: item.id,
-        title: item.title || 'Untitled Content',
-        description: item.description,
-        status: item.status,
-        duration: item.duration_sec ? formatDuration(item.duration_sec) : undefined,
-        thumbnailUrl: item.thumbnail_url,
-        createdAt: new Date(item.created_at).toLocaleString(),
-        lastUpdated: new Date(item.updated_at).toLocaleString(),
-      }));
-
+    if (!contentItems || contentItems.length === 0) {
       return {
         success: true,
         data: {
-          content: formattedContent,
-          total: count || contentItems.length,
-          limit: limit || 10,
-          sortedBy: `${sortField} (${sortOrder || 'desc'})`,
+          message: status
+            ? `No content found with status "${status}"`
+            : 'No content found. Create your first content item to get started.',
+          content: [],
+          total: 0,
         },
       };
+    }
+
+    // Format content items
+    const formattedContent = contentItems.map((item) => ({
+      id: item.id,
+      title: item.title || 'Untitled Content',
+      description: item.description,
+      status: item.status,
+      duration: item.duration_sec
+        ? formatDuration(item.duration_sec)
+        : undefined,
+      thumbnailUrl: item.thumbnail_url,
+      createdAt: new Date(item.created_at).toLocaleString(),
+      lastUpdated: new Date(item.updated_at).toLocaleString(),
+    }));
+
+    return {
+      success: true,
+      data: {
+        content: formattedContent,
+        total: count || contentItems.length,
+        limit: limit || 10,
+        sortedBy: `${sortField} (${sortOrder || 'desc'})`,
+      },
+    };
   } catch (error) {
     console.error('[ChatTools] listRecordings error:', error);
     return {
@@ -757,7 +805,7 @@ export async function executeSearchConcepts(
     types?: string[];
     minMentions?: number;
   },
-  context: ToolContext
+  context: ToolContext,
 ): Promise<ToolResponse> {
   const { orgId } = context;
   const { query, limit = 10, types, minMentions = 1 } = args;
@@ -785,7 +833,7 @@ export async function executeSearchConcepts(
     const conceptSummary = concepts
       .map(
         (c, i) =>
-          `${i + 1}. **${c.name}** (${c.conceptType}) - mentioned ${c.mentionCount} times, ${Math.round(c.matchScore * 100)}% match`
+          `${i + 1}. **${c.name}** (${c.conceptType}) - mentioned ${c.mentionCount} times, ${Math.round(c.matchScore * 100)}% match`,
       )
       .join('\n');
 
@@ -806,7 +854,8 @@ export async function executeSearchConcepts(
     console.error('[ChatTools] searchConcepts error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to search concepts',
+      error:
+        error instanceof Error ? error.message : 'Failed to search concepts',
     };
   }
 }
@@ -823,7 +872,7 @@ export async function executeGetConceptDetails(
     includeRelated?: boolean;
     includeMentions?: boolean;
   },
-  context: ToolContext
+  context: ToolContext,
 ): Promise<ToolResponse> {
   const { orgId } = context;
   const { conceptId, includeRelated = true, includeMentions = true } = args;
@@ -858,22 +907,23 @@ export async function executeGetConceptDetails(
           strength,
           relationship_type,
           concept_b_id
-        `
+        `,
         )
         .eq('concept_a_id', conceptId)
         .eq('org_id', orgId)
         .order('strength', { ascending: false })
         .limit(10);
 
-      relatedConcepts = (related || [])
-        .map((r) => ({
-          id: r.concept_b_id,
-          name: r.concept_b_id,
+      relatedConcepts = (related || []).flatMap((__item, __index, __array) => {
+        const __mapped = {
+          id: __item.concept_b_id,
+          name: __item.concept_b_id,
           type: undefined,
-          relationshipType: r.relationship_type,
-          strength: Math.round((r.strength ?? 0) * 100),
-        }))
-        .filter((r) => r.id);
+          relationshipType: __item.relationship_type,
+          strength: Math.round((__item.strength ?? 0) * 100),
+        };
+        return __mapped.id ? [__mapped] : [];
+      });
     }
 
     // Get recent mentions if requested
@@ -886,29 +936,34 @@ export async function executeGetConceptDetails(
           confidence,
           created_at,
           content:content_id(id, title, content_type)
-        `
+        `,
         )
         .eq('concept_id', conceptId)
         .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(5);
 
-      recentMentions = (mentions || [])
-        .map((mention) => {
-          const joinedMention = mention as typeof mention & {
-            content?: { id?: string; title?: string | null; content_type?: string | null };
+      recentMentions = (mentions || []).flatMap((mention) => {
+        const joinedMention = mention as typeof mention & {
+          content?: {
+            id?: string;
+            title?: string | null;
+            content_type?: string | null;
           };
-          return {
-          contentId: joinedMention.content?.id,
-          contentTitle: joinedMention.content?.title || 'Untitled',
-          contentType: joinedMention.content?.content_type,
-          context: `${mention.context?.substring(0, 200) ?? ''}${
-            (mention.context?.length ?? 0) > 200 ? '...' : ''
-          }`,
-          confidence: Math.round((mention.confidence ?? 0) * 100),
         };
-        })
-        .filter((m) => m.contentId);
+        if (!joinedMention.content?.id) return [];
+        return [
+          {
+            contentId: joinedMention.content?.id,
+            contentTitle: joinedMention.content?.title || 'Untitled',
+            contentType: joinedMention.content?.content_type,
+            context: `${mention.context?.substring(0, 200) ?? ''}${
+              (mention.context?.length ?? 0) > 200 ? '...' : ''
+            }`,
+            confidence: Math.round((mention.confidence ?? 0) * 100),
+          },
+        ];
+      });
     }
 
     // Format for AI
@@ -948,7 +1003,9 @@ export async function executeGetConceptDetails(
     return {
       success: false,
       error:
-        error instanceof Error ? error.message : 'Failed to get concept details',
+        error instanceof Error
+          ? error.message
+          : 'Failed to get concept details',
     };
   }
 }
@@ -965,7 +1022,7 @@ export async function executeExploreKnowledgeGraph(
     maxNodes?: number;
     types?: string[];
   },
-  context: ToolContext
+  context: ToolContext,
 ): Promise<ToolResponse> {
   const { orgId } = context;
   const { focusConceptId, maxNodes = 20, types } = args;
@@ -1031,7 +1088,7 @@ export async function executeExploreKnowledgeGraph(
       .slice(0, 5)
       .map(
         (c, i) =>
-          `${i + 1}. **${c.name}** (${c.concept_type}, ${c.mention_count} mentions)`
+          `${i + 1}. **${c.name}** (${c.concept_type}, ${c.mention_count} mentions)`,
       )
       .join('\n');
 

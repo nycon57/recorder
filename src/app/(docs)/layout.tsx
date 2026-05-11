@@ -17,9 +17,10 @@ export default async function DocsLayout({
   children: React.ReactNode;
 }) {
   const reqHeaders = await headers();
-  const { audience } = await resolveDocsAudience(reqHeaders);
-
-  const registry = await getDocsRegistry();
+  const [{ audience }, registry] = await Promise.all([
+    resolveDocsAudience(reqHeaders),
+    getDocsRegistry(),
+  ]);
   const navTree = registry.buildNavigation(audience);
 
   return (

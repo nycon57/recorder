@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useReducer, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Brain,
@@ -13,7 +13,7 @@ import {
   Upload,
   Activity,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -56,6 +56,41 @@ type SortOption =
   | 'name_asc'
   | 'name_desc';
 
+type KnowledgePageState = {
+  viewMode: ViewMode;
+  selectedConceptId: string | null;
+  selectedTypes: ConceptType[];
+  sortBy: SortOption;
+  graphNodes: KnowledgeGraphData['nodes'];
+  graphEdges: KnowledgeGraphData['edges'];
+  concepts: Concept[];
+  loading: boolean;
+  error: string | null;
+};
+
+type KnowledgePageAction =
+  | Partial<KnowledgePageState>
+  | ((state: KnowledgePageState) => KnowledgePageState);
+
+const initialKnowledgePageState: KnowledgePageState = {
+  viewMode: 'list',
+  selectedConceptId: null,
+  selectedTypes: [],
+  sortBy: 'mention_count_desc',
+  graphNodes: [],
+  graphEdges: [],
+  concepts: [],
+  loading: true,
+  error: null,
+};
+
+function knowledgePageReducer(
+  state: KnowledgePageState,
+  action: KnowledgePageAction,
+): KnowledgePageState {
+  return typeof action === 'function' ? action(state) : { ...state, ...action };
+}
+
 /**
  * KnowledgePage - Main Knowledge Graph page
  *
@@ -69,29 +104,30 @@ type SortOption =
  * - Empty state when no concepts
  */
 function KnowledgePageContent() {
-  // View state
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [selectedConceptId, setSelectedConceptId] = useState<string | null>(
-    null,
-  );
+  return useKnowledgePageContentImplementation();
+}
 
-  // Filter state
-  const [selectedTypes, setSelectedTypes] = useState<ConceptType[]>([]);
-  const [sortBy, setSortBy] = useState<SortOption>('mention_count_desc');
-
-  // Data state
-  const [graphNodes, setGraphNodes] = useState<KnowledgeGraphData['nodes']>([]);
-  const [graphEdges, setGraphEdges] = useState<KnowledgeGraphData['edges']>([]);
-  const [concepts, setConcepts] = useState<Concept[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function useKnowledgePageContentImplementation() {
+  const [
+    {
+      viewMode,
+      selectedConceptId,
+      selectedTypes,
+      sortBy,
+      graphNodes,
+      graphEdges,
+      concepts,
+      loading,
+      error,
+    },
+    updateKnowledgePageState,
+  ] = useReducer(knowledgePageReducer, initialKnowledgePageState);
 
   // Stable fetch function that takes params explicitly to avoid stale closures
   const fetchGraphData = useCallback(
     async (types: ConceptType[], sort: SortOption, signal: AbortSignal) => {
       try {
-        setLoading(true);
-        setError(null);
+        updateKnowledgePageState({ loading: true, error: null });
 
         // Build query params for graph
         const graphParams = new URLSearchParams();
@@ -117,8 +153,10 @@ function KnowledgePageContent() {
         // Check if aborted before updating state
         if (signal.aborted) return;
 
-        setGraphNodes(data.nodes);
-        setGraphEdges(data.edges);
+        updateKnowledgePageState({
+          graphNodes: data.nodes,
+          graphEdges: data.edges,
+        });
 
         // Also fetch concepts for list view
         const conceptParams = new URLSearchParams();
@@ -141,20 +179,25 @@ function KnowledgePageContent() {
         // Check if aborted before updating state
         if (signal.aborted) return;
 
-        setConcepts(conceptResult.data?.concepts || []);
+        updateKnowledgePageState({
+          concepts: conceptResult.data?.concepts || [],
+        });
       } catch (err) {
         // Ignore abort errors
         if (err instanceof Error && err.name === 'AbortError') {
           return;
         }
         console.error('Error fetching graph data:', err);
-        setError(
-          err instanceof Error ? err.message : 'Failed to load knowledge graph',
-        );
+        updateKnowledgePageState({
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Failed to load knowledge graph',
+        });
       } finally {
         // Only clear loading if not aborted
         if (!signal.aborted) {
-          setLoading(false);
+          updateKnowledgePageState({ loading: false });
         }
       }
     },
@@ -203,28 +246,28 @@ function KnowledgePageContent() {
 
   // Handle concept click
   const handleConceptClick = useCallback((conceptId: string) => {
-    setSelectedConceptId(conceptId);
+    updateKnowledgePageState({ selectedConceptId: conceptId });
   }, []);
 
   const handleClosePanel = useCallback(() => {
-    setSelectedConceptId(null);
+    updateKnowledgePageState({ selectedConceptId: null });
   }, []);
 
   // Clear filters
   const handleClearFilters = useCallback(() => {
-    setSelectedTypes([]);
+    updateKnowledgePageState({ selectedTypes: [] });
   }, []);
 
   // Keyboard shortcuts
   useKeyboardShortcuts([
     {
       key: 'g',
-      handler: () => setViewMode('graph'),
+      handler: () => updateKnowledgePageState({ viewMode: 'graph' }),
       description: 'Switch to graph view',
     },
     {
       key: 'l',
-      handler: () => setViewMode('list'),
+      handler: () => updateKnowledgePageState({ viewMode: 'list' }),
       description: 'Switch to list view',
     },
     {
@@ -253,13 +296,13 @@ function KnowledgePageContent() {
           <div className="space-y-2">
             <div className="flex items-center gap-3">
               <h1 className="trbd-page-title tracking-tight flex items-center gap-3">
-                <Brain className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
+                <Brain className="size-7 sm:size-8 text-primary" />
                 Knowledge Graph
               </h1>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Info className="h-5 w-5 text-muted-foreground cursor-help" />
+                    <Info className="size-5 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[320px] p-4">
                     <div className="space-y-2">
@@ -283,9 +326,7 @@ function KnowledgePageContent() {
             <p className="text-sm sm:text-base text-muted-foreground">
               Explore concepts and relationships across your content
             </p>
-            <DocLink href="/docs/product/wiki">
-              Wiki product guide
-            </DocLink>
+            <DocLink href="/docs/product/wiki">Wiki product guide</DocLink>
           </div>
 
           {/* Right: Health link + View mode toggle */}
@@ -297,7 +338,7 @@ function KnowledgePageContent() {
               className="min-h-[44px]"
             >
               <Link href="/knowledge/health">
-                <Activity className="h-4 w-4 mr-2" aria-hidden="true" />
+                <Activity className="size-4 mr-2" aria-hidden="true" />
                 Health
               </Link>
             </Button>
@@ -309,23 +350,23 @@ function KnowledgePageContent() {
               <Button
                 variant={viewMode === 'graph' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={() => setViewMode('graph')}
+                onClick={() => updateKnowledgePageState({ viewMode: 'graph' })}
                 className="flex-1 sm:flex-none gap-2 min-h-[44px]"
                 aria-label="Graph view"
                 aria-pressed={viewMode === 'graph'}
               >
-                <Network className="h-4 w-4" aria-hidden="true" />
+                <Network className="size-4" aria-hidden="true" />
                 <span>Graph</span>
               </Button>
               <Button
                 variant={viewMode === 'list' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={() => setViewMode('list')}
+                onClick={() => updateKnowledgePageState({ viewMode: 'list' })}
                 className="flex-1 sm:flex-none gap-2 min-h-[44px]"
                 aria-label="List view"
                 aria-pressed={viewMode === 'list'}
               >
-                <List className="h-4 w-4" aria-hidden="true" />
+                <List className="size-4" aria-hidden="true" />
                 <span>List</span>
               </Button>
             </div>
@@ -342,7 +383,7 @@ function KnowledgePageContent() {
           >
             <div className="flex items-center gap-2">
               <Hash
-                className="h-4 w-4 text-muted-foreground"
+                className="size-4 text-muted-foreground"
                 aria-hidden="true"
               />
               <span className="text-sm font-medium">
@@ -351,7 +392,7 @@ function KnowledgePageContent() {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    <Info className="size-3.5 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[280px]">
                     <p className="text-xs">
@@ -385,14 +426,18 @@ function KnowledgePageContent() {
             {/* Concept Type Filter */}
             <ConceptFilter
               selectedTypes={selectedTypes}
-              onSelectionChange={setSelectedTypes}
+              onSelectionChange={(types) =>
+                updateKnowledgePageState({ selectedTypes: types })
+              }
             />
 
             {/* Sort (List view only) */}
             {viewMode === 'list' && (
               <Select
                 value={sortBy}
-                onValueChange={(v) => setSortBy(v as SortOption)}
+                onValueChange={(value) =>
+                  updateKnowledgePageState({ sortBy: value as SortOption })
+                }
               >
                 <SelectTrigger className="w-full sm:w-[200px] min-h-[44px]">
                   <SelectValue />
@@ -426,7 +471,7 @@ function KnowledgePageContent() {
       {/* Error Display */}
       {error && (
         <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -434,7 +479,7 @@ function KnowledgePageContent() {
       {/* Main Content */}
       <AnimatePresence mode="wait">
         {loading ? (
-          <motion.div
+          <m.div
             key="loading"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -449,9 +494,9 @@ function KnowledgePageContent() {
                 itemsPerGroup={8}
               />
             )}
-          </motion.div>
+          </m.div>
         ) : !hasData ? (
-          <motion.div
+          <m.div
             key="empty"
             variants={fadeIn}
             initial="hidden"
@@ -460,7 +505,7 @@ function KnowledgePageContent() {
           >
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
               <div className="bg-primary/5 rounded-full p-6 mb-6">
-                <Brain className="h-12 w-12 text-primary" />
+                <Brain className="size-12 text-primary" />
               </div>
               <h3 className="text-xl font-semibold mb-3">
                 Your Knowledge Graph is Empty
@@ -474,13 +519,13 @@ function KnowledgePageContent() {
               {/* How it works section */}
               <div className="bg-muted/30 rounded-lg p-6 max-w-2xl w-full mb-8">
                 <h4 className="font-medium mb-4 flex items-center gap-2 justify-center">
-                  <Sparkles className="h-4 w-4 text-primary" />
+                  <Sparkles className="size-4 text-primary" />
                   How the Knowledge Graph Works
                 </h4>
                 <div className="grid sm:grid-cols-3 gap-4 text-left">
                   <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
                     <div className="bg-background rounded-full p-2 mb-2">
-                      <Upload className="h-5 w-5 text-muted-foreground" />
+                      <Upload className="size-5 text-muted-foreground" />
                     </div>
                     <p className="text-sm font-medium">1. Add Content</p>
                     <p className="text-xs text-muted-foreground">
@@ -489,7 +534,7 @@ function KnowledgePageContent() {
                   </div>
                   <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
                     <div className="bg-background rounded-full p-2 mb-2">
-                      <Sparkles className="h-5 w-5 text-muted-foreground" />
+                      <Sparkles className="size-5 text-muted-foreground" />
                     </div>
                     <p className="text-sm font-medium">2. AI Extraction</p>
                     <p className="text-xs text-muted-foreground">
@@ -499,7 +544,7 @@ function KnowledgePageContent() {
                   </div>
                   <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
                     <div className="bg-background rounded-full p-2 mb-2">
-                      <Network className="h-5 w-5 text-muted-foreground" />
+                      <Network className="size-5 text-muted-foreground" />
                     </div>
                     <p className="text-sm font-medium">3. Build Connections</p>
                     <p className="text-xs text-muted-foreground">
@@ -512,30 +557,30 @@ function KnowledgePageContent() {
               {/* Concept types info */}
               <div className="flex flex-wrap justify-center gap-2 mb-8">
                 <Badge variant="outline" className="text-xs">
-                  <span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5" />
+                  <span className="size-2 rounded-full bg-blue-500 mr-1.5" />
                   Tools & Technologies
                 </Badge>
                 <Badge variant="outline" className="text-xs">
-                  <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5" />
+                  <span className="size-2 rounded-full bg-green-500 mr-1.5" />
                   Processes & Workflows
                 </Badge>
                 <Badge variant="outline" className="text-xs">
-                  <span className="w-2 h-2 rounded-full bg-purple-500 mr-1.5" />
+                  <span className="size-2 rounded-full bg-purple-500 mr-1.5" />
                   People & Organizations
                 </Badge>
                 <Badge variant="outline" className="text-xs">
-                  <span className="w-2 h-2 rounded-full bg-orange-500 mr-1.5" />
+                  <span className="size-2 rounded-full bg-orange-500 mr-1.5" />
                   Technical Terms
                 </Badge>
               </div>
 
               <Button asChild>
-                <a href="/library">Go to Library</a>
+                <Link href="/library">Go to Library</Link>
               </Button>
             </div>
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div
+          <m.div
             key={viewMode}
             variants={fadeIn}
             initial="hidden"
@@ -558,7 +603,7 @@ function KnowledgePageContent() {
                 viewMode="list"
               />
             )}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 

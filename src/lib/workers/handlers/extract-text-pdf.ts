@@ -5,12 +5,11 @@
  * Saves the extracted text to the transcripts table and enqueues document generation.
  */
 
-import { writeFile, unlink } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
-
-const pdfParse = require('pdf-parse');
+import { writeFile, unlink } from 'fs/promises';
+import { createRequire } from 'module';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/types/database';
@@ -22,6 +21,11 @@ import {
 } from '@/lib/utils/status-helpers';
 
 import type { ProgressCallback } from '../job-processor';
+
+const loadPackage = createRequire(import.meta.url);
+const pdfParse = loadPackage('pdf-parse') as (
+  buffer: Buffer,
+) => Promise<{ text?: string; numpages?: number }>;
 
 type Job = Database['public']['Tables']['jobs']['Row'];
 
@@ -92,7 +96,7 @@ export async function handleExtractTextPdf(
     // Save PDF to temp file
     tempPdfPath = join(tmpdir(), `${randomUUID()}.pdf`);
     const buffer = await pdfBlob.arrayBuffer();
-    await writeFile(tempPdfPath, Buffer.from(buffer));
+    await writeFile(tempPdfPath, new Uint8Array(buffer));
 
     logger.info('PDF saved to temp file', {
       context: { tempPdfPath, sizeBytes: buffer.byteLength },
@@ -110,8 +114,8 @@ export async function handleExtractTextPdf(
     const dataBuffer = Buffer.from(buffer);
     const pdfData = await pdfParse(dataBuffer);
 
-    const extractedText = pdfData.text;
-    const pageCount = pdfData.numpages;
+    const extractedText = pdfData.text ?? '';
+    const pageCount = pdfData.numpages ?? 0;
 
     logger.info('PDF text extracted', {
       context: {

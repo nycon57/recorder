@@ -1018,8 +1018,3 @@ class PublishError extends Error {
 // =====================================================
 // EXPORTS
 // =====================================================
-
-/** Singleton instance for convenience */
-export const documentPublisher = new DocumentPublisher();
-
-export default DocumentPublisher;

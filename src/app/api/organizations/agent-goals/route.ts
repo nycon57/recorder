@@ -77,12 +77,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
 // ---------------------------------------------------------------------------
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId } = await requireAdmin();
-
-  const body = await parseBody<z.infer<typeof createGoalSchema>>(
-    request,
-    createGoalSchema
-  );
+  const [{ orgId }, body] = await Promise.all([
+    requireAdmin(),
+    parseBody<z.infer<typeof createGoalSchema>>(request, createGoalSchema),
+  ]);
 
   const { data, error } = await supabaseAdmin
     .from('agent_goals')
@@ -111,20 +109,18 @@ export const POST = apiHandler(async (request: NextRequest) => {
 // ---------------------------------------------------------------------------
 
 export const PATCH = apiHandler(async (request: NextRequest) => {
-  const { orgId } = await requireAdmin();
-
-  const { id, ...updates } = await parseBody<z.infer<typeof updateGoalSchema>>(
-    request,
-    updateGoalSchema
+  const { data, error } = await Promise.all([
+    requireAdmin(),
+    parseBody<z.infer<typeof updateGoalSchema>>(request, updateGoalSchema),
+  ]).then(([{ orgId }, { id, ...updates }]) =>
+    supabaseAdmin
+      .from('agent_goals')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .select()
+      .single(),
   );
-
-  const { data, error } = await supabaseAdmin
-    .from('agent_goals')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .eq('org_id', orgId)
-    .select()
-    .single();
 
   if (error) {
     if (error.code === 'PGRST116') {

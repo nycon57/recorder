@@ -54,10 +54,10 @@ export async function handleGenerateAlerts(job: Job): Promise<void> {
           .from('organizations')
           .select('id');
         if (organizations) {
-          configs = organizations.map(org => ({
+          configs = organizations.map((org) => ({
             organization_id: org.id,
             storage_threshold: 80, // 80% of quota
-            cost_threshold: 100,   // $100
+            cost_threshold: 100, // $100
             enable_email_notifications: false,
             enable_slack_notifications: false,
           }));
@@ -72,7 +72,7 @@ export async function handleGenerateAlerts(job: Job): Promise<void> {
         .from('organizations')
         .select('id');
       if (organizations) {
-        configs = organizations.map(org => ({
+        configs = organizations.map((org) => ({
           organization_id: org.id,
           storage_threshold: 80,
           cost_threshold: 100,
@@ -90,17 +90,19 @@ export async function handleGenerateAlerts(job: Job): Promise<void> {
     logger.info(`Processing alerts for ${configs.length} organization(s)`);
 
     // Process each organization's alert config
-    for (const config of configs) {
-      try {
-        await generateAlertsForOrganization(supabase, config);
-      } catch (error) {
-        logger.error('Failed to generate alerts for organization', {
-          context: { organizationId: config.organization_id },
-          error: error as Error,
-        });
-        // Continue processing other organizations
-      }
-    }
+    await Promise.all(
+      Array.from(configs).map(async (config) => {
+        try {
+          await generateAlertsForOrganization(supabase, config);
+        } catch (error) {
+          logger.error('Failed to generate alerts for organization', {
+            context: { organizationId: config.organization_id },
+            error: error as Error,
+          });
+          // Continue processing other organizations
+        }
+      }),
+    );
 
     logger.info('Alert generation completed successfully');
   } catch (error) {
@@ -111,7 +113,7 @@ export async function handleGenerateAlerts(job: Job): Promise<void> {
 
 async function generateAlertsForOrganization(
   supabase: ReturnType<typeof createAdminClient>,
-  config: AlertConfig
+  config: AlertConfig,
 ): Promise<void> {
   logger.debug('Generating alerts for organization', {
     context: { organizationId: config.organization_id },
@@ -130,7 +132,9 @@ async function generateAlertsForOrganization(
 
     latestMetric = data;
   } catch {
-    logger.debug('storage_metrics table not found, skipping metric-based alerts');
+    logger.debug(
+      'storage_metrics table not found, skipping metric-based alerts',
+    );
   }
 
   // Check storage threshold (if metrics available)
@@ -224,7 +228,7 @@ interface AlertData {
 
 async function createOrUpdateAlert(
   supabase: ReturnType<typeof createAdminClient>,
-  alertData: AlertData
+  alertData: AlertData,
 ): Promise<void> {
   try {
     // Check if alert already exists and is not resolved
@@ -265,7 +269,9 @@ async function createOrUpdateAlert(
         .eq('id', alert.id);
 
       if (error) {
-        logger.warn('Failed to update existing alert', { error: new Error(error.message) });
+        logger.warn('Failed to update existing alert', {
+          error: new Error(error.message),
+        });
       }
     }
   } catch (error) {

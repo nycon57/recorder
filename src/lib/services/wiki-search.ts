@@ -9,7 +9,8 @@ import type { Database } from '@/lib/types/database';
 import { filterQueryableVendorSourceRows } from './vendor-source-queryability';
 
 type OrgWikiPageRow = Database['public']['Tables']['org_wiki_pages']['Row'];
-type VendorWikiPageRow = Database['public']['Tables']['vendor_wiki_pages']['Row'];
+type VendorWikiPageRow =
+  Database['public']['Tables']['vendor_wiki_pages']['Row'];
 
 const KEYWORD_FALLBACK_FETCH_LIMIT = 100;
 const SNIPPET_LENGTH = 240;
@@ -99,10 +100,13 @@ function lexicalScore(args: {
 
   let score = 0;
   for (const token of queryTokens) {
-    if (haystack.includes(token)) score += 0.12;
+    if (containsText(haystack, token)) score += 0.12;
   }
 
-  if (args.requestedApp && normalize(args.app) === normalize(args.requestedApp)) {
+  if (
+    args.requestedApp &&
+    normalize(args.app) === normalize(args.requestedApp)
+  ) {
     score += 0.35;
   }
   if (
@@ -114,6 +118,10 @@ function lexicalScore(args: {
   if (normalize(args.title).includes(normalize(args.query))) score += 0.25;
 
   return Math.min(1, Math.max(0.05, score));
+}
+
+function containsText(text: string, searchText: string) {
+  return text.includes(searchText);
 }
 
 function mapVectorOrgPage(
@@ -214,9 +222,12 @@ export async function searchCompiledOrgWikiPages(args: {
       return pages.map((page) => mapVectorOrgPage(page, args.query));
     }
   } catch (error) {
-    console.warn('[wiki-search] vector org wiki search failed; using keyword fallback', {
-      errorMessage: error instanceof Error ? error.message : String(error),
-    });
+    console.warn(
+      '[wiki-search] vector org wiki search failed; using keyword fallback',
+      {
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
+    );
   }
 
   const firstQueryToken = tokenize(args.query)[0];
@@ -240,8 +251,10 @@ export async function searchCompiledOrgWikiPages(args: {
   }
 
   return ((data ?? []) as OrgWikiPageRow[])
-    .map((page) => mapOrgPage(page, args.query))
-    .filter((page) => page.similarity > 0.05)
+    .flatMap((__item, __index, __array) => {
+      const __mapped = mapOrgPage(__item, args.query);
+      return __mapped.similarity > 0.05 ? [__mapped] : [];
+    })
     .sort((left, right) => right.similarity - left.similarity)
     .slice(0, limit);
 }
@@ -255,7 +268,9 @@ export async function searchVendorWikiPages(args: {
   const limit = clampLimit(args.limit);
   let query = supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('id, app, screen, content, source_url, updated_at, vendor_source_id')
+    .select(
+      'id, app, screen, content, source_url, updated_at, vendor_source_id',
+    )
     .is('retired_at', null);
 
   if (args.app) {
@@ -282,13 +297,13 @@ export async function searchVendorWikiPages(args: {
   );
 
   return queryableRows
-    .map((page) =>
-      mapVendorPage(page, args.query, {
+    .flatMap((__item, __index, __array) => {
+      const __mapped = mapVendorPage(__item, args.query, {
         app: args.app,
         screen: args.screen,
-      }),
-    )
-    .filter((page) => page.similarity > 0.05)
+      });
+      return __mapped.similarity > 0.05 ? [__mapped] : [];
+    })
     .sort((left, right) => right.similarity - left.similarity)
     .slice(0, limit);
 }
@@ -330,7 +345,9 @@ export async function getVendorWikiPage(args: {
 }): Promise<WikiPageResult | null> {
   const { data, error } = await supabaseAdmin
     .from('vendor_wiki_pages')
-    .select('id, app, screen, content, source_url, updated_at, vendor_source_id')
+    .select(
+      'id, app, screen, content, source_url, updated_at, vendor_source_id',
+    )
     .eq('id', args.pageId)
     .is('retired_at', null)
     .single();
@@ -340,19 +357,21 @@ export async function getVendorWikiPage(args: {
     throw new Error(`Failed to fetch vendor wiki page: ${error.message}`);
   }
 
-  const [page] = await filterQueryableVendorSourceRows(
-    data ? ([data] as VendorWikiPageRow[]) : [],
-  );
-  if (!page) return null;
+  if (!data) return null;
 
-  return {
-    id: page.id,
-    source: 'vendor_wiki',
-    title: `${page.app} / ${page.screen}`,
-    app: page.app,
-    screen: page.screen,
-    content: page.content,
-    sourceUrl: page.source_url,
-    updatedAt: page.updated_at,
-  };
+  const [page] = await filterQueryableVendorSourceRows([
+    data,
+  ] as VendorWikiPageRow[]);
+  return page
+    ? {
+        id: page.id,
+        source: 'vendor_wiki',
+        title: `${page.app} / ${page.screen}`,
+        app: page.app,
+        screen: page.screen,
+        content: page.content,
+        sourceUrl: page.source_url,
+        updatedAt: page.updated_at,
+      }
+    : null;
 }

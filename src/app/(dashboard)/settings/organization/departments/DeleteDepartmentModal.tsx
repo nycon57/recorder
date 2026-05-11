@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useSession } from "@/lib/auth/auth-client";
 import { AlertCircle, AlertTriangle, Users, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { useSession } from "@/lib/auth/auth-client";
 import {
   Dialog,
   DialogContent,
@@ -142,13 +142,13 @@ export function DeleteDepartmentModal({
           {/* Department being deleted */}
           <div className="p-4 bg-destructive/10 rounded-lg border border-destructive/20">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
+              <AlertTriangle className="size-5 text-destructive mt-0.5" />
               <div className="flex-1">
                 <p className="font-medium text-sm">
                   You are about to delete:
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  <Building2 className="w-4 h-4" />
+                  <Building2 className="size-4" />
                   <span className="font-semibold">{department.name}</span>
                 </div>
                 {department.description && (
@@ -163,7 +163,7 @@ export function DeleteDepartmentModal({
           {/* Warning for children */}
           {hasChildren && (
             <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
+              <AlertCircle className="size-4" />
               <AlertDescription>
                 This department has {department.children?.length} sub-department(s).
                 You must delete or reassign them before deleting this department.
@@ -175,7 +175,7 @@ export function DeleteDepartmentModal({
           {hasMembers && !hasChildren && (
             <div className="space-y-2">
               <Label>
-                <Users className="w-4 h-4 inline mr-2" />
+                <Users className="size-4 inline mr-2" />
                 Reassign {department.memberCount} member(s) to:
               </Label>
               <Select
@@ -194,7 +194,7 @@ export function DeleteDepartmentModal({
                         className="flex items-center gap-1"
                         style={{ marginLeft: `${dept.level * 12}px` }}
                       >
-                        <Building2 className="w-3 h-3" />
+                        <Building2 className="size-3" />
                         <span>{dept.name}</span>
                         {dept.memberCount !== undefined && (
                           <span className="text-xs text-muted-foreground ml-2">
@@ -214,7 +214,7 @@ export function DeleteDepartmentModal({
 
           {/* Additional warnings */}
           <Alert>
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="size-4" />
             <AlertDescription>
               <ul className="list-disc list-inside space-y-1 text-sm">
                 <li>All content associated with this department will be affected</li>

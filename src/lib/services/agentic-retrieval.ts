@@ -41,7 +41,7 @@ export interface AgenticSearchOptions {
  */
 export async function agenticSearch(
   query: string,
-  options: AgenticSearchOptions
+  options: AgenticSearchOptions,
 ): Promise<AgenticSearchResult> {
   const startTime = Date.now();
 
@@ -95,9 +95,14 @@ export async function agenticSearch(
   const iterations: IterationResult[] = [];
   const allResults = new Map<string, SearchResult>();
 
-  for (const [batchIndex, batch] of executionBatches.entries()) {
+  const executeBatch = async (batchIndex = 0): Promise<void> => {
+    const batch = executionBatches[batchIndex];
+    if (!batch || batchIndex >= maxIterations) {
+      return;
+    }
+
     console.log(
-      `[Agentic Search] Executing batch ${batchIndex + 1}/${executionBatches.length}...`
+      `[Agentic Search] Executing batch ${batchIndex + 1}/${executionBatches.length}...`,
     );
 
     // Execute queries in parallel within batch
@@ -157,7 +162,7 @@ export async function agenticSearch(
         iterations.push(iteration);
 
         return iteration;
-      })
+      }),
     );
 
     // Check if we should continue to next iteration
@@ -180,15 +185,19 @@ export async function agenticSearch(
       batchIndex < executionBatches.length - 1
     ) {
       console.log('[Agentic Search] High confidence - stopping early');
-      break;
+      return;
     }
 
     // Respect max iterations
     if (batchIndex >= maxIterations - 1) {
       console.log('[Agentic Search] Max iterations reached');
-      break;
+      return;
     }
-  }
+
+    return executeBatch(batchIndex + 1);
+  };
+
+  await executeBatch();
 
   // Step 5: Compile final results
   const finalResults = Array.from(allResults.values())
@@ -242,7 +251,7 @@ export async function agenticSearch(
  */
 function generateReasoningPath(
   decomposition: QueryDecomposition,
-  iterations: IterationResult[]
+  iterations: IterationResult[],
 ): string {
   const lines: string[] = [];
 
@@ -252,7 +261,7 @@ function generateReasoningPath(
 
   for (const iteration of iterations) {
     lines.push(
-      `${iteration.iterationNumber}. ${iteration.subQuery.text} → ${iteration.chunks.length} relevant chunks (confidence: ${(iteration.confidence * 100).toFixed(0)}%)`
+      `${iteration.iterationNumber}. ${iteration.subQuery.text} → ${iteration.chunks.length} relevant chunks (confidence: ${(iteration.confidence * 100).toFixed(0)}%)`,
     );
 
     if (iteration.gapsIdentified.length > 0) {
@@ -269,7 +278,7 @@ function generateReasoningPath(
 async function logAgenticSearch(
   result: AgenticSearchResult,
   orgId: string,
-  userId?: string
+  userId?: string,
 ): Promise<void> {
   try {
     const supabase = await createClient();

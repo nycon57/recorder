@@ -1,5 +1,5 @@
+import Image from 'next/image';
 import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
 import {
   VideoIcon,
   FileVideoIcon,
@@ -14,10 +14,8 @@ import { Badge } from '@/app/components/ui/badge';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { vectorSearch } from '@/lib/services/vector-search-google';
 import type { ContentType } from '@/lib/types/database';
-import {
-  CONTENT_TYPE_LABELS,
-  CONTENT_TYPE_COLORS,
-} from '@/lib/types/content';
+import { formatStableDateTime } from '@/lib/utils/formatting';
+import { CONTENT_TYPE_LABELS, CONTENT_TYPE_COLORS } from '@/lib/types/content';
 
 interface RelatedContentProps {
   contentId: string;
@@ -50,7 +48,7 @@ function isValidContentType(type: string): type is ContentType {
 async function findRelatedByConceptOverlap(
   contentId: string,
   orgId: string,
-  limit: number
+  limit: number,
 ): Promise<RelatedItem[]> {
   const { data: contentConcepts, error: conceptsError } = await supabaseAdmin
     .from('concept_mentions')
@@ -59,7 +57,10 @@ async function findRelatedByConceptOverlap(
     .eq('org_id', orgId);
 
   if (conceptsError) {
-    console.error('[RelatedContent] Failed to fetch concept mentions:', conceptsError);
+    console.error(
+      '[RelatedContent] Failed to fetch concept mentions:',
+      conceptsError,
+    );
     return [];
   }
 
@@ -76,7 +77,10 @@ async function findRelatedByConceptOverlap(
     .limit(limit * 50);
 
   if (mentionsError) {
-    console.error('[RelatedContent] Failed to fetch related mentions:', mentionsError);
+    console.error(
+      '[RelatedContent] Failed to fetch related mentions:',
+      mentionsError,
+    );
     return [];
   }
 
@@ -88,8 +92,8 @@ async function findRelatedByConceptOverlap(
     overlapCounts.set(id, (overlapCounts.get(id) ?? 0) + 1);
   }
 
-  const topContentIds = [...overlapCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
+  const topContentIds = Array.from(overlapCounts.entries())
+    .toSorted((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([id]) => id);
 
@@ -101,34 +105,39 @@ async function findRelatedByConceptOverlap(
     .eq('org_id', orgId);
 
   if (contentError) {
-    console.error('[RelatedContent] Failed to fetch content details:', contentError);
+    console.error(
+      '[RelatedContent] Failed to fetch content details:',
+      contentError,
+    );
     return [];
   }
 
   if (!contentItems) return [];
 
-  const contentById = new Map(
-    contentItems.map((item) => [item.id, item])
-  );
+  const contentById = new Map(contentItems.map((item) => [item.id, item]));
 
-  return topContentIds
-    .map((id) => contentById.get(id))
-    .filter((item): item is NonNullable<typeof item> => item != null)
-    .map((item) => ({
-      id: item.id,
-      title: item.title,
-      content_type: item.content_type as ContentType | null,
-      thumbnail_url: item.thumbnail_url,
-      created_at: item.created_at,
-      relevanceScore: overlapCounts.get(item.id) ?? 0,
-      scoreType: 'concepts' as const,
-    }));
+  return topContentIds.flatMap((__item, __index, __array) => {
+    const __mapped = contentById.get(__item);
+    return __mapped != null
+      ? [
+          {
+            id: __mapped.id,
+            title: __mapped.title,
+            content_type: __mapped.content_type as ContentType | null,
+            thumbnail_url: __mapped.thumbnail_url,
+            created_at: __mapped.created_at,
+            relevanceScore: overlapCounts.get(__mapped.id) ?? 0,
+            scoreType: 'concepts' as const,
+          },
+        ]
+      : [];
+  });
 }
 
 async function findRelatedByVectorSimilarity(
   contentId: string,
   orgId: string,
-  limit: number
+  limit: number,
 ): Promise<RelatedItem[]> {
   const { data: content, error: contentError } = await supabaseAdmin
     .from('content')
@@ -139,7 +148,10 @@ async function findRelatedByVectorSimilarity(
 
   if (contentError || !content?.title) {
     if (contentError) {
-      console.error('[RelatedContent] Failed to fetch content for vector search:', contentError);
+      console.error(
+        '[RelatedContent] Failed to fetch content for vector search:',
+        contentError,
+      );
     }
     return [];
   }
@@ -160,7 +172,9 @@ async function findRelatedByVectorSimilarity(
       items.push({
         id: result.contentId,
         title: result.contentTitle,
-        content_type: isValidContentType(result.contentType) ? result.contentType : null,
+        content_type: isValidContentType(result.contentType)
+          ? result.contentType
+          : null,
         thumbnail_url: null,
         created_at: result.createdAt,
         relevanceScore: result.similarity ?? 0,
@@ -215,14 +229,19 @@ export async function RelatedContent({
                   className={`relative shrink-0 size-12 rounded-lg ${colors.bg} flex items-center justify-center overflow-hidden`}
                 >
                   {item.thumbnail_url ? (
-                    <img
+                    <Image
                       src={item.thumbnail_url}
                       alt=""
-                      loading="lazy"
-                      className="size-full object-cover"
+                      fill
+                      sizes="48px"
+                      className="object-cover"
+                      unoptimized
                     />
                   ) : (
-                    <Icon className={`size-5 ${colors.text}`} aria-hidden="true" />
+                    <Icon
+                      className={`size-5 ${colors.text}`}
+                      aria-hidden="true"
+                    />
                   )}
                 </div>
 
@@ -231,7 +250,10 @@ export async function RelatedContent({
                     {item.title ?? 'Untitled'}
                   </h4>
                   <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1.5 py-0"
+                    >
                       {label}
                     </Badge>
                     <span className="flex items-center gap-1">
@@ -240,11 +262,7 @@ export async function RelatedContent({
                         ? `${item.relevanceScore} shared concept${item.relevanceScore !== 1 ? 's' : ''}`
                         : `${Math.round(item.relevanceScore * 100)}% similar`}
                     </span>
-                    <span>
-                      {formatDistanceToNow(new Date(item.created_at), {
-                        addSuffix: true,
-                      })}
-                    </span>
+                    <span>{formatStableDateTime(item.created_at)}</span>
                   </div>
                 </div>
               </div>

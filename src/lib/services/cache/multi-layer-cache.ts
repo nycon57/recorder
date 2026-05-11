@@ -155,8 +155,9 @@ export class MultiLayerCache {
     let deletedCount = 0;
 
     // L1: Memory cache - delete matching keys
+    const matchesPattern = (key: string) => key.includes(fullPattern);
     for (const key of this.memoryCache.keys()) {
-      if (key.includes(fullPattern)) {
+      if (matchesPattern(key)) {
         this.memoryCache.delete(key);
         deletedCount++;
       }

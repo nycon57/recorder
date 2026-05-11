@@ -11,18 +11,27 @@ import OpenAI from 'openai';
 import { GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/lib/types/database';
-import { chunkTranscriptWithSegments, chunkVideoTranscript, type VideoTranscriptChunk } from '@/lib/services/chunking';
+import {
+  chunkTranscriptWithSegments,
+  chunkVideoTranscript,
+  type VideoTranscriptChunk,
+} from '@/lib/services/chunking';
 import { createSemanticChunker } from '@/lib/services/semantic-chunker';
 import { classifyContent } from '@/lib/services/content-classifier';
 import { getAdaptiveChunkConfig } from '@/lib/services/adaptive-sizing';
 import { sanitizeMetadata } from '@/lib/utils/config-validation';
 import { createLogger } from '@/lib/utils/logger';
 import { streamingManager } from '@/lib/services/streaming-processor';
-import { sendEmbeddingProgress, isStreamingAvailable } from '@/lib/services/llm-streaming-helper';
+import {
+  sendEmbeddingProgress,
+  isStreamingAvailable,
+} from '@/lib/services/llm-streaming-helper';
 import { extractAndStoreConcepts } from '@/lib/services/concept-extractor';
+import { mapBatchesSequentially } from '@/lib/utils/async';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
-type TranscriptChunkInsert = Database['public']['Tables']['transcript_chunks']['Insert'];
+type TranscriptChunkInsert =
+  Database['public']['Tables']['transcript_chunks']['Insert'];
 
 interface EmbeddingsPayload {
   recordingId: string;
@@ -150,7 +159,7 @@ function getOpenAIClient(): OpenAI {
 async function generateEmbeddingWithFallback(
   genai: GoogleGenAI,
   text: string,
-  logger: ReturnType<typeof createLogger>
+  logger: ReturnType<typeof createLogger>,
 ): Promise<{ embedding: number[]; provider: 'google' | 'openai' }> {
   try {
     // Try Google first
@@ -207,7 +216,9 @@ async function generateEmbeddingWithFallback(
             openaiError: openaiErrorMessage,
           },
         });
-        throw new Error(`All embedding providers failed: Google (${googleErrorMessage}), OpenAI (${openaiErrorMessage})`);
+        throw new Error(
+          `All embedding providers failed: Google (${googleErrorMessage}), OpenAI (${openaiErrorMessage})`,
+        );
       }
     }
 
@@ -245,7 +256,10 @@ function validateSemanticScore(score: unknown): number | null {
 /**
  * Generate embeddings for transcript and document using Google
  */
-export async function generateEmbeddings(job: Job, progressCallback?: (percent: number, message: string, data?: Json) => void): Promise<void> {
+export async function generateEmbeddings(
+  job: Job,
+  progressCallback?: (percent: number, message: string, data?: Json) => void,
+): Promise<void> {
   const payload = job.payload as unknown as EmbeddingsPayload;
   const { recordingId, transcriptId, documentId, orgId } = payload;
 
@@ -274,19 +288,23 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     .eq('content_id', recordingId);
 
   const totalChunks = chunkStats?.length || 0;
-  const chunksWithEmbeddings = chunkStats?.filter(
-    chunk => chunk.embedding !== null && chunk.embedding !== ''
-  ).length || 0;
+  const chunksWithEmbeddings =
+    chunkStats?.filter(
+      (chunk) => chunk.embedding !== null && chunk.embedding !== '',
+    ).length || 0;
 
   // Check if embeddings are complete
   if (totalChunks > 0 && totalChunks === chunksWithEmbeddings) {
-    logger.info('Embeddings already exist and are complete, skipping generation', {
-      context: {
-        recordingId,
-        totalChunks,
-        chunksWithEmbeddings,
+    logger.info(
+      'Embeddings already exist and are complete, skipping generation',
+      {
+        context: {
+          recordingId,
+          totalChunks,
+          chunksWithEmbeddings,
+        },
       },
-    });
+    );
 
     // Enqueue summary generation job (in case pipeline was interrupted)
     const { data: existingSummaryJob } = await supabase
@@ -331,10 +349,14 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
       .eq('content_id', recordingId);
 
     if (deleteError) {
-      throw new Error(`Failed to clean up partial embeddings: ${deleteError.message}`);
+      throw new Error(
+        `Failed to clean up partial embeddings: ${deleteError.message}`,
+      );
     }
 
-    logger.info('Cleaned up partial embeddings, proceeding with full generation');
+    logger.info(
+      'Cleaned up partial embeddings, proceeding with full generation',
+    );
   }
 
   try {
@@ -346,7 +368,9 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
       .single();
 
     if (transcriptError || !transcript) {
-      throw new Error(`Failed to fetch transcript: ${transcriptError?.message || 'Not found'}`);
+      throw new Error(
+        `Failed to fetch transcript: ${transcriptError?.message || 'Not found'}`,
+      );
     }
 
     // Fetch document
@@ -357,7 +381,9 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
       .single();
 
     if (documentError || !document) {
-      throw new Error(`Failed to fetch document: ${documentError?.message || 'Not found'}`);
+      throw new Error(
+        `Failed to fetch document: ${documentError?.message || 'Not found'}`,
+      );
     }
 
     logger.info('Loaded transcript and document', {
@@ -406,9 +432,10 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
 
     // Check if this is a video transcript with visual context
     const visualEvents = Array.isArray(transcript.visual_events)
-      ? transcript.visual_events
-          .map(toVisualEvent)
-          .filter((event): event is VisualEvent => event !== null)
+      ? transcript.visual_events.flatMap((__item, __index, __array) => {
+          const __mapped = toVisualEvent(__item);
+          return __mapped !== null ? [__mapped] : [];
+        })
       : [];
     const hasVisualContext = visualEvents.length > 0;
     const isGeminiVideo = transcript.provider === 'gemini-video';
@@ -424,7 +451,12 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
 
     progressCallback?.(5, 'Analyzing content structure...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'embeddings', 5, 'Analyzing content structure...');
+      streamingManager.sendProgress(
+        recordingId,
+        'embeddings',
+        5,
+        'Analyzing content structure...',
+      );
     }
 
     // Chunk transcript based on type
@@ -436,7 +468,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
         transcript.text,
         audioSegments,
         visualEvents,
-        { maxTokens: 500, overlapTokens: 50 }
+        { maxTokens: 500, overlapTokens: 50 },
       );
       logger.info('Created video transcript chunks', {
         context: {
@@ -450,7 +482,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
       transcriptChunks = chunkTranscriptWithSegments(
         transcript.text,
         simpleSegments,
-        { maxTokens: 500, overlapTokens: 50 }
+        { maxTokens: 500, overlapTokens: 50 },
       );
       logger.info('Created audio transcript chunks', {
         context: {
@@ -463,7 +495,12 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
 
     progressCallback?.(8, 'Chunking document for indexing...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'embeddings', 8, 'Chunking document for indexing...');
+      streamingManager.sendProgress(
+        recordingId,
+        'embeddings',
+        8,
+        'Chunking document for indexing...',
+      );
     }
 
     // Chunk document using semantic chunking (always markdown format)
@@ -477,16 +514,21 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     });
 
     // Get adaptive config for content type
-    const documentChunkConfig = getAdaptiveChunkConfig(documentClassification.type);
+    const documentChunkConfig = getAdaptiveChunkConfig(
+      documentClassification.type,
+    );
 
     // Create semantic chunker
     const documentChunker = createSemanticChunker(documentChunkConfig);
 
     // Generate semantic chunks
-    const semanticDocumentChunks = await documentChunker.chunk(document.markdown, {
-      recordingId,
-      contentType: documentClassification.type,
-    });
+    const semanticDocumentChunks = await documentChunker.chunk(
+      document.markdown,
+      {
+        recordingId,
+        contentType: documentClassification.type,
+      },
+    );
 
     logger.info('Created semantic document chunks', {
       context: {
@@ -498,7 +540,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
 
     // Combine all chunks with enhanced metadata
     const allChunks: EmbeddingChunk[] = [
-      ...transcriptChunks.map(chunk => {
+      ...transcriptChunks.map((chunk) => {
         const baseMetadata = {
           chunkIndex: chunk.index,
           startChar: chunk.startChar,
@@ -558,7 +600,9 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
 
     // Filter out chunks with empty or whitespace-only text
     // Google's embedContent API throws an error for empty strings
-    const validChunks = allChunks.filter(chunk => chunk.text && chunk.text.trim().length > 0);
+    const validChunks = allChunks.filter(
+      (chunk) => chunk.text && chunk.text.trim().length > 0,
+    );
 
     if (validChunks.length < allChunks.length) {
       logger.warn('Filtered out empty chunks', {
@@ -580,7 +624,12 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     });
 
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'embeddings', 10, `Preparing to embed ${validChunks.length} chunks...`);
+      streamingManager.sendProgress(
+        recordingId,
+        'embeddings',
+        10,
+        `Preparing to embed ${validChunks.length} chunks...`,
+      );
     }
 
     // PERFORMANCE FIX: Create Google GenAI client once (not for every chunk)
@@ -591,7 +640,6 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     const genai = new GoogleGenAI({ apiKey });
 
     // Generate embeddings in batches
-    const embeddingRecords: TranscriptChunkInsert[] = [];
     const totalBatches = Math.ceil(validChunks.length / BATCH_SIZE);
 
     logger.info('Starting batch embedding generation', {
@@ -602,197 +650,246 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
       },
     });
 
-    for (let i = 0; i < validChunks.length; i += BATCH_SIZE) {
-      const batch = validChunks.slice(i, i + BATCH_SIZE);
-      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+    const embeddingRecords = await mapBatchesSequentially(
+      validChunks,
+      BATCH_SIZE,
+      async (batch, batchIndex) => {
+        const i = batchIndex * BATCH_SIZE;
+        const batchNumber = batchIndex + 1;
 
-      logger.info(`Processing embedding batch ${batchNumber}/${totalBatches}`, {
-        context: {
-          batchNumber,
-          batchSize: batch.length,
-          startIndex: i,
-          endIndex: Math.min(i + BATCH_SIZE, validChunks.length),
-        },
-      });
-
-      const batchProgressPercent = Math.round(20 + (60 * (i / validChunks.length)));
-      const batchProgressMsg = `Generating embeddings: batch ${batchNumber}/${totalBatches}`;
-
-      progressCallback?.(batchProgressPercent, batchProgressMsg);
-      if (isStreaming) {
-        sendEmbeddingProgress(
-          recordingId,
-          batchNumber,
-          totalBatches,
-          batchProgressMsg
+        logger.info(
+          `Processing embedding batch ${batchNumber}/${totalBatches}`,
+          {
+            context: {
+              batchNumber,
+              batchSize: batch.length,
+              startIndex: i,
+              endIndex: Math.min(i + BATCH_SIZE, validChunks.length),
+            },
+          },
         );
-      }
 
-      // PERFORMANCE FIX: Process chunks in parallel using Promise.allSettled for fault tolerance
-      // PERF-AI-006: Uses fallback (Google → OpenAI) for resilience
-      const batchSettledResults = await Promise.allSettled(
-        batch.map(async (chunk, chunkIndex): Promise<TranscriptChunkInsert> => {
-          try {
-            // Call embedding with automatic fallback (Google → OpenAI)
-            const { embedding, provider } = await generateEmbeddingWithFallback(
-              genai,
-              chunk.text,
-              logger
-            );
+        const batchProgressPercent = Math.round(
+          20 + 60 * (i / validChunks.length),
+        );
+        const batchProgressMsg = `Generating embeddings: batch ${batchNumber}/${totalBatches}`;
 
-            // Track provider usage for analytics
-            if (provider === 'openai') {
-              logger.info(`Chunk ${i + chunkIndex} used OpenAI fallback`);
-            }
-
-            // Sanitize metadata to prevent injection and data leakage
-            const sanitizedMetadata = sanitizeMetadata(chunk.metadata) as Record<string, Json | undefined>;
-
-            return {
-              content_id: recordingId,
-              org_id: orgId,
-              chunk_text: chunk.text,
-              chunk_index: sanitizedMetadata.chunkIndex as number,
-              start_time_sec: getNumber(sanitizedMetadata.startTime) || null,
-              end_time_sec: getNumber(sanitizedMetadata.endTime) || null,
-              embedding: JSON.stringify(embedding), // Supabase expects string for vector type
-              content_type: chunk.contentType || 'audio',
-              // Semantic chunking metadata (only for document chunks)
-              chunking_strategy: ('semanticScore' in sanitizedMetadata) ? 'semantic' : 'fixed',
-              semantic_score: 'semanticScore' in sanitizedMetadata
-                ? validateSemanticScore(sanitizedMetadata.semanticScore)
-                : null,
-              structure_type: 'structureType' in sanitizedMetadata
-                ? getNullableText(sanitizedMetadata.structureType)
-                : null,
-              boundary_type: 'boundaryType' in sanitizedMetadata
-                ? getNullableText(sanitizedMetadata.boundaryType)
-                : null,
-              metadata: {
-                source: chunk.source,
-                source_type: chunk.source, // For compatibility
-                transcriptId: chunk.source === 'transcript' ? transcriptId : undefined,
-                documentId: chunk.source === 'document' ? documentId : undefined,
-                embedding_provider: provider, // PERF-AI-006: Track which provider generated the embedding
-                ...sanitizedMetadata,
-              } satisfies Json,
-            };
-          } catch (error) {
-            // Log the error with chunk details but don't fail the entire batch
-            logger.error(`Failed to generate embedding for chunk ${i + chunkIndex}`, {
-              context: {
-                recordingId,
-                batchNumber,
-                chunkIndex: i + chunkIndex,
-                chunkText: chunk.text.substring(0, 100),
-                error: error instanceof Error ? error.message : String(error),
-              },
-            });
-            throw error; // Re-throw to be caught by allSettled
-          }
-        })
-      );
-
-      // Filter out failed results and collect only successful embeddings
-      const batchResults: TranscriptChunkInsert[] = [];
-      for (const result of batchSettledResults) {
-        if (result.status === 'fulfilled') {
-          batchResults.push(result.value);
-        }
-      }
-
-      // Log failures for monitoring
-      const failedResults = batchSettledResults.filter(result => result.status === 'rejected');
-      if (failedResults.length > 0) {
-        logger.warn(`${failedResults.length} chunks failed in batch ${batchNumber}`, {
-          context: {
+        progressCallback?.(batchProgressPercent, batchProgressMsg);
+        if (isStreaming) {
+          sendEmbeddingProgress(
             recordingId,
             batchNumber,
             totalBatches,
-            failedCount: failedResults.length,
-            successCount: batchResults.length,
+            batchProgressMsg,
+          );
+        }
+
+        // PERFORMANCE FIX: Process chunks in parallel using Promise.allSettled for fault tolerance
+        // PERF-AI-006: Uses fallback (Google → OpenAI) for resilience
+        const batchSettledResults = await Promise.allSettled(
+          batch.map(
+            async (chunk, chunkIndex): Promise<TranscriptChunkInsert> => {
+              try {
+                // Call embedding with automatic fallback (Google → OpenAI)
+                const { embedding, provider } =
+                  await generateEmbeddingWithFallback(
+                    genai,
+                    chunk.text,
+                    logger,
+                  );
+
+                // Track provider usage for analytics
+                if (provider === 'openai') {
+                  logger.info(`Chunk ${i + chunkIndex} used OpenAI fallback`);
+                }
+
+                // Sanitize metadata to prevent injection and data leakage
+                const sanitizedMetadata = sanitizeMetadata(
+                  chunk.metadata,
+                ) as Record<string, Json | undefined>;
+
+                return {
+                  content_id: recordingId,
+                  org_id: orgId,
+                  chunk_text: chunk.text,
+                  chunk_index: sanitizedMetadata.chunkIndex as number,
+                  start_time_sec:
+                    getNumber(sanitizedMetadata.startTime) || null,
+                  end_time_sec: getNumber(sanitizedMetadata.endTime) || null,
+                  embedding: JSON.stringify(embedding), // Supabase expects string for vector type
+                  content_type: chunk.contentType || 'audio',
+                  // Semantic chunking metadata (only for document chunks)
+                  chunking_strategy:
+                    'semanticScore' in sanitizedMetadata ? 'semantic' : 'fixed',
+                  semantic_score:
+                    'semanticScore' in sanitizedMetadata
+                      ? validateSemanticScore(sanitizedMetadata.semanticScore)
+                      : null,
+                  structure_type:
+                    'structureType' in sanitizedMetadata
+                      ? getNullableText(sanitizedMetadata.structureType)
+                      : null,
+                  boundary_type:
+                    'boundaryType' in sanitizedMetadata
+                      ? getNullableText(sanitizedMetadata.boundaryType)
+                      : null,
+                  metadata: {
+                    source: chunk.source,
+                    source_type: chunk.source, // For compatibility
+                    transcriptId:
+                      chunk.source === 'transcript' ? transcriptId : undefined,
+                    documentId:
+                      chunk.source === 'document' ? documentId : undefined,
+                    embedding_provider: provider, // PERF-AI-006: Track which provider generated the embedding
+                    ...sanitizedMetadata,
+                  } satisfies Json,
+                };
+              } catch (error) {
+                // Log the error with chunk details but don't fail the entire batch
+                logger.error(
+                  `Failed to generate embedding for chunk ${i + chunkIndex}`,
+                  {
+                    context: {
+                      recordingId,
+                      batchNumber,
+                      chunkIndex: i + chunkIndex,
+                      chunkText: chunk.text.substring(0, 100),
+                      error:
+                        error instanceof Error ? error.message : String(error),
+                    },
+                  },
+                );
+                throw error; // Re-throw to be caught by allSettled
+              }
+            },
+          ),
+        );
+
+        // Filter out failed results and collect only successful embeddings
+        const batchResults = batchSettledResults.flatMap((result) =>
+          result.status === 'fulfilled' ? [result.value] : [],
+        );
+
+        // Log failures for monitoring
+        const failedCount = batchSettledResults.length - batchResults.length;
+        if (failedCount > 0) {
+          logger.warn(`${failedCount} chunks failed in batch ${batchNumber}`, {
+            context: {
+              recordingId,
+              batchNumber,
+              totalBatches,
+              failedCount,
+              successCount: batchResults.length,
+            },
+          });
+        }
+
+        logger.info(`Completed batch ${batchNumber}/${totalBatches}`, {
+          context: {
+            batchNumber,
+            recordsGenerated: batchResults.length,
           },
         });
-      }
 
-      // Add batch results to records
-      embeddingRecords.push(...batchResults);
+        // PERF-AI-003: Removed artificial 100ms delay between batches
+        // The delay was overly conservative - current API rate limits are sufficient
+        // without additional throttling. Impact: ~10% improvement in embedding generation time
+        return batchResults;
+      },
+    );
 
-      logger.info(`Completed batch ${batchNumber}/${totalBatches}`, {
-        context: {
-          batchNumber,
-          recordsGenerated: batchResults.length,
-        },
-      });
-
-      // PERF-AI-003: Removed artificial 100ms delay between batches
-      // The delay was overly conservative - current API rate limits are sufficient
-      // without additional throttling. Impact: ~10% improvement in embedding generation time
-    }
-
-    logger.info(`Generated ${embeddingRecords.length} embeddings, saving to database with transaction`, {
-      context: { totalRecords: embeddingRecords.length },
-    });
+    logger.info(
+      `Generated ${embeddingRecords.length} embeddings, saving to database with transaction`,
+      {
+        context: { totalRecords: embeddingRecords.length },
+      },
+    );
 
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'embeddings', 80, 'Saving embeddings to database...');
+      streamingManager.sendProgress(
+        recordingId,
+        'embeddings',
+        80,
+        'Saving embeddings to database...',
+      );
     }
 
     // Save embeddings to database in batches within a transaction
     // Use a temporary staging approach to ensure atomicity
     try {
       // Save all embeddings in batches (they will be committed as part of the job transaction)
-      for (let i = 0; i < embeddingRecords.length; i += DB_INSERT_BATCH_SIZE) {
-        const batch = embeddingRecords.slice(i, Math.min(i + DB_INSERT_BATCH_SIZE, embeddingRecords.length));
-        const batchNumber = Math.floor(i / DB_INSERT_BATCH_SIZE) + 1;
-        const totalSaveBatches = Math.ceil(embeddingRecords.length / DB_INSERT_BATCH_SIZE);
-
-        logger.info(`Saving batch ${batchNumber}/${totalSaveBatches}`, {
-          context: {
-            batchNumber,
-            batchSize: batch.length,
+      await Promise.all(
+        Array.from(
+          {
+            length: Math.max(
+              0,
+              Math.ceil((embeddingRecords.length - 0) / DB_INSERT_BATCH_SIZE),
+            ),
           },
-        });
+          (_, __loopIndex) => 0 + __loopIndex * DB_INSERT_BATCH_SIZE,
+        ).map(async (i) => {
+          const batch = embeddingRecords.slice(
+            i,
+            Math.min(i + DB_INSERT_BATCH_SIZE, embeddingRecords.length),
+          );
+          const batchNumber = Math.floor(i / DB_INSERT_BATCH_SIZE) + 1;
+          const totalSaveBatches = Math.ceil(
+            embeddingRecords.length / DB_INSERT_BATCH_SIZE,
+          );
 
-        const { error: insertError } = await supabase
-          .from('transcript_chunks')
-          .insert(batch);
-
-        if (insertError) {
-          // On any error, attempt cleanup of partial data
-          logger.error(`Failed to save embeddings batch ${batchNumber}, cleaning up partial data`, {
+          logger.info(`Saving batch ${batchNumber}/${totalSaveBatches}`, {
             context: {
-              recordingId,
               batchNumber,
-              error: insertError.message,
+              batchSize: batch.length,
             },
           });
 
-          // Clean up any partial chunks that were inserted before the failure
-          const { error: cleanupError } = await supabase
+          const { error: insertError } = await supabase
             .from('transcript_chunks')
-            .delete()
-            .eq('content_id', recordingId);
+            .insert(batch);
 
-          if (cleanupError) {
-            logger.error('Failed to cleanup partial embeddings after insert error', {
-              context: {
-                recordingId,
-                cleanupError: cleanupError.message,
+          if (insertError) {
+            // On any error, attempt cleanup of partial data
+            logger.error(
+              `Failed to save embeddings batch ${batchNumber}, cleaning up partial data`,
+              {
+                context: {
+                  recordingId,
+                  batchNumber,
+                  error: insertError.message,
+                },
               },
-            });
+            );
+
+            // Clean up any partial chunks that were inserted before the failure
+            const { error: cleanupError } = await supabase
+              .from('transcript_chunks')
+              .delete()
+              .eq('content_id', recordingId);
+
+            if (cleanupError) {
+              logger.error(
+                'Failed to cleanup partial embeddings after insert error',
+                {
+                  context: {
+                    recordingId,
+                    cleanupError: cleanupError.message,
+                  },
+                },
+              );
+            }
+
+            throw new Error(
+              `Failed to save embeddings batch ${batchNumber}: ${insertError.message}. Partial data cleaned up.`,
+            );
           }
 
-          throw new Error(
-            `Failed to save embeddings batch ${batchNumber}: ${insertError.message}. Partial data cleaned up.`
-          );
-        }
-
-        // Small delay between batches
-        if (i + DB_INSERT_BATCH_SIZE < embeddingRecords.length) {
-          await sleep(50);
-        }
-      }
+          // Small delay between batches
+          if (i + DB_INSERT_BATCH_SIZE < embeddingRecords.length) {
+            await sleep(50);
+          }
+        }),
+      );
 
       logger.info(`Successfully saved ${embeddingRecords.length} embeddings`, {
         context: { recordingId, totalRecords: embeddingRecords.length },
@@ -800,16 +897,23 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
 
       progressCallback?.(90, 'Finalizing search index...');
       if (isStreaming) {
-        streamingManager.sendProgress(recordingId, 'embeddings', 90, 'Finalizing embedding generation...');
+        streamingManager.sendProgress(
+          recordingId,
+          'embeddings',
+          90,
+          'Finalizing embedding generation...',
+        );
       }
 
       // Atomically update recording and document using the PostgreSQL function
       const timestamp = new Date().toISOString();
-      const { data: updateResult, error: rpcError } = await supabase
-        .rpc('update_embedding_completion', {
+      const { data: updateResult, error: rpcError } = await supabase.rpc(
+        'update_embedding_completion',
+        {
           p_content_id: recordingId,
           p_timestamp: timestamp,
-        });
+        },
+      );
 
       if (rpcError) {
         logger.error('Failed to update embedding completion atomically', {
@@ -818,15 +922,20 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
             error: rpcError.message,
           },
         });
-        throw new Error(`Failed to finalize embedding completion: ${rpcError.message}`);
+        throw new Error(
+          `Failed to finalize embedding completion: ${rpcError.message}`,
+        );
       }
 
-      logger.info('Atomically updated recording and document completion status', {
-        context: {
-          recordingId,
-          result: updateResult,
+      logger.info(
+        'Atomically updated recording and document completion status',
+        {
+          context: {
+            recordingId,
+            result: updateResult,
+          },
         },
-      });
+      );
     } catch (error) {
       // If anything fails during the save process, ensure partial data is cleaned
       logger.error('Transaction failed during embedding save, rolling back', {
@@ -858,7 +967,12 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     // Run concept extraction in parallel with summary job enqueue (non-blocking)
     progressCallback?.(92, 'Extracting concepts for Knowledge Graph...');
     if (isStreaming) {
-      streamingManager.sendProgress(recordingId, 'embeddings', 92, 'Extracting concepts for Knowledge Graph...');
+      streamingManager.sendProgress(
+        recordingId,
+        'embeddings',
+        92,
+        'Extracting concepts for Knowledge Graph...',
+      );
     }
 
     try {
@@ -873,7 +987,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
           maxConcepts: 15, // Quality over quantity - only specific, high-value concepts
           minConfidence: 0.7, // Higher threshold for better signal
           generateEmbeddings: true,
-        }
+        },
       );
 
       if (conceptResult.success) {
@@ -907,7 +1021,10 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
       logger.warn('Concept extraction failed (non-critical)', {
         context: {
           recordingId,
-          error: conceptError instanceof Error ? conceptError.message : String(conceptError),
+          error:
+            conceptError instanceof Error
+              ? conceptError.message
+              : String(conceptError),
         },
       });
     }
@@ -930,9 +1047,11 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     });
 
     if (isStreaming) {
-      streamingManager.sendComplete(recordingId, `Embedding generation complete: ${embeddingRecords.length} chunks processed`);
+      streamingManager.sendComplete(
+        recordingId,
+        `Embedding generation complete: ${embeddingRecords.length} chunks processed`,
+      );
     }
-
   } catch (error) {
     logger.error('Embedding generation error', {
       context: { recordingId, orgId },
@@ -942,7 +1061,7 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
     if (isStreaming) {
       streamingManager.sendError(
         recordingId,
-        `Embedding generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Embedding generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
 
@@ -957,5 +1076,5 @@ export async function generateEmbeddings(job: Job, progressCallback?: (percent: 
  * Utility: Sleep helper
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -97,7 +97,11 @@ export function MessageList({
   const isEmpty = messages.length === 0 && !isLoading;
 
   return (
-    <div className={cn('flex-1 overflow-hidden', className)} role="region" aria-label="Chat messages">
+    <div
+      className={cn('flex-1 overflow-hidden', className)}
+      role="region"
+      aria-label="Chat messages"
+    >
       <Conversation className="h-full">
         <ConversationContent className="space-y-2 md:space-y-3">
           {/* Empty State */}
@@ -105,14 +109,24 @@ export function MessageList({
             <ConversationEmptyState
               title={emptyTitle}
               description={emptyDescription}
-              icon={<Bot className="w-16 h-16 text-muted-foreground" aria-hidden="true" />}
+              icon={
+                <Bot
+                  className="size-16 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              }
             >
               {/* Custom content with example prompts */}
               <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
-                <Bot className="w-16 h-16 text-muted-foreground" aria-hidden="true" />
+                <Bot
+                  className="size-16 text-muted-foreground"
+                  aria-hidden="true"
+                />
                 <div className="space-y-1">
                   <h3 className="font-medium text-lg">{emptyTitle}</h3>
-                  <p className="text-muted-foreground text-sm">{emptyDescription}</p>
+                  <p className="text-muted-foreground text-sm">
+                    {emptyDescription}
+                  </p>
                 </div>
 
                 {/* Example Prompts */}
@@ -121,15 +135,19 @@ export function MessageList({
                     <p className="text-xs font-medium text-muted-foreground mb-3">
                       Try asking:
                     </p>
-                    <div role="group" aria-label="Example prompts" className="space-y-2">
+                    <div
+                      role="group"
+                      aria-label="Example prompts"
+                      className="space-y-2"
+                    >
                       {examplePrompts.map((prompt, index) => (
                         <button
-                          key={index}
+                          key={JSON.stringify(prompt)}
                           onClick={() => onExampleClick?.(prompt)}
                           className={cn(
                             'w-full text-left p-3 rounded-lg border dark:border-border/50',
                             'bg-muted/50 dark:bg-muted/30 hover:bg-muted dark:hover:bg-muted/50 transition-colors',
-                            'text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-primary/60'
+                            'text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-primary/60',
                           )}
                           aria-label={`Ask: ${prompt}`}
                         >
@@ -148,7 +166,10 @@ export function MessageList({
             <AnimatePresence mode="popLayout">
               {messages.map((message, index) => {
                 // Disable animation for the last message if still loading (streaming)
-                const isStreamingMessage = isLoading && index === messages.length - 1 && message.role === 'assistant';
+                const isStreamingMessage =
+                  isLoading &&
+                  index === messages.length - 1 &&
+                  message.role === 'assistant';
                 return (
                   <MessageItem
                     key={message.id}
@@ -170,10 +191,10 @@ export function MessageList({
               aria-label="Assistant is typing"
             >
               <div
-                className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0"
+                className="size-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0"
                 aria-hidden="true"
               >
-                <Bot className="w-5 h-5 text-primary" />
+                <Bot className="size-5 text-primary" />
               </div>
               <div className="max-w-3xl space-y-2 flex-1">
                 {/* Status indicator */}
@@ -194,7 +215,12 @@ export function MessageList({
       </Conversation>
 
       {/* Screen reader announcements for new messages */}
-      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+      <div
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {messages.length > 0 && messages[messages.length - 1] && (
           <>
             {messages[messages.length - 1].role === 'assistant'

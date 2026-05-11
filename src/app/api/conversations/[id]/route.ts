@@ -6,7 +6,12 @@
 
 import { NextRequest } from 'next/server';
 
-import { apiHandler, requireOrg, successResponse, errors } from '@/lib/utils/api';
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  errors,
+} from '@/lib/utils/api';
 import { getConversationHistory } from '@/lib/services/chat-conversations';
 import { createClient } from '@/lib/supabase/server';
 
@@ -15,11 +20,15 @@ import { createClient } from '@/lib/supabase/server';
  * Get conversation with message history
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const { id: conversationId } = await params;
-
-    const supabase = await createClient();
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId }, { id: conversationId }, supabase] = await Promise.all([
+      requireOrg(),
+      params,
+      createClient(),
+    ]);
 
     // Verify conversation belongs to org
     const { data: conversation, error: convError } = await supabase
@@ -45,7 +54,7 @@ export const GET = apiHandler(
       },
       messages,
     });
-  }
+  },
 );
 
 /**
@@ -53,11 +62,15 @@ export const GET = apiHandler(
  * Delete a conversation and all its messages
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const { id: conversationId } = await params;
-
-    const supabase = await createClient();
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId }, { id: conversationId }, supabase] = await Promise.all([
+      requireOrg(),
+      params,
+      createClient(),
+    ]);
 
     // Delete conversation (messages cascade)
     const { error } = await supabase
@@ -71,7 +84,7 @@ export const DELETE = apiHandler(
     }
 
     return successResponse({ deleted: true });
-  }
+  },
 );
 
 /**
@@ -79,10 +92,15 @@ export const DELETE = apiHandler(
  * Update conversation title
  */
 export const PATCH = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const { id: conversationId } = await params;
-    const body = await request.json();
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId }, { id: conversationId }, body] = await Promise.all([
+      requireOrg(),
+      params,
+      request.json(),
+    ]);
     const { title } = body;
 
     if (!title || typeof title !== 'string') {
@@ -104,5 +122,5 @@ export const PATCH = apiHandler(
     }
 
     return successResponse({ conversation });
-  }
+  },
 );

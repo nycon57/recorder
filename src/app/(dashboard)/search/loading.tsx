@@ -29,11 +29,14 @@ export default function SearchLoading() {
 
       {/* Search Results */}
       <div className="space-y-4">
-        {[...Array(8)].map((_, i) => (
+        {Array.from({ length: 8 }, (_, index) => ({
+          id: `search-result-${index + 1}`,
+          delay: index * 50,
+        })).map((skeleton) => (
           <div
-            key={i}
+            key={skeleton.id}
             className="border border-border rounded-lg p-5"
-            style={{ animationDelay: `${i * 50}ms` }}
+            style={{ animationDelay: `${skeleton.delay}ms` }}
           >
             {/* Result Header */}
             <div className="mb-3">

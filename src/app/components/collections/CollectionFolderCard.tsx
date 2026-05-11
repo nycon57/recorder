@@ -1,8 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { Folder, MoreHorizontal, Pencil, Trash2, FolderInput } from 'lucide-react';
-import { motion } from 'motion/react';
+import {
+  Folder,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  FolderInput,
+} from 'lucide-react';
+import { m } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import {
@@ -59,8 +65,6 @@ export function CollectionFolderCard({
   selected = false,
   className,
 }: CollectionFolderCardProps) {
-  const [isHovered, setIsHovered] = React.useState(false);
-
   // Default color if none specified
   const folderColor = collection.color || '#3b82f6';
 
@@ -69,7 +73,7 @@ export function CollectionFolderCard({
   const subCount = collection.subcollection_count || 0;
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
@@ -81,11 +85,9 @@ export function CollectionFolderCard({
         'transition-colors hover:border-primary/50 hover:bg-accent/50',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         selected && 'border-primary bg-accent',
-        className
+        className,
       )}
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -99,11 +101,11 @@ export function CollectionFolderCard({
       {/* Folder Icon */}
       <div className="flex items-start justify-between mb-3">
         <div
-          className="flex items-center justify-center w-12 h-12 rounded-lg"
+          className="flex items-center justify-center size-12 rounded-lg"
           style={{ backgroundColor: `${folderColor}20` }}
         >
           <Folder
-            className="w-6 h-6"
+            className="size-6"
             style={{ color: folderColor }}
             fill={`${folderColor}40`}
           />
@@ -116,25 +118,25 @@ export function CollectionFolderCard({
               variant="ghost"
               size="icon-sm"
               className={cn(
-                'h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity',
-                'focus-visible:opacity-100'
+                'size-8 opacity-0 group-hover:opacity-100 transition-opacity',
+                'focus-visible:opacity-100',
               )}
               onClick={(e) => e.stopPropagation()}
               aria-label="Folder actions"
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <MoreHorizontal className="size-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             {onEdit && (
               <DropdownMenuItem onClick={onEdit}>
-                <Pencil className="mr-2 h-4 w-4" />
+                <Pencil className="mr-2 size-4" />
                 Edit
               </DropdownMenuItem>
             )}
             {onMove && (
               <DropdownMenuItem onClick={onMove}>
-                <FolderInput className="mr-2 h-4 w-4" />
+                <FolderInput className="mr-2 size-4" />
                 Move
               </DropdownMenuItem>
             )}
@@ -145,7 +147,7 @@ export function CollectionFolderCard({
                   onClick={onDelete}
                   className="text-destructive focus:text-destructive"
                 >
-                  <Trash2 className="mr-2 h-4 w-4" />
+                  <Trash2 className="mr-2 size-4" />
                   Delete
                 </DropdownMenuItem>
               </>
@@ -188,7 +190,7 @@ export function CollectionFolderCard({
           aria-hidden="true"
         />
       )}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -200,8 +202,8 @@ export function CollectionFolderCardSkeleton() {
   return (
     <div className="flex flex-col rounded-lg border bg-card p-4 animate-pulse">
       <div className="flex items-start justify-between mb-3">
-        <div className="w-12 h-12 rounded-lg bg-muted" />
-        <div className="w-8 h-8 rounded bg-muted" />
+        <div className="size-12 rounded-lg bg-muted" />
+        <div className="size-8 rounded bg-muted" />
       </div>
       <div className="h-4 w-3/4 bg-muted rounded mb-2" />
       <div className="h-3 w-1/2 bg-muted rounded mt-auto" />

@@ -35,17 +35,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
   const query = parseSearchParams<KnowledgeGraphQueryInput>(
     request,
-    knowledgeGraphQuerySchema
+    knowledgeGraphQuerySchema,
   );
 
-  const payload = await buildKnowledgeGraph({
-    orgId,
-    query,
-  });
-
-  const { CacheControlHeaders, generateETag } = await import(
-    '@/lib/services/cache'
-  );
+  const [payload, { CacheControlHeaders, generateETag }] = await Promise.all([
+    buildKnowledgeGraph({
+      orgId,
+      query,
+    }),
+    import('@/lib/services/cache'),
+  ]);
   const response = successResponse(payload);
   response.headers.set('Cache-Control', CacheControlHeaders.metadata);
   response.headers.set('ETag', generateETag(payload));

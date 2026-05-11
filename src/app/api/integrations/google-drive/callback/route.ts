@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { google } from 'googleapis';
+
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { requireOrg } from '@/lib/utils/api';
 import { ConnectorType } from '@/lib/connectors/base';
@@ -38,6 +39,41 @@ function redirectWithSuccess(): NextResponse {
   const url = new URL(SETTINGS_URL, process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
   url.searchParams.set('success', 'google_drive_connected');
   return NextResponse.redirect(url.toString());
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function readFormString(value: FormDataEntryValue | null | undefined): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function renderCallbackPostPage(code: string, state: string): NextResponse {
+  return new NextResponse(
+    `<!doctype html>
+    <html>
+      <head><meta charset="utf-8"><title>Completing Google Drive connection</title></head>
+      <body>
+        <form id="oauth-callback-form" method="post" action="/api/integrations/google-drive/callback">
+          <input type="hidden" name="code" value="${escapeHtml(code)}">
+          <input type="hidden" name="state" value="${escapeHtml(state)}">
+          <button type="submit">Complete Google Drive connection</button>
+        </form>
+        <script>document.getElementById('oauth-callback-form').requestSubmit();</script>
+      </body>
+    </html>`,
+    {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    }
+  );
 }
 
 /**
@@ -76,18 +112,41 @@ function verifyState(
 }
 
 export async function GET(req: NextRequest) {
+  const searchParams = req.nextUrl.searchParams;
+  const code = searchParams.get('code');
+  const state = searchParams.get('state');
+  const error = searchParams.get('error');
+  const errorDescription = searchParams.get('error_description');
+
+  if (error) {
+    console.error('[Google Drive Callback] OAuth error:', { error, errorDescription });
+    return redirectWithError(
+      'google_drive_auth_denied',
+      errorDescription || 'Authorization denied'
+    );
+  }
+
+  if (!code || !state) {
+    console.error('[Google Drive Callback] Missing code or state');
+    return redirectWithError('invalid_callback', 'Missing authorization code');
+  }
+
+  return renderCallbackPostPage(code, state);
+}
+
+export async function POST(req: NextRequest) {
   const supabase = createAdminClient();
 
   try {
     // Authenticate user and get internal org ID
     const { orgId, userId } = await requireOrg();
 
-    // Extract query parameters
-    const searchParams = req.nextUrl.searchParams;
-    const code = searchParams.get('code');
-    const state = searchParams.get('state');
-    const error = searchParams.get('error');
-    const errorDescription = searchParams.get('error_description');
+    // Extract callback parameters from the same-origin POST handoff.
+    const formData = await req.formData().catch(() => null);
+    const code = readFormString(formData?.get('code'));
+    const state = readFormString(formData?.get('state'));
+    const error = readFormString(formData?.get('error'));
+    const errorDescription = readFormString(formData?.get('error_description'));
 
     // Handle OAuth errors from Google
     if (error) {

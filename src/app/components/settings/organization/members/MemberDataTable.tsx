@@ -12,7 +12,11 @@ import {
 } from '@tanstack/react-table';
 import { ArrowUpDown } from 'lucide-react';
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/app/components/ui/avatar';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from '@/app/components/ui/avatar';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -40,10 +44,22 @@ interface MemberDataTableProps {
 // Helper components
 function RoleBadge({ role }: { role: string }) {
   const variants: Record<string, { color: string; label: string }> = {
-    owner: { color: 'bg-primary/15 text-primary border-primary/30', label: 'Owner' },
-    admin: { color: 'bg-accent/15 text-accent border-accent/30', label: 'Admin' },
-    contributor: { color: 'bg-secondary/15 text-secondary border-secondary/30', label: 'Contributor' },
-    reader: { color: 'bg-muted text-muted-foreground border-border/50', label: 'Reader' },
+    owner: {
+      color: 'bg-primary/15 text-primary border-primary/30',
+      label: 'Owner',
+    },
+    admin: {
+      color: 'bg-accent/15 text-accent border-accent/30',
+      label: 'Admin',
+    },
+    contributor: {
+      color: 'bg-secondary/15 text-secondary border-secondary/30',
+      label: 'Contributor',
+    },
+    reader: {
+      color: 'bg-muted text-muted-foreground border-border/50',
+      label: 'Reader',
+    },
   };
 
   const variant = variants[role] || variants.reader;
@@ -57,10 +73,22 @@ function RoleBadge({ role }: { role: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   const variants: Record<string, { color: string; label: string }> = {
-    active: { color: 'bg-accent/15 text-accent border-accent/30', label: 'Active' },
-    pending: { color: 'bg-warning/15 text-warning border-warning/30', label: 'Pending' },
-    suspended: { color: 'bg-destructive/15 text-destructive border-destructive/30', label: 'Suspended' },
-    inactive: { color: 'bg-muted text-muted-foreground border-border/50', label: 'Inactive' },
+    active: {
+      color: 'bg-accent/15 text-accent border-accent/30',
+      label: 'Active',
+    },
+    pending: {
+      color: 'bg-warning/15 text-warning border-warning/30',
+      label: 'Pending',
+    },
+    suspended: {
+      color: 'bg-destructive/15 text-destructive border-destructive/30',
+      label: 'Suspended',
+    },
+    inactive: {
+      color: 'bg-muted text-muted-foreground border-border/50',
+      label: 'Inactive',
+    },
   };
 
   const variant = variants[status] || variants.inactive;
@@ -72,7 +100,13 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function MemberDataTable({
+export function MemberDataTable(
+  props: Parameters<typeof useMemberDataTableImplementation>[0],
+) {
+  return useMemberDataTableImplementation(props);
+}
+
+function useMemberDataTableImplementation({
   members,
   isLoading,
   selectedIds,
@@ -105,7 +139,9 @@ export function MemberDataTable({
             if (checked) {
               onSelectionChange([...selectedIds, row.original.id]);
             } else {
-              onSelectionChange(selectedIds.filter((id) => id !== row.original.id));
+              onSelectionChange(
+                selectedIds.filter((id) => id !== row.original.id),
+              );
             }
           }}
           onClick={(e) => e.stopPropagation()}
@@ -126,27 +162,34 @@ export function MemberDataTable({
             className="gap-1 hover:bg-transparent"
           >
             Member
-            <ArrowUpDown className="h-3 w-3" />
+            <ArrowUpDown className="size-3" />
           </Button>
         );
       },
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10">
+          <Avatar className="size-10">
             <AvatarImage src={row.original.avatar_url || undefined} />
             <AvatarFallback>
               {row.original.name
                 ?.split(' ')
                 .map((n: string) => n[0])
                 .join('')
-                .toUpperCase() || (row.original.email?.[0] || '?').toUpperCase()}
+                .toUpperCase() ||
+                (row.original.email?.[0] || '?').toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <div className="font-medium">{row.original.name || 'Unnamed User'}</div>
-            <div className="text-sm text-muted-foreground">{row.original.email}</div>
+            <div className="font-medium">
+              {row.original.name || 'Unnamed User'}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {row.original.email}
+            </div>
             {row.original.title && (
-              <div className="text-xs text-muted-foreground">{row.original.title}</div>
+              <div className="text-xs text-muted-foreground">
+                {row.original.title}
+              </div>
             )}
           </div>
         </div>
@@ -165,7 +208,7 @@ export function MemberDataTable({
             className="gap-1 hover:bg-transparent"
           >
             Role
-            <ArrowUpDown className="h-3 w-3" />
+            <ArrowUpDown className="size-3" />
           </Button>
         );
       },
@@ -179,11 +222,13 @@ export function MemberDataTable({
         if (row.original.departments && row.original.departments.length > 0) {
           return (
             <div className="flex flex-wrap gap-1">
-              {row.original.departments.slice(0, 2).map((dept: { id: string; name: string }) => (
-                <Badge key={dept.id} variant="outline" className="text-xs">
-                  {dept.name}
-                </Badge>
-              ))}
+              {row.original.departments
+                .slice(0, 2)
+                .map((dept: { id: string; name: string }) => (
+                  <Badge key={dept.id} variant="outline" className="text-xs">
+                    {dept.name}
+                  </Badge>
+                ))}
               {row.original.departments.length > 2 && (
                 <Badge variant="outline" className="text-xs">
                   +{row.original.departments.length - 2}
@@ -208,7 +253,7 @@ export function MemberDataTable({
             className="gap-1 hover:bg-transparent"
           >
             Last Active
-            <ArrowUpDown className="h-3 w-3" />
+            <ArrowUpDown className="size-3" />
           </Button>
         );
       },
@@ -217,7 +262,11 @@ export function MemberDataTable({
           // VALIDATION: Ensure date is valid before formatting
           const date = new Date(row.original.last_active_at);
           if (isNaN(date.getTime())) {
-            return <span className="text-sm text-muted-foreground">Invalid date</span>;
+            return (
+              <span className="text-sm text-muted-foreground">
+                Invalid date
+              </span>
+            );
           }
           return (
             <span className="text-sm">
@@ -243,18 +292,24 @@ export function MemberDataTable({
             className="gap-1 hover:bg-transparent"
           >
             Status
-            <ArrowUpDown className="h-3 w-3" />
+            <ArrowUpDown className="size-3" />
           </Button>
         );
       },
-      cell: ({ row }) => <StatusBadge status={row.original.status || 'pending'} />,
+      cell: ({ row }) => (
+        <StatusBadge status={row.original.status || 'pending'} />
+      ),
       enableSorting: true,
     },
     {
       id: 'actions',
       header: '',
       cell: ({ row }) => (
-        <div onClick={(e) => e.stopPropagation()}>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="presentation"
+        >
           <MemberRowActions member={row.original} />
         </div>
       ),
@@ -279,9 +334,15 @@ export function MemberDataTable({
   if (isLoading) {
     return (
       <div className="p-6">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="flex items-center gap-4 mb-4">
-            <Skeleton className="h-10 w-10 rounded-full" />
+        {[
+          'member-table-1',
+          'member-table-2',
+          'member-table-3',
+          'member-table-4',
+          'member-table-5',
+        ].map((skeletonId) => (
+          <div key={skeletonId} className="flex items-center gap-4 mb-4">
+            <Skeleton className="size-10 rounded-full" />
             <div className="space-y-2 flex-1">
               <Skeleton className="h-4 w-48" />
               <Skeleton className="h-3 w-32" />
@@ -309,11 +370,20 @@ export function MemberDataTable({
             {headerGroup.headers.map((header) => (
               <TableHead
                 key={header.id}
-                className={header.column.id === 'select' ? 'w-12' : header.column.id === 'actions' ? 'w-12' : undefined}
+                className={
+                  header.column.id === 'select'
+                    ? 'w-12'
+                    : header.column.id === 'actions'
+                      ? 'w-12'
+                      : undefined
+                }
               >
                 {header.isPlaceholder
                   ? null
-                  : flexRender(header.column.columnDef.header, header.getContext())}
+                  : flexRender(
+                      header.column.columnDef.header,
+                      header.getContext(),
+                    )}
               </TableHead>
             ))}
           </TableRow>

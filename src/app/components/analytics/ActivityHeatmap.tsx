@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 interface ActivityHeatmapProps {
   timeRange: string;
@@ -16,38 +17,31 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 export default function ActivityHeatmap({ timeRange }: ActivityHeatmapProps) {
-  const [data, setData] = useState<HeatmapData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [maxCount, setMaxCount] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data = [],
+    isLoading,
+    error,
+  } = useQuery<HeatmapData[], Error>({
+    queryKey: ['analytics', 'user', 'charts', 'heatmap', timeRange],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        `/api/analytics/user/charts/heatmap?timeRange=${timeRange}`,
+        { signal },
+      );
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`/api/analytics/user/charts/heatmap?timeRange=${timeRange}`);
-        if (!response.ok) {
-          setError('Failed to load activity data');
-          return;
-        }
-        const result = await response.json();
-        const heatmapData = result.data || [];
-        setData(heatmapData);
-
-        // Calculate max count for color intensity
-        const max = Math.max(...heatmapData.map((d: HeatmapData) => d.count), 1);
-        setMaxCount(max);
-      } catch (err) {
-        console.error('Error fetching chart data:', err);
-        setError('An error occurred while loading data');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to load activity data');
       }
-    };
 
-    fetchData();
-  }, [timeRange]);
+      const result = await response.json();
+      return result.data || [];
+    },
+  });
+
+  const maxCount = useMemo(
+    () => Math.max(...data.map((d) => d.count), 1),
+    [data],
+  );
 
   const getIntensity = (count: number) => {
     if (count === 0) return 0;
@@ -63,13 +57,19 @@ export default function ActivityHeatmap({ timeRange }: ActivityHeatmapProps) {
   };
 
   const getCellData = (day: string, hour: number) => {
-    return data.find((d) => d.day === day && d.hour === hour) || { day, hour, count: 0 };
+    return (
+      data.find((d) => d.day === day && d.hour === hour) || {
+        day,
+        hour,
+        count: 0,
+      }
+    );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="h-[300px] w-full flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="size-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -77,7 +77,7 @@ export default function ActivityHeatmap({ timeRange }: ActivityHeatmapProps) {
   if (error) {
     return (
       <div className="h-[300px] w-full flex items-center justify-center">
-        <p className="text-sm text-destructive">{error}</p>
+        <p className="text-sm text-destructive">{error.message}</p>
       </div>
     );
   }
@@ -117,8 +117,12 @@ export default function ActivityHeatmap({ timeRange }: ActivityHeatmapProps) {
                 >
                   {/* Tooltip on hover */}
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-card border border-border rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                    <p className="text-xs font-medium">{day} {hour}:00</p>
-                    <p className="text-xs text-muted-foreground">{cellData.count} searches</p>
+                    <p className="text-xs font-medium">
+                      {day} {hour}:00
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {cellData.count} searches
+                    </p>
                   </div>
                 </div>
               );
@@ -130,11 +134,11 @@ export default function ActivityHeatmap({ timeRange }: ActivityHeatmapProps) {
         <div className="flex items-center gap-2 mt-4">
           <span className="text-xs text-muted-foreground">Less</span>
           <div className="flex gap-1">
-            <div className="w-4 h-4 rounded bg-muted/30" />
-            <div className="w-4 h-4 rounded bg-primary/20" />
-            <div className="w-4 h-4 rounded bg-primary/40" />
-            <div className="w-4 h-4 rounded bg-primary/60" />
-            <div className="w-4 h-4 rounded bg-primary" />
+            <div className="size-4 rounded bg-muted/30" />
+            <div className="size-4 rounded bg-primary/20" />
+            <div className="size-4 rounded bg-primary/40" />
+            <div className="size-4 rounded bg-primary/60" />
+            <div className="size-4 rounded bg-primary" />
           </div>
           <span className="text-xs text-muted-foreground">More</span>
         </div>

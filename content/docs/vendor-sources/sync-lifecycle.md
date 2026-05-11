@@ -1,11 +1,9 @@
 ---
-slug: vendor-sources/sync-lifecycle
 title: Sync lifecycle
 description: End-to-end walkthrough of a vendor-source sync from trigger through curation attribution.
 audience: system-admin
 section: vendor-sources
 order: 10
-updatedAt: "2026-04-20"
 related:
   - vendor-sources/failure-handling
   - vendor-sources/governance

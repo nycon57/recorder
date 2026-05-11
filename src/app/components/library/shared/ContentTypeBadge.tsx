@@ -89,7 +89,7 @@ export default function ContentTypeBadge({
 /**
  * Compact version for use in tables and tight spaces
  */
-export function ContentTypeBadgeCompact({
+function ContentTypeBadgeCompact({
   contentType,
   className = '',
 }: Omit<ContentTypeBadgeProps, 'showIcon'>) {

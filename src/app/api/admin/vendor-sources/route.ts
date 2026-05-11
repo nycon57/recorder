@@ -20,9 +20,10 @@ export const GET = apiHandler(async () => {
 });
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const session = await requireSystemAdmin();
-
-  const rawBody = await request.json().catch(() => null);
+  const [session, rawBody] = await Promise.all([
+    requireSystemAdmin(),
+    request.json().catch(() => null),
+  ]);
   const parsed = vendorIngestInputSchema.safeParse(rawBody);
 
   if (!parsed.success) {
@@ -53,7 +54,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
 });
 
 function derivePublisherHostname(hostname: string): string {
-  const normalized = hostname.trim().toLowerCase().replace(/^www\./, '');
+  const normalized = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./, '');
   const parts = normalized.split('.').filter(Boolean);
 
   if (parts.length <= 2) {

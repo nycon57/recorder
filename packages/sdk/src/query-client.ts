@@ -9,7 +9,7 @@ import type { PageContext } from './context';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface TextChunkEvent {
+interface TextChunkEvent {
   type: 'text_chunk';
   text: string;
 }
@@ -28,16 +28,16 @@ export interface CitationEvent {
   recordingUrl?: string;
 }
 
-export interface DoneEvent {
+interface DoneEvent {
   type: 'done';
 }
 
-export interface ErrorEvent {
+interface ErrorEvent {
   type: 'error';
   message: string;
 }
 
-export type QueryEvent =
+type QueryEvent =
   | TextChunkEvent
   | ElementRefEvent
   | CitationEvent
@@ -148,9 +148,7 @@ export class QueryClient {
           response
             .text()
             .then((text) => {
-              callbacks.onError?.(
-                `Query failed (${response.status}): ${text}`,
-              );
+              callbacks.onError?.(`Query failed (${response.status}): ${text}`);
             })
             .catch(() => {
               callbacks.onError?.(`Query failed (${response.status})`);
@@ -195,9 +193,11 @@ export class QueryClient {
     let buffer = '';
 
     try {
-      while (!signal.aborted) {
+      const readChunk = async (): Promise<void> => {
+        if (signal.aborted) return;
+
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) return;
 
         buffer += decoder.decode(value, { stream: true });
 
@@ -209,7 +209,10 @@ export class QueryClient {
         for (const part of parts) {
           this.parseSSEEvent(part, callbacks);
         }
-      }
+        return readChunk();
+      };
+
+      await readChunk();
 
       // Process any remaining buffer
       if (buffer.trim()) {

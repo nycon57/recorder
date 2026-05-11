@@ -30,14 +30,14 @@ export interface KnowledgeHealthData {
   knowledgeStatus: KnowledgeStatusSummary;
 }
 
-export type KnowledgeBottleneckKind =
+type KnowledgeBottleneckKind =
   | 'routing'
   | 'review'
   | 'publication'
   | 'vendor-gap'
   | 'processing';
 
-export interface KnowledgeFlowBottleneck {
+interface KnowledgeFlowBottleneck {
   key: KnowledgeBottleneckKind;
   label: string;
   count: number;
@@ -242,7 +242,7 @@ export async function fetchKnowledgeHealth(orgId: string): Promise<KnowledgeHeal
   };
 }
 
-export async function fetchKnowledgeOperationalMetrics(
+async function fetchKnowledgeOperationalMetrics(
   orgId: string,
 ): Promise<KnowledgeOperationalMetrics> {
   const [knowledgeStatus, reviewQueueKinds] = await Promise.all([

@@ -23,7 +23,13 @@ import {
 import { cn } from '@/lib/utils';
 
 import { useConversations } from '../store/ConversationContext';
-import type { ExtendedMessage, MessageAttachment, MessageMetadata, MessagePart, SourceCitation } from '../types';
+import type {
+  ExtendedMessage,
+  MessageAttachment,
+  MessageMetadata,
+  MessagePart,
+  SourceCitation,
+} from '../types';
 
 import { ChatInput } from './ChatInput';
 import { MessageList } from './MessageList';
@@ -60,7 +66,9 @@ function toMessageMetadata(metadata: unknown): MessageMetadata | undefined {
     : undefined;
 }
 
-function getSourceKey(metadata: MessageMetadata | undefined): string | undefined {
+function getSourceKey(
+  metadata: MessageMetadata | undefined,
+): string | undefined {
   const sourceKey = metadata?.custom?.sourceKey;
   return typeof sourceKey === 'string' ? sourceKey : undefined;
 }
@@ -108,7 +116,13 @@ export function AssistantChat(props: AssistantChatProps) {
  *
  * Inner chat component that uses PromptInputController.
  */
-function AssistantChatInner({
+function AssistantChatInner(
+  props: Parameters<typeof useAssistantChatInnerImplementation>[0],
+) {
+  return useAssistantChatInnerImplementation(props);
+}
+
+function useAssistantChatInnerImplementation({
   apiEndpoint = '/api/chat',
   className,
   showAdvancedFeatures = true,
@@ -144,7 +158,9 @@ function AssistantChatInner({
    * Store sources by USER message ID for merging with aiMessages
    * Key = user message ID, Value = sources for the assistant's response
    */
-  const [messageSourcesMap, setMessageSourcesMap] = useState<Map<string, SourceCitation[]>>(new Map());
+  const [messageSourcesMap, setMessageSourcesMap] = useState<
+    Map<string, SourceCitation[]>
+  >(new Map());
 
   /**
    * AI SDK useChat hook
@@ -177,8 +193,12 @@ function AssistantChatInner({
 
       if (cacheKey) {
         try {
-          const sourcesResponse = await fetch(`${apiEndpoint}?sourcesKey=${cacheKey}`);
-          const { sources } = (await sourcesResponse.json()) as { sources?: SourceCitation[] };
+          const sourcesResponse = await fetch(
+            `${apiEndpoint}?sourcesKey=${cacheKey}`,
+          );
+          const { sources } = (await sourcesResponse.json()) as {
+            sources?: SourceCitation[];
+          };
 
           if (sources && sources.length > 0) {
             messageWithSources = {
@@ -194,15 +214,20 @@ function AssistantChatInner({
               },
             };
             // Store sources in map using USER message ID as key
-            setMessageSourcesMap(prev => new Map(prev).set(cacheKey, sources));
+            setMessageSourcesMap((prev) =>
+              new Map(prev).set(cacheKey, sources),
+            );
 
-            console.log('[AssistantChat] Created message with sources and metadata:', {
-              messageId: finishedMessage.id,
-              cacheKey,
-              sourcesCount: sources.length,
-              hasMetadata: !!messageWithSources.metadata,
-              hasSourceKey: !!getSourceKey(messageWithSources.metadata),
-            });
+            console.log(
+              '[AssistantChat] Created message with sources and metadata:',
+              {
+                messageId: finishedMessage.id,
+                cacheKey,
+                sourcesCount: sources.length,
+                hasMetadata: !!messageWithSources.metadata,
+                hasSourceKey: !!getSourceKey(messageWithSources.metadata),
+              },
+            );
           }
         } catch (e) {
           console.error('[AssistantChat] Failed to fetch sources:', e);
@@ -256,19 +281,23 @@ function AssistantChatInner({
       if (!lastStoreMessage || lastAiMessage.id !== lastStoreMessage.id) {
         aiMessages.forEach((msg) => {
           const existsInStore = currentConversation.messages.some(
-            (m) => m.id === msg.id
+            (m) => m.id === msg.id,
           );
           if (!existsInStore) {
-            console.log('[AssistantChat] useEffect adding message from aiMessages:', {
-              messageId: msg.id,
-              role: msg.role,
-              hasSources: !!(msg as AiMessageLike).sources,
-              hasMetadata: !!(msg as AiMessageLike).metadata,
-            });
+            console.log(
+              '[AssistantChat] useEffect adding message from aiMessages:',
+              {
+                messageId: msg.id,
+                role: msg.role,
+                hasSources: !!(msg as AiMessageLike).sources,
+                hasMetadata: !!(msg as AiMessageLike).metadata,
+              },
+            );
 
             // Extract content from UIMessage (AI SDK v5 uses .parts array)
             const parts = toMessageParts((msg as AiMessageLike).parts);
-            const textContent = parts.find((p) => p.type === 'text')?.text || '';
+            const textContent =
+              parts.find((p) => p.type === 'text')?.text || '';
             const metadata = toMessageMetadata((msg as AiMessageLike).metadata);
 
             const extendedMessage: ExtendedMessage = {
@@ -334,7 +363,7 @@ function AssistantChatInner({
       // Clear input using PromptInput controller
       promptController.textInput.clear();
     },
-    [currentConversation, createConversation, sendMessage, promptController]
+    [currentConversation, createConversation, sendMessage, promptController],
   );
 
   /**
@@ -344,7 +373,7 @@ function AssistantChatInner({
     (prompt: string) => {
       promptController.textInput.setInput(prompt);
     },
-    [promptController]
+    [promptController],
   );
 
   /**
@@ -360,46 +389,42 @@ function AssistantChatInner({
   const handleEdit = useCallback(
     (message: ExtendedMessage) => {
       // Set input to message text for editing using PromptInput controller
-      const textContent = typeof message.content === 'string'
-        ? message.content
-        : message.content
-            .filter((p) => p.type === 'text')
-            .map((p) => p.text)
-            .join(' ');
+      const textContent =
+        typeof message.content === 'string'
+          ? message.content
+          : message.content
+              .flatMap((__item, __index, __array) =>
+                __item.type === 'text' ? [__item.text] : [],
+              )
+              .join(' ');
 
       promptController.textInput.setInput(textContent);
 
       // TODO: Delete messages after this one and regenerate from edited message
       toast.info('Edit mode - modify and send to regenerate');
     },
-    [promptController]
+    [promptController],
   );
 
   /**
    * Handle message regenerate
    */
-  const handleRegenerate = useCallback(
-    async () => {
-      try {
-        await regenerate();
-        toast.success('Regenerating response...');
-      } catch {
-        toast.error('Failed to regenerate response');
-      }
-    },
-    [regenerate]
-  );
+  const handleRegenerate = useCallback(async () => {
+    try {
+      await regenerate();
+      toast.success('Regenerating response...');
+    } catch {
+      toast.error('Failed to regenerate response');
+    }
+  }, [regenerate]);
 
   /**
    * Handle message branch
    */
-  const handleBranch = useCallback(
-    () => {
-      // TODO: Implement conversation branching
-      toast.info('Branching coming soon!');
-    },
-    []
-  );
+  const handleBranch = useCallback(() => {
+    // TODO: Implement conversation branching
+    toast.info('Branching coming soon!');
+  }, []);
 
   /**
    * Handle message delete
@@ -409,49 +434,48 @@ function AssistantChatInner({
       deleteMessage(message.id);
       toast.success('Message deleted');
     },
-    [deleteMessage]
+    [deleteMessage],
   );
 
   /**
    * Convert AI messages to ExtendedMessage format, merging sources from map
    * and metadata from ConversationStore
    */
-  const extendedMessages: ExtendedMessage[] = useMemo(
-    () => {
-      return aiMessages.map((msg, index) => {
-        // For assistant messages, find the preceding user message to get sources
-        let sources: SourceCitation[] | undefined;
+  const extendedMessages: ExtendedMessage[] = useMemo(() => {
+    return aiMessages.map((msg, index) => {
+      // For assistant messages, find the preceding user message to get sources
+      let sources: SourceCitation[] | undefined;
 
-        if (msg.role === 'assistant' && index > 0) {
-          // Look backwards for the most recent user message
-          for (let i = index - 1; i >= 0; i--) {
-            if (aiMessages[i].role === 'user') {
-              const userMessageId = aiMessages[i].id;
-              sources = messageSourcesMap.get(userMessageId);
-              break;
-            }
+      if (msg.role === 'assistant' && index > 0) {
+        // Look backwards for the most recent user message
+        for (let i = index - 1; i >= 0; i--) {
+          if (aiMessages[i].role === 'user') {
+            const userMessageId = aiMessages[i].id;
+            sources = messageSourcesMap.get(userMessageId);
+            break;
           }
         }
+      }
 
-        // Merge metadata from ConversationStore if message exists there
-        let storeMetadata: MessageMetadata | undefined = undefined;
-        if (currentConversation) {
-          const storeMessage = currentConversation.messages.find((m) => m.id === msg.id);
-          if (storeMessage?.metadata) {
-            storeMetadata = storeMessage.metadata;
-          }
+      // Merge metadata from ConversationStore if message exists there
+      let storeMetadata: MessageMetadata | undefined = undefined;
+      if (currentConversation) {
+        const storeMessage = currentConversation.messages.find(
+          (m) => m.id === msg.id,
+        );
+        if (storeMessage?.metadata) {
+          storeMetadata = storeMessage.metadata;
         }
+      }
 
-        return {
-          ...msg,
-          ...(sources && { sources }),
-          ...(storeMetadata && { metadata: storeMetadata }),
-          createdAt: new Date(),
-        } as unknown as ExtendedMessage;
-      });
-    },
-    [aiMessages, messageSourcesMap, currentConversation]
-  );
+      return {
+        ...msg,
+        ...(sources && { sources }),
+        ...(storeMetadata && { metadata: storeMetadata }),
+        createdAt: new Date(),
+      } as unknown as ExtendedMessage;
+    });
+  }, [aiMessages, messageSourcesMap, currentConversation]);
 
   /**
    * Generate suggested follow-up prompts
@@ -465,7 +489,11 @@ function AssistantChatInner({
   }, [extendedMessages, examplePrompts]);
 
   return (
-    <div className={cn('flex-1 flex flex-col min-h-0', className)} role="main" aria-label="AI Assistant Chat">
+    <div
+      className={cn('flex-1 flex flex-col min-h-0', className)}
+      role="main"
+      aria-label="AI Assistant Chat"
+    >
       {/* Error Display */}
       {error && (
         <div

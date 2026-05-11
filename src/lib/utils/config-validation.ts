@@ -12,7 +12,15 @@ export interface ValidationOptions {
   required?: boolean;
 }
 
-export class ConfigValidationError extends Error {
+const stripControlChars = (value: string) =>
+  Array.from(value)
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code > 31 && code !== 127;
+    })
+    .join('');
+
+class ConfigValidationError extends Error {
   constructor(message: string, public readonly key: string, public readonly value: any) {
     super(message);
     this.name = 'ConfigValidationError';
@@ -108,7 +116,7 @@ export function parseFloatSafe(
 /**
  * Safely validate a string environment variable
  */
-export function parseStringSafe(
+function parseStringSafe(
   value: string | undefined,
   defaultValue: string,
   options: ValidationOptions = {}
@@ -180,12 +188,12 @@ export function sanitizeMetadata(metadata: Record<string, any>): Record<string, 
     // Sanitize value based on type
     if (typeof value === 'string') {
       // Remove null bytes and control characters
-      sanitized[key] = value.replace(/\0/g, '').replace(/[\x00-\x1F\x7F]/g, '');
+      sanitized[key] = stripControlChars(value);
     } else if (typeof value === 'number' || typeof value === 'boolean') {
       sanitized[key] = value;
     } else if (Array.isArray(value)) {
       sanitized[key] = value.map(v =>
-        typeof v === 'string' ? v.replace(/\0/g, '').replace(/[\x00-\x1F\x7F]/g, '') : v
+        typeof v === 'string' ? stripControlChars(v) : v
       );
     } else if (value === null || value === undefined) {
       sanitized[key] = value;

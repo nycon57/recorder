@@ -28,18 +28,18 @@ interface ConceptsEmptyStateProps {
   className?: string;
 }
 
-export function ConceptsEmptyState({
+function ConceptsEmptyState({
   variant = 'no-content',
   className,
 }: ConceptsEmptyStateProps) {
-  const router = useRouter();
+  const { push } = useRouter();
 
   const handleRecordClick = () => {
-    router.push('/record');
+    push('/record');
   };
 
   const handleUploadClick = () => {
-    router.push('/library?action=upload');
+    push('/library?action=upload');
   };
 
   // Processing state
@@ -122,7 +122,7 @@ export function ConceptsEmptyState({
 
         <EmptyDescription className="max-w-md">
           As you add recordings, videos, and documents, we&apos;ll automatically extract key concepts
-          like tools, processes, and technical terms—creating a searchable knowledge network.
+          like tools, processes, and technical terms-creating a searchable knowledge network.
         </EmptyDescription>
       </EmptyHeader>
 
@@ -180,7 +180,7 @@ export function ConceptsEmptyStateCompact({
     return (
       <div className={`flex items-center gap-2 text-sm text-muted-foreground ${className}`}>
         <Loader2 className="size-4 animate-spin" />
-        <span>Extracting concepts...</span>
+        <span>Extracting concepts…</span>
       </div>
     );
   }

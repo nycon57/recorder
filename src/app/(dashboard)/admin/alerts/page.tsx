@@ -32,7 +32,6 @@ interface AlertsData {
 
 export default function AdminAlertsPage() {
   const [data, setData] = useState<AlertsData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,19 +59,17 @@ export default function AdminAlertsPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
     }
   }
 
   function getSeverityIcon(severity: string) {
     switch (severity) {
       case 'critical':
-        return <AlertTriangle className="h-4 w-4 text-red-500" />;
+        return <AlertTriangle className="size-4 text-red-500" />;
       case 'warning':
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+        return <AlertCircle className="size-4 text-yellow-500" />;
       case 'info':
-        return <Info className="h-4 w-4 text-blue-500" />;
+        return <Info className="size-4 text-blue-500" />;
       default:
         return null;
     }
@@ -103,10 +100,10 @@ export default function AdminAlertsPage() {
     return date.toLocaleString();
   }
 
-  if (loading && !data) {
+  if (!data && !error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -115,7 +112,7 @@ export default function AdminAlertsPage() {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
@@ -145,9 +142,9 @@ export default function AdminAlertsPage() {
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Open</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+            <AlertCircle className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.totalOpen}</div>
@@ -155,9 +152,9 @@ export default function AdminAlertsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Critical</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <AlertTriangle className="size-4 text-red-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.critical}</div>
@@ -165,9 +162,9 @@ export default function AdminAlertsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Warning</CardTitle>
-            <AlertCircle className="h-4 w-4 text-yellow-500" />
+            <AlertCircle className="size-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.warning}</div>
@@ -175,9 +172,9 @@ export default function AdminAlertsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Info</CardTitle>
-            <Info className="h-4 w-4 text-blue-500" />
+            <Info className="size-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.info}</div>
@@ -193,7 +190,7 @@ export default function AdminAlertsPage() {
         <CardContent>
           {!data.recentIncidents || data.recentIncidents.length === 0 ? (
             <div className="text-center py-12">
-              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4 opacity-50" />
+              <CheckCircle className="size-12 text-green-500 mx-auto mb-4 opacity-50" />
               <p className="text-sm text-muted-foreground">
                 No open alerts - system healthy
               </p>

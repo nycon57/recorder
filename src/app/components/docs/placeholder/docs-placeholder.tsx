@@ -19,7 +19,7 @@ export function DocsPlaceholder({ page }: DocsPlaceholderProps) {
         <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.1em] text-[color:var(--docs-text-muted)]">
           {page.section} / {page.audience}
         </p>
-        <h1 className="mb-4 font-[family-name:var(--font-space-grotesk)] text-4xl font-bold leading-tight text-[color:var(--docs-text-primary)]">
+        <h1 className="mb-4 font-[family-name:var(--font-space-grotesk)] text-4xl font-semibold leading-tight text-[color:var(--docs-text-primary)]">
           {page.title}
         </h1>
         {page.description && (

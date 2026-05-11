@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useReducer, useCallback, useRef } from 'react';
 import {
   AudioLinesIcon,
   CheckCircle2Icon,
@@ -38,11 +38,12 @@ import {
   fetchWithRetry,
   showErrorToast,
   getAcceptedFileTypesMessage,
-  logError
+  logError,
 } from '@/lib/utils/error-handler';
 import type { ContentType, FileType } from '@/lib/types/database';
-import ProcessingOptions from './ProcessingOptions';
 import type { AnalysisType } from '@/lib/services/analysis-templates';
+
+import ProcessingOptions from './ProcessingOptions';
 
 /**
  * File upload status for tracking individual file states
@@ -118,23 +119,52 @@ const CONTENT_TYPE_ICON_MAP: Record<ContentType, typeof FileVideoIcon> = {
   text: FileEditIcon,
 };
 
+interface UploadModalState {
+  files: UploadFile[];
+  isDragging: boolean;
+  isUploading: boolean;
+  analysisType: AnalysisType;
+  skipAnalysis: boolean;
+}
+
+type UploadModalAction =
+  | Partial<UploadModalState>
+  | ((state: UploadModalState) => UploadModalState);
+
+const initialUploadModalState: UploadModalState = {
+  files: [],
+  isDragging: false,
+  isUploading: false,
+  analysisType: 'general',
+  skipAnalysis: false,
+};
+
+const uploadModalReducer = (
+  state: UploadModalState,
+  action: UploadModalAction,
+): UploadModalState =>
+  typeof action === 'function' ? action(state) : { ...state, ...action };
+
 /**
  * Beautiful, feature-rich file upload modal component
  * Supports drag-and-drop, multi-file selection, validation, and progress tracking
  */
-export default function UploadModal({
+export default function UploadModal(
+  props: Parameters<typeof useUploadModalImplementation>[0],
+) {
+  return useUploadModalImplementation(props);
+}
+
+function useUploadModalImplementation({
   isOpen,
   onClose,
   onUploadComplete,
 }: UploadModalProps) {
-  const [files, setFiles] = useState<UploadFile[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [
+    { files, isDragging, isUploading, analysisType, skipAnalysis },
+    updateUploadState,
+  ] = useReducer(uploadModalReducer, initialUploadModalState);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Processing options state (AI analysis)
-  const [analysisType, setAnalysisType] = useState<AnalysisType>('general');
-  const [skipAnalysis, setSkipAnalysis] = useState(false);
 
   /**
    * Handle file selection from input or drag-drop
@@ -146,45 +176,46 @@ export default function UploadModal({
     const newFiles: UploadFile[] = [];
 
     // Process files sequentially to handle async duration checks
-    for (const file of Array.from(fileList)) {
-      // For video/audio files, get duration for validation
-      const isMediaFile = file.type.startsWith('video/') || file.type.startsWith('audio/');
-      let duration: number | undefined;
+    await Promise.all(
+      Array.from(Array.from(fileList)).map(async (file) => {
+        const isMediaFile =
+          file.type.startsWith('video/') || file.type.startsWith('audio/');
+        let duration: number | undefined;
+        if (isMediaFile) {
+          const mediaDuration = await getMediaDuration(file);
+          duration = mediaDuration ?? undefined;
+        }
+        const validation = validateFileForUpload(file, duration);
+        if (validation.valid && validation.contentType && validation.fileType) {
+          newFiles.push({
+            id: `${file.name}-${Date.now()}-${Math.random()}`,
+            file,
+            contentType: validation.contentType,
+            fileType: validation.fileType,
+            status: 'pending',
+            progress: 0,
+            duration,
+          });
+        } else {
+          // Add as error file to show validation message
+          newFiles.push({
+            id: `${file.name}-${Date.now()}-${Math.random()}`,
+            file,
+            contentType: 'video', // Fallback
+            fileType: 'mp4', // Fallback
+            status: 'error',
+            progress: 0,
+            error: validation.error || 'Invalid file',
+            duration,
+          });
+        }
+      }),
+    );
 
-      if (isMediaFile) {
-        const mediaDuration = await getMediaDuration(file);
-        duration = mediaDuration ?? undefined;
-      }
-
-      // Validate file with duration if available
-      const validation = validateFileForUpload(file, duration);
-
-      if (validation.valid && validation.contentType && validation.fileType) {
-        newFiles.push({
-          id: `${file.name}-${Date.now()}-${Math.random()}`,
-          file,
-          contentType: validation.contentType,
-          fileType: validation.fileType,
-          status: 'pending',
-          progress: 0,
-          duration,
-        });
-      } else {
-        // Add as error file to show validation message
-        newFiles.push({
-          id: `${file.name}-${Date.now()}-${Math.random()}`,
-          file,
-          contentType: 'video', // Fallback
-          fileType: 'mp4', // Fallback
-          status: 'error',
-          progress: 0,
-          error: validation.error || 'Invalid file',
-          duration,
-        });
-      }
-    }
-
-    setFiles((prev) => [...prev, ...newFiles]);
+    updateUploadState((state) => ({
+      ...state,
+      files: [...state.files, ...newFiles],
+    }));
   }, []);
 
   /**
@@ -193,13 +224,13 @@ export default function UploadModal({
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
+    updateUploadState({ isDragging: true });
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    updateUploadState({ isDragging: false });
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -211,12 +242,12 @@ export default function UploadModal({
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      setIsDragging(false);
+      updateUploadState({ isDragging: false });
 
       const droppedFiles = e.dataTransfer.files;
       handleFiles(droppedFiles);
     },
-    [handleFiles]
+    [handleFiles],
   );
 
   /**
@@ -230,35 +261,40 @@ export default function UploadModal({
         fileInputRef.current.value = '';
       }
     },
-    [handleFiles]
+    [handleFiles],
   );
 
   /**
    * Remove file from upload list
    */
   const removeFile = useCallback((fileId: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== fileId));
+    updateUploadState((state) => ({
+      ...state,
+      files: state.files.filter((f) => f.id !== fileId),
+    }));
   }, []);
 
   /**
    * Retry failed upload
    */
-  const retryFile = useCallback(async (fileId: string) => {
-    const fileToRetry = files.find((f) => f.id === fileId);
-    if (!fileToRetry) return;
+  const retryFile = useCallback(
+    async (fileId: string) => {
+      const fileToRetry = files.find((f) => f.id === fileId);
+      if (!fileToRetry) return;
 
-    // Reset status and retry
-    setFiles((prev) =>
-      prev.map((f) =>
-        f.id === fileId
-          ? { ...f, status: 'pending', error: undefined }
-          : f
-      )
-    );
+      // Reset status and retry
+      updateUploadState((state) => ({
+        ...state,
+        files: state.files.map((f) =>
+          f.id === fileId ? { ...f, status: 'pending', error: undefined } : f,
+        ),
+      }));
 
-    // Upload the file
-    await uploadFile(fileToRetry);
-  }, [files]);
+      // Upload the file
+      await uploadFile(fileToRetry);
+    },
+    [files],
+  );
 
   /**
    * Upload files in batch with progress tracking
@@ -267,7 +303,7 @@ export default function UploadModal({
     const formData = new FormData();
 
     // Add all files to FormData
-    batchFiles.forEach(uploadFile => {
+    batchFiles.forEach((uploadFile) => {
       formData.append('files', uploadFile.file);
     });
 
@@ -277,12 +313,13 @@ export default function UploadModal({
 
     try {
       // Update all files to uploading
-      setFiles((prev) =>
-        prev.map((f) => {
-          const isInBatch = batchFiles.some(bf => bf.id === f.id);
+      updateUploadState((state) => ({
+        ...state,
+        files: state.files.map((f) => {
+          const isInBatch = batchFiles.some((bf) => bf.id === f.id);
           return isInBatch ? { ...f, status: 'uploading', progress: 0 } : f;
-        })
-      );
+        }),
+      }));
 
       // Track upload progress
       const xhr = new XMLHttpRequest();
@@ -291,13 +328,17 @@ export default function UploadModal({
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
           // Cap upload progress at 90% to indicate server processing is still needed
-          const percentComplete = Math.min((event.loaded / event.total) * 90, 90);
-          setFiles((prev) =>
-            prev.map((f) => {
-              const isInBatch = batchFiles.some(bf => bf.id === f.id);
-              return isInBatch ? { ...f, progress: percentComplete } : f;
-            })
+          const percentComplete = Math.min(
+            (event.loaded / event.total) * 90,
+            90,
           );
+          updateUploadState((state) => ({
+            ...state,
+            files: state.files.map((f) => {
+              const isInBatch = batchFiles.some((bf) => bf.id === f.id);
+              return isInBatch ? { ...f, progress: percentComplete } : f;
+            }),
+          }));
         }
       });
 
@@ -317,7 +358,9 @@ export default function UploadModal({
         });
 
         xhr.addEventListener('error', () => reject(new Error('Network error')));
-        xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
+        xhr.addEventListener('abort', () =>
+          reject(new Error('Upload aborted')),
+        );
       });
 
       // Send request
@@ -325,12 +368,13 @@ export default function UploadModal({
       xhr.send(formData);
 
       // Update progress to 95% while waiting for response
-      setFiles((prev) =>
-        prev.map((f) => {
-          const isInBatch = batchFiles.some(bf => bf.id === f.id);
+      updateUploadState((state) => ({
+        ...state,
+        files: state.files.map((f) => {
+          const isInBatch = batchFiles.some((bf) => bf.id === f.id);
           return isInBatch ? { ...f, progress: 95 } : f;
-        })
-      );
+        }),
+      }));
 
       const result = await uploadPromise;
       const recordingIds: string[] = [];
@@ -343,8 +387,9 @@ export default function UploadModal({
 
           if (uploadResult.status === 'success') {
             recordingIds.push(uploadResult.id);
-            setFiles((prev) =>
-              prev.map((f) =>
+            updateUploadState((state) => ({
+              ...state,
+              files: state.files.map((f) =>
                 f.id === uploadFile.id
                   ? {
                       ...f,
@@ -352,12 +397,13 @@ export default function UploadModal({
                       progress: 100, // Now set to 100% after server confirms
                       recordingId: uploadResult.id,
                     }
-                  : f
-              )
-            );
+                  : f,
+              ),
+            }));
           } else {
-            setFiles((prev) =>
-              prev.map((f) =>
+            updateUploadState((state) => ({
+              ...state,
+              files: state.files.map((f) =>
                 f.id === uploadFile.id
                   ? {
                       ...f,
@@ -366,9 +412,9 @@ export default function UploadModal({
                       progress: 0, // Reset progress on error
                       retryCount: (f.retryCount || 0) + 1,
                     }
-                  : f
-              )
-            );
+                  : f,
+              ),
+            }));
           }
         });
       }
@@ -376,9 +422,10 @@ export default function UploadModal({
       return recordingIds;
     } catch (error: any) {
       // Mark all batch files as failed
-      batchFiles.forEach(uploadFile => {
-        setFiles((prev) =>
-          prev.map((f) =>
+      batchFiles.forEach((uploadFile) => {
+        updateUploadState((state) => ({
+          ...state,
+          files: state.files.map((f) =>
             f.id === uploadFile.id
               ? {
                   ...f,
@@ -386,14 +433,14 @@ export default function UploadModal({
                   error: error.message || 'Upload failed',
                   retryCount: (f.retryCount || 0) + 1,
                 }
-              : f
-          )
-        );
+              : f,
+          ),
+        }));
       });
 
       logError(error, {
         batchSize: batchFiles.length,
-        totalSize: batchFiles.reduce((sum, f) => sum + f.file.size, 0)
+        totalSize: batchFiles.reduce((sum, f) => sum + f.file.size, 0),
       });
 
       return [];
@@ -421,18 +468,28 @@ export default function UploadModal({
 
     if (validFiles.length === 0) return;
 
-    setIsUploading(true);
+    updateUploadState({ isUploading: true });
 
     try {
       const recordingIds: string[] = [];
       const BATCH_SIZE = 5; // Upload 5 files at a time
 
       // Split files into batches
-      for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
-        const batch = validFiles.slice(i, i + BATCH_SIZE);
-        const batchIds = await uploadBatch(batch);
-        recordingIds.push(...batchIds);
-      }
+      await Promise.all(
+        Array.from(
+          {
+            length: Math.max(
+              0,
+              Math.ceil((validFiles.length - 0) / BATCH_SIZE),
+            ),
+          },
+          (_, __loopIndex) => 0 + __loopIndex * BATCH_SIZE,
+        ).map(async (i) => {
+          const batch = validFiles.slice(i, i + BATCH_SIZE);
+          const batchIds = await uploadBatch(batch);
+          recordingIds.push(...batchIds);
+        }),
+      );
 
       // Call completion handler
       if (onUploadComplete && recordingIds.length > 0) {
@@ -447,7 +504,7 @@ export default function UploadModal({
         }, 1500);
       }
     } finally {
-      setIsUploading(false);
+      updateUploadState({ isUploading: false });
     }
   };
 
@@ -456,8 +513,10 @@ export default function UploadModal({
    */
   const handleClose = () => {
     if (!isUploading) {
-      setFiles([]);
-      setIsDragging(false);
+      updateUploadState({
+        files: [],
+        isDragging: false,
+      });
       onClose();
     }
   };
@@ -520,6 +579,14 @@ export default function UploadModal({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={openFileBrowser}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openFileBrowser();
+              }
+            }}
+            role="button"
+            tabIndex={0}
             className={`
               relative flex flex-col items-center justify-center
               min-h-[160px] sm:min-h-[200px] px-4 sm:px-6 py-6 sm:py-8
@@ -553,8 +620,7 @@ export default function UploadModal({
                 { type: 'document', label: 'PDF/DOCX', limit: '50MB' },
                 { type: 'text', label: 'Text', limit: '1MB' },
               ].map((item) => {
-                const colors =
-                  CONTENT_TYPE_COLORS[item.type as ContentType];
+                const colors = CONTENT_TYPE_COLORS[item.type as ContentType];
                 return (
                   <span
                     key={item.type}
@@ -673,7 +739,7 @@ export default function UploadModal({
                         {/* Success Message */}
                         {uploadFile.status === 'success' && (
                           <p className="text-[10px] sm:text-xs text-muted-foreground mt-2">
-                            Upload complete! Processing...
+                            Upload complete! Processing…
                           </p>
                         )}
                       </div>
@@ -688,9 +754,13 @@ export default function UploadModal({
           {files.length > 0 && !isUploading && (
             <ProcessingOptions
               analysisType={analysisType}
-              onAnalysisTypeChange={setAnalysisType}
+              onAnalysisTypeChange={(nextAnalysisType) =>
+                updateUploadState({ analysisType: nextAnalysisType })
+              }
               skipAnalysis={skipAnalysis}
-              onSkipAnalysisChange={setSkipAnalysis}
+              onSkipAnalysisChange={(nextSkipAnalysis) =>
+                updateUploadState({ skipAnalysis: nextSkipAnalysis })
+              }
             />
           )}
 
@@ -755,12 +825,14 @@ export default function UploadModal({
               {isUploading ? (
                 <>
                   <Loader2Icon className="size-4 animate-spin" />
-                  Uploading...
+                  Uploading…
                 </>
               ) : (
                 <>
                   <UploadCloudIcon className="size-4" />
-                  Upload {files.filter((f) => f.status === 'pending').length}{' '}
+                  Upload {
+                    files.filter((f) => f.status === 'pending').length
+                  }{' '}
                   {files.filter((f) => f.status === 'pending').length === 1
                     ? 'File'
                     : 'Files'}

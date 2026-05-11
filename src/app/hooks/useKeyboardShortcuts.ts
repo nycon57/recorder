@@ -2,7 +2,7 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 
-export type ShortcutHandler = (event: KeyboardEvent) => void;
+type ShortcutHandler = (event: KeyboardEvent) => void;
 
 export interface Shortcut {
   key: string;
@@ -26,18 +26,23 @@ export function useKeyboardShortcuts(
 ) {
   const { enabled = true, ignoreInputFields = true } = options;
   const shortcutsRef = useRef(shortcuts);
+  const optionsRef = useRef({ enabled, ignoreInputFields });
 
   // Update shortcuts ref when shortcuts change
   useEffect(() => {
     shortcutsRef.current = shortcuts;
   }, [shortcuts]);
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (!enabled) return;
+  useEffect(() => {
+    optionsRef.current = { enabled, ignoreInputFields };
+  }, [enabled, ignoreInputFields]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!optionsRef.current.enabled) return;
 
       // Ignore if typing in input fields
-      if (ignoreInputFields) {
+      if (optionsRef.current.ignoreInputFields) {
         const target = event.target as HTMLElement;
         const tagName = target.tagName.toLowerCase();
         const isContentEditable = target.contentEditable === 'true';
@@ -85,18 +90,13 @@ export function useKeyboardShortcuts(
         shortcut.handler(event);
         break;
       }
-    },
-    [enabled, ignoreInputFields]
-  );
-
-  useEffect(() => {
-    if (!enabled) return;
+    };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [enabled, handleKeyDown]);
+  }, []);
 
   const registerShortcut = useCallback((shortcut: Shortcut) => {
     shortcutsRef.current = [...shortcutsRef.current, shortcut];

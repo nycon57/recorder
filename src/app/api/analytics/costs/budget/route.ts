@@ -6,9 +6,15 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getCurrentPeriod } from '@/lib/analytics/cost-calculations';
+
+const USD_CURRENCY_FORMATTER = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+});
 
 /**
  * GET /api/analytics/costs/budget
@@ -151,8 +157,5 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * Helper to format currency
  */
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amount);
+  return USD_CURRENCY_FORMATTER.format(amount);
 }

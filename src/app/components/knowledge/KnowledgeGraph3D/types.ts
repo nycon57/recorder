@@ -164,7 +164,7 @@ export interface KnowledgeGraph3DProps {
 /**
  * Graph scene props
  */
-export interface GraphSceneProps {
+interface GraphSceneProps {
   nodes: GraphNode3D[];
   edges: GraphEdge3D[];
   onNodeClick?: (conceptId: string) => void;
@@ -175,7 +175,7 @@ export interface GraphSceneProps {
 /**
  * Camera controller props
  */
-export interface CameraControllerProps {
+interface CameraControllerProps {
   selectedNode?: GraphNode3D | null;
   onFlyComplete?: () => void;
   initialPosition?: [number, number, number];
@@ -188,7 +188,7 @@ export interface CameraControllerProps {
 /**
  * Performance metrics
  */
-export interface PerformanceMetrics {
+interface PerformanceMetrics {
   fps: number;
   frameTime: number;
   nodeCount: number;
@@ -199,17 +199,10 @@ export interface PerformanceMetrics {
 /**
  * Device capability detection result
  */
-export interface DeviceCapabilities {
+interface DeviceCapabilities {
   webgl2: boolean;
   webgl1: boolean;
   maxTextureSize: number;
   gpuTier: 'high' | 'medium' | 'low' | 'unknown';
   recommendedLOD: LODLevel;
-}
-
-// ============================================================================
-// Re-export base types for convenience
-// ============================================================================
-
-export type { ConceptType, GraphNode, GraphEdge, RelationshipType };
-export { CONCEPT_TYPE_COLORS } from '@/lib/validations/knowledge';
+}export { CONCEPT_TYPE_COLORS } from '@/lib/validations/knowledge';

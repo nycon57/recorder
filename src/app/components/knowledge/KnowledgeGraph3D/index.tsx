@@ -48,6 +48,9 @@ import { useGraphLayout } from './hooks/useGraphLayout';
 import type { KnowledgeGraph3DProps } from './types';
 import { LOD_CONFIGS } from './types';
 
+const EMPTY_GRAPH_NODES: NonNullable<KnowledgeGraph3DProps['nodes']> = [];
+const EMPTY_GRAPH_EDGES: NonNullable<KnowledgeGraph3DProps['edges']> = [];
+
 // ============================================================================
 // Skeleton Component
 // ============================================================================
@@ -63,13 +66,15 @@ export function KnowledgeGraph3DSkeleton({
     <div
       className={cn(
         'relative flex items-center justify-center rounded-lg border bg-background',
-        className
+        className,
       )}
       style={{ height }}
     >
       <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Loading 3D visualization...</p>
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          Loading 3D visualization…
+        </p>
       </div>
     </div>
   );
@@ -113,7 +118,7 @@ function ControlsOverlay({
               className="bg-background/80 backdrop-blur-sm"
               aria-label="Zoom in"
             >
-              <ZoomIn className="h-4 w-4" />
+              <ZoomIn className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left">Zoom in (+)</TooltipContent>
@@ -128,7 +133,7 @@ function ControlsOverlay({
               className="bg-background/80 backdrop-blur-sm"
               aria-label="Zoom out"
             >
-              <ZoomOut className="h-4 w-4" />
+              <ZoomOut className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left">Zoom out (-)</TooltipContent>
@@ -143,7 +148,7 @@ function ControlsOverlay({
               className="bg-background/80 backdrop-blur-sm"
               aria-label="Fit view"
             >
-              <Maximize2 className="h-4 w-4" />
+              <Maximize2 className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left">Fit view (F)</TooltipContent>
@@ -158,7 +163,7 @@ function ControlsOverlay({
               className="bg-background/80 backdrop-blur-sm"
               aria-label="Reset camera"
             >
-              <RotateCcw className="h-4 w-4" />
+              <RotateCcw className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left">Reset camera (R)</TooltipContent>
@@ -187,8 +192,8 @@ function ControlsOverlay({
 // ============================================================================
 
 export function KnowledgeGraph3D({
-  nodes = [],
-  edges = [],
+  nodes = EMPTY_GRAPH_NODES,
+  edges = EMPTY_GRAPH_EDGES,
   onNodeClick,
   selectedNodeId,
   className,
@@ -203,9 +208,13 @@ export function KnowledgeGraph3D({
   } | null>(null);
 
   // Compute layout with d3-force-3d
-  const { layoutNodes, layoutEdges, isSimulating } = useGraphLayout(nodes, edges, {
-    warmupTicks: 100,
-  });
+  const { layoutNodes, layoutEdges, isSimulating } = useGraphLayout(
+    nodes,
+    edges,
+    {
+      warmupTicks: 100,
+    },
+  );
 
   // Adaptive LOD based on node count (uses useFrame internally)
   const nodeCount = layoutNodes.length;
@@ -258,7 +267,10 @@ export function KnowledgeGraph3D({
   if (nodes.length === 0) {
     return (
       <div
-        className={cn('flex items-center justify-center rounded-lg border bg-background', className)}
+        className={cn(
+          'flex items-center justify-center rounded-lg border bg-background',
+          className,
+        )}
         style={{ height }}
       >
         <Empty>
@@ -266,7 +278,7 @@ export function KnowledgeGraph3D({
             <EmptyMedia>
               <div className="rounded-full bg-muted p-6">
                 <svg
-                  className="h-12 w-12 text-muted-foreground"
+                  className="size-12 text-muted-foreground"
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
                   fill="none"
@@ -285,7 +297,8 @@ export function KnowledgeGraph3D({
             <EmptyTitle>No Knowledge Graph Available</EmptyTitle>
             <EmptyDescription>
               Start adding content to build your knowledge graph. Operational
-              wiki nodes and relationships will appear here as they are compiled.
+              wiki nodes and relationships will appear here as they are
+              compiled.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -295,7 +308,10 @@ export function KnowledgeGraph3D({
 
   return (
     <div
-      className={cn('relative rounded-lg border bg-background overflow-hidden', className)}
+      className={cn(
+        'relative rounded-lg border bg-background overflow-hidden',
+        className,
+      )}
       style={{ height }}
     >
       <Canvas
@@ -332,12 +348,12 @@ export function KnowledgeGraph3D({
                   minZ: Math.min(acc.minZ, node.z),
                   maxZ: Math.max(acc.maxZ, node.z),
                 }),
-                { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 }
+                { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 },
               );
               const size = Math.max(
                 bounds.maxX - bounds.minX,
                 bounds.maxY - bounds.minY,
-                bounds.maxZ - bounds.minZ
+                bounds.maxZ - bounds.minZ,
               );
               camera.position.set(0, 0, size * 1.5);
             },
@@ -375,12 +391,10 @@ export function KnowledgeGraph3D({
       {/* Simulation indicator */}
       {isSimulating && (
         <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-muted-foreground z-10">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Optimizing layout...</span>
+          <Loader2 className="size-3 animate-spin" />
+          <span>Optimizing layout…</span>
         </div>
       )}
     </div>
   );
 }
-
-export default KnowledgeGraph3D;

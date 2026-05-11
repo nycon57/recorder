@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useReducer } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -28,9 +29,7 @@ interface DashboardRecentItem {
   id: string;
   title: string | null;
   description: string | null;
-  content_type:
-    | ContentType
-    | null;
+  content_type: ContentType | null;
   thumbnail_url: string | null;
   status: string;
   created_at: string;
@@ -39,76 +38,74 @@ interface DashboardRecentItem {
 }
 
 export function DashboardContent() {
-  const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentItems, setRecentItems] = useState<DashboardRecentItem[]>([]);
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
-  const [isLoadingItems, setIsLoadingItems] = useState(true);
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isCreateNoteModalOpen, setIsCreateNoteModalOpen] = useState(false);
-  const [selectedConceptId, setSelectedConceptId] = useState<string | null>(
-    null,
+  const { push } = useRouter();
+  const queryClient = useQueryClient();
+  const [uiState, dispatchUiState] = useReducer(
+    (
+      current: {
+        isUploadModalOpen: boolean;
+        isCreateNoteModalOpen: boolean;
+        selectedConceptId: string | null;
+      },
+      patch: Partial<{
+        isUploadModalOpen: boolean;
+        isCreateNoteModalOpen: boolean;
+        selectedConceptId: string | null;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      isUploadModalOpen: false,
+      isCreateNoteModalOpen: false,
+      selectedConceptId: null,
+    },
   );
+  const { isUploadModalOpen, isCreateNoteModalOpen, selectedConceptId } =
+    uiState;
 
-  /**
-   * Fetch dashboard data
-   */
-  const fetchDashboardData = () => {
-    // Fetch stats
-    setIsLoadingStats(true);
-    fetch('/api/dashboard/stats')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.data) {
-          setStats(data.data);
-        }
-        setIsLoadingStats(false);
-      })
-      .catch((err) => {
-        console.error('Error fetching stats:', err);
-        setIsLoadingStats(false);
-      });
+  const { data: stats = null, isLoading: isLoadingStats } =
+    useQuery<DashboardStats | null>({
+      queryKey: ['dashboard', 'stats'],
+      queryFn: async ({ signal }) => {
+        const res = await fetch('/api/dashboard/stats', { signal });
+        const data = await res.json();
+        return data.data ?? null;
+      },
+    });
 
-    // Fetch recent items
-    setIsLoadingItems(true);
-    fetch('/api/dashboard/recent')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.data && Array.isArray(data.data.data)) {
-          setRecentItems(data.data.data);
-        }
-        setIsLoadingItems(false);
-      })
-      .catch((err) => {
-        console.error('Error fetching recent items:', err);
-        setIsLoadingItems(false);
-      });
+  const { data: recentItems = [], isLoading: isLoadingItems } = useQuery<
+    DashboardRecentItem[]
+  >({
+    queryKey: ['dashboard', 'recent'],
+    queryFn: async ({ signal }) => {
+      const res = await fetch('/api/dashboard/recent', { signal });
+      const data = await res.json();
+      return data.data && Array.isArray(data.data.data) ? data.data.data : [];
+    },
+  });
+
+  const refreshDashboardData = () => {
+    void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
-
-  useEffect(() => {
-    const timeoutId = setTimeout(fetchDashboardData, 0);
-    return () => clearTimeout(timeoutId);
-  }, []);
 
   /**
    * Handle upload button click
    */
   const handleUploadClick = () => {
-    setIsUploadModalOpen(true);
+    dispatchUiState({ isUploadModalOpen: true });
   };
 
   /**
    * Handle create note button click
    */
   const handleCreateNoteClick = () => {
-    setIsCreateNoteModalOpen(true);
+    dispatchUiState({ isCreateNoteModalOpen: true });
   };
 
   /**
    * Handle record button click
    */
   const handleRecordClick = () => {
-    router.push('/record');
+    push('/record');
   };
 
   /**
@@ -121,7 +118,7 @@ export function DashboardContent() {
       });
     }
     // Refresh dashboard data to show new items
-    fetchDashboardData();
+    refreshDashboardData();
   };
 
   /**
@@ -129,7 +126,7 @@ export function DashboardContent() {
    */
   const handleNoteCreated = () => {
     // Refresh dashboard data to show new note
-    fetchDashboardData();
+    refreshDashboardData();
   };
 
   const isEmpty = !isLoadingItems && recentItems.length === 0;
@@ -160,7 +157,9 @@ export function DashboardContent() {
         {/* Knowledge Insights */}
         <section>
           <KnowledgeInsightsCard
-            onConceptClick={(conceptId) => setSelectedConceptId(conceptId)}
+            onConceptClick={(conceptId) =>
+              dispatchUiState({ selectedConceptId: conceptId })
+            }
             className="max-w-2xl"
           />
         </section>
@@ -173,10 +172,7 @@ export function DashboardContent() {
               onUploadClick={handleUploadClick}
             />
           ) : (
-            <RecentItems
-              items={recentItems}
-              isLoading={isLoadingItems}
-            />
+            <RecentItems items={recentItems} isLoading={isLoadingItems} />
           )}
         </section>
       </div>
@@ -184,22 +180,24 @@ export function DashboardContent() {
       {/* Upload Modal */}
       <UploadModal
         isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
+        onClose={() => dispatchUiState({ isUploadModalOpen: false })}
         onUploadComplete={handleUploadComplete}
       />
 
       {/* Create Note Modal */}
       <CreateNoteModal
         isOpen={isCreateNoteModalOpen}
-        onClose={() => setIsCreateNoteModalOpen(false)}
+        onClose={() => dispatchUiState({ isCreateNoteModalOpen: false })}
         onNoteCreated={handleNoteCreated}
       />
 
       {/* Concept Panel (Knowledge Graph) */}
       <ConceptPanel
         conceptId={selectedConceptId}
-        onClose={() => setSelectedConceptId(null)}
-        onConceptClick={(conceptId) => setSelectedConceptId(conceptId)}
+        onClose={() => dispatchUiState({ selectedConceptId: null })}
+        onConceptClick={(conceptId) =>
+          dispatchUiState({ selectedConceptId: conceptId })
+        }
       />
     </>
   );

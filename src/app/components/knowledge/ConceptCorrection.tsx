@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useReducer, useCallback, useRef, useEffect } from 'react';
 import { Pencil, Merge, Trash2, Loader2, Check } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
@@ -21,10 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
-import {
-  type ConceptType,
-  CONCEPT_TYPES,
-} from '@/lib/validations/knowledge';
+import { type ConceptType, CONCEPT_TYPES } from '@/lib/validations/knowledge';
 
 type CorrectionMode = 'edit' | 'merge' | 'incorrect';
 
@@ -56,41 +53,96 @@ const MODE_LABELS: Record<CorrectionMode, string> = {
   incorrect: 'Remove',
 };
 
-export function ConceptCorrection({
+interface ConceptCorrectionState {
+  open: boolean;
+  mode: CorrectionMode;
+  name: string;
+  type: ConceptType;
+  mergeTargetId: string;
+  mergeSearch: string;
+  mergeResults: Array<{ id: string; name: string; conceptType: ConceptType }>;
+  isSearching: boolean;
+  isSaving: boolean;
+  error: string | null;
+}
+
+const createInitialConceptCorrectionState = ({
+  conceptName,
+  conceptType,
+}: Pick<
+  ConceptCorrectionProps,
+  'conceptName' | 'conceptType'
+>): ConceptCorrectionState => ({
+  open: false,
+  mode: 'edit',
+  name: conceptName,
+  type: conceptType,
+  mergeTargetId: '',
+  mergeSearch: '',
+  mergeResults: [],
+  isSearching: false,
+  isSaving: false,
+  error: null,
+});
+
+const conceptCorrectionReducer = (
+  state: ConceptCorrectionState,
+  patch: Partial<ConceptCorrectionState>,
+): ConceptCorrectionState => ({
+  ...state,
+  ...patch,
+});
+
+export function ConceptCorrection(
+  props: Parameters<typeof useConceptCorrectionImplementation>[0],
+) {
+  return useConceptCorrectionImplementation(props);
+}
+
+function useConceptCorrectionImplementation({
   conceptId,
   conceptName,
   conceptType,
   onCorrected,
 }: ConceptCorrectionProps) {
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<CorrectionMode>('edit');
-  const [name, setName] = useState(conceptName);
-  const [type, setType] = useState<ConceptType>(conceptType);
-  const [mergeTargetId, setMergeTargetId] = useState('');
-  const [mergeSearch, setMergeSearch] = useState('');
-  const [mergeResults, setMergeResults] = useState<
-    Array<{ id: string; name: string; conceptType: ConceptType }>
-  >([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [
+    {
+      open,
+      mode,
+      name,
+      type,
+      mergeTargetId,
+      mergeSearch,
+      mergeResults,
+      isSearching,
+      isSaving,
+      error,
+    },
+    updateCorrectionState,
+  ] = useReducer(
+    conceptCorrectionReducer,
+    { conceptName, conceptType },
+    createInitialConceptCorrectionState,
+  );
 
   const resetState = useCallback(() => {
-    setMode('edit');
-    setName(conceptName);
-    setType(conceptType);
-    setMergeTargetId('');
-    setMergeSearch('');
-    setMergeResults([]);
-    setError(null);
+    updateCorrectionState({
+      mode: 'edit',
+      name: conceptName,
+      type: conceptType,
+      mergeTargetId: '',
+      mergeSearch: '',
+      mergeResults: [],
+      error: null,
+    });
   }, [conceptName, conceptType]);
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
-      setOpen(nextOpen);
+      updateCorrectionState({ open: nextOpen });
       if (nextOpen) resetState();
     },
-    [resetState]
+    [resetState],
   );
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -106,8 +158,10 @@ export function ConceptCorrection({
   const searchConcepts = useCallback(
     async (query: string) => {
       if (query.length < 2) {
-        setMergeResults([]);
-        setIsSearching(false);
+        updateCorrectionState({
+          mergeResults: [],
+          isSearching: false,
+        });
         return;
       }
 
@@ -116,54 +170,62 @@ export function ConceptCorrection({
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      setIsSearching(true);
+      updateCorrectionState({ isSearching: true });
       try {
         const params = new URLSearchParams({ search: query, limit: '10' });
-        const res = await fetch(`/api/knowledge/concepts?${params}`, { signal: controller.signal });
+        const res = await fetch(`/api/knowledge/concepts?${params}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) throw new Error('Search failed');
         const result = await res.json();
         const concepts = (result.data?.concepts ?? []).filter(
-          (c: { id: string }) => c.id !== conceptId
+          (c: { id: string }) => c.id !== conceptId,
         );
-        setMergeResults(concepts);
+        updateCorrectionState({ mergeResults: concepts });
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
-        setMergeResults([]);
+        updateCorrectionState({ mergeResults: [] });
       } finally {
         if (!controller.signal.aborted) {
-          setIsSearching(false);
+          updateCorrectionState({ isSearching: false });
         }
       }
     },
-    [conceptId]
+    [conceptId],
   );
 
   const handleMergeSearchChange = useCallback(
     (value: string) => {
-      setMergeSearch(value);
-      setMergeTargetId('');
+      updateCorrectionState({
+        mergeSearch: value,
+        mergeTargetId: '',
+      });
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       if (value.length < 2) {
-        setMergeResults([]);
+        updateCorrectionState({ mergeResults: [] });
         return;
       }
-      setIsSearching(true);
+      updateCorrectionState({ isSearching: true });
       debounceTimerRef.current = setTimeout(() => searchConcepts(value), 250);
     },
-    [searchConcepts]
+    [searchConcepts],
   );
 
   const handleSave = useCallback(async () => {
-    setIsSaving(true);
-    setError(null);
+    updateCorrectionState({
+      isSaving: true,
+      error: null,
+    });
 
     try {
       let body: Record<string, unknown>;
 
       if (mode === 'merge') {
         if (!mergeTargetId) {
-          setError('Select a concept to merge into');
-          setIsSaving(false);
+          updateCorrectionState({
+            error: 'Select a concept to merge into',
+            isSaving: false,
+          });
           return;
         }
         body = { merge_into_id: mergeTargetId };
@@ -174,7 +236,7 @@ export function ConceptCorrection({
         if (name.trim() && name !== conceptName) body.name = name.trim();
         if (type !== conceptType) body.concept_type = type;
         if (Object.keys(body).length === 0) {
-          setOpen(false);
+          updateCorrectionState({ open: false });
           return;
         }
       }
@@ -190,14 +252,25 @@ export function ConceptCorrection({
         throw new Error(errData.message || 'Failed to update concept');
       }
 
-      setOpen(false);
+      updateCorrectionState({ open: false });
       onCorrected?.(MODE_ACTIONS[mode]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      updateCorrectionState({
+        error: err instanceof Error ? err.message : 'Something went wrong',
+      });
     } finally {
-      setIsSaving(false);
+      updateCorrectionState({ isSaving: false });
     }
-  }, [mode, name, type, mergeTargetId, conceptId, conceptName, conceptType, onCorrected]);
+  }, [
+    mode,
+    name,
+    type,
+    mergeTargetId,
+    conceptId,
+    conceptName,
+    conceptType,
+    onCorrected,
+  ]);
 
   const selectedMergeTarget = mergeResults.find((c) => c.id === mergeTargetId);
 
@@ -209,7 +282,7 @@ export function ConceptCorrection({
         className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         aria-label={`Edit concept "${conceptName}"`}
       >
-        <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
+        <Pencil aria-hidden="true" className="size-3.5" />
       </button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -218,7 +291,11 @@ export function ConceptCorrection({
             <DialogTitle>Edit Concept</DialogTitle>
           </DialogHeader>
 
-          <div className="flex gap-1 rounded-lg bg-muted/50 p-1" role="tablist" aria-label="Correction mode">
+          <div
+            className="flex gap-1 rounded-lg bg-muted/50 p-1"
+            role="tablist"
+            aria-label="Correction mode"
+          >
             {(
               [
                 { key: 'edit', label: 'Edit', icon: Pencil },
@@ -232,33 +309,45 @@ export function ConceptCorrection({
                 aria-selected={mode === key}
                 aria-controls={`correction-panel-${key}`}
                 id={`correction-tab-${key}`}
-                onClick={() => setMode(key)}
+                onClick={() => updateCorrectionState({ mode: key })}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
                   mode === key
                     ? 'bg-background font-medium text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <Icon aria-hidden="true" className="h-3.5 w-3.5" />
+                <Icon aria-hidden="true" className="size-3.5" />
                 {label}
               </button>
             ))}
           </div>
 
           {mode === 'edit' && (
-            <div id="correction-panel-edit" role="tabpanel" aria-labelledby="correction-tab-edit" className="space-y-4">
+            <div
+              id="correction-panel-edit"
+              role="tabpanel"
+              aria-labelledby="correction-tab-edit"
+              className="space-y-4"
+            >
               <div className="space-y-2">
                 <Label htmlFor="concept-name">Name</Label>
                 <Input
                   id="concept-name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) =>
+                    updateCorrectionState({ name: e.target.value })
+                  }
                   placeholder="Concept name"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="concept-type">Type</Label>
-                <Select value={type} onValueChange={(v) => setType(v as ConceptType)}>
+                <Select
+                  value={type}
+                  onValueChange={(v) =>
+                    updateCorrectionState({ type: v as ConceptType })
+                  }
+                >
                   <SelectTrigger id="concept-type">
                     <SelectValue />
                   </SelectTrigger>
@@ -275,10 +364,15 @@ export function ConceptCorrection({
           )}
 
           {mode === 'merge' && (
-            <div id="correction-panel-merge" role="tabpanel" aria-labelledby="correction-tab-merge" className="space-y-3">
+            <div
+              id="correction-panel-merge"
+              role="tabpanel"
+              aria-labelledby="correction-tab-merge"
+              className="space-y-3"
+            >
               <p className="text-sm text-muted-foreground">
-                Merge <strong>{conceptName}</strong> into another concept. All mentions
-                will be reassigned.
+                Merge <strong>{conceptName}</strong> into another concept. All
+                mentions will be reassigned.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="merge-search">Search for target concept</Label>
@@ -286,13 +380,16 @@ export function ConceptCorrection({
                   id="merge-search"
                   value={mergeSearch}
                   onChange={(e) => handleMergeSearchChange(e.target.value)}
-                  placeholder="Type to search..."
+                  placeholder="Type to search…"
                 />
               </div>
               {isSearching && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
-                  Searching...
+                  <Loader2
+                    aria-hidden="true"
+                    className="size-3.5 animate-spin"
+                  />
+                  Searching…
                 </div>
               )}
               {mergeResults.length > 0 && (
@@ -301,7 +398,9 @@ export function ConceptCorrection({
                     <button
                       key={c.id}
                       type="button"
-                      onClick={() => setMergeTargetId(c.id)}
+                      onClick={() =>
+                        updateCorrectionState({ mergeTargetId: c.id })
+                      }
                       className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
                         mergeTargetId === c.id
                           ? 'bg-accent/20 text-foreground'
@@ -309,7 +408,10 @@ export function ConceptCorrection({
                       }`}
                     >
                       {mergeTargetId === c.id && (
-                        <Check aria-hidden="true" className="h-3.5 w-3.5 text-accent" />
+                        <Check
+                          aria-hidden="true"
+                          className="size-3.5 text-accent"
+                        />
                       )}
                       <span className="truncate">{c.name}</span>
                       <span className="ml-auto text-xs text-muted-foreground capitalize">
@@ -328,10 +430,16 @@ export function ConceptCorrection({
           )}
 
           {mode === 'incorrect' && (
-            <div id="correction-panel-incorrect" role="tabpanel" aria-labelledby="correction-tab-incorrect" className="space-y-2">
+            <div
+              id="correction-panel-incorrect"
+              role="tabpanel"
+              aria-labelledby="correction-tab-incorrect"
+              className="space-y-2"
+            >
               <p className="text-sm text-muted-foreground">
-                Mark <strong>{conceptName}</strong> as incorrect. This will remove the
-                concept and all its mentions from the knowledge graph.
+                Mark <strong>{conceptName}</strong> as incorrect. This will
+                remove the concept and all its mentions from the knowledge
+                graph.
               </p>
               <p className="text-sm font-medium text-destructive">
                 This action cannot be undone.
@@ -357,7 +465,10 @@ export function ConceptCorrection({
               variant={mode === 'incorrect' ? 'destructive' : 'default'}
             >
               {isSaving && (
-                <Loader2 aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2
+                  aria-hidden="true"
+                  className="mr-2 size-4 animate-spin"
+                />
               )}
               {MODE_LABELS[mode]}
             </Button>

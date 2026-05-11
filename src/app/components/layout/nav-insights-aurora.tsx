@@ -1,12 +1,12 @@
-"use client"
+'use client';
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import * as motion from "motion/react-client"
-import { Newspaper, AlertTriangle } from "lucide-react"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Analytics01Icon } from "@hugeicons/core-free-icons"
+import * as React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import * as motion from 'motion/react-client';
+import { Newspaper, AlertTriangle } from 'lucide-react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Analytics01Icon } from '@hugeicons/core-free-icons';
 
 import {
   SidebarGroup,
@@ -15,7 +15,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-} from "@/app/components/ui/sidebar"
+} from '@/app/components/ui/sidebar';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -26,7 +26,7 @@ const containerVariants = {
       delayChildren: 0.2,
     },
   },
-}
+};
 
 const itemVariants = {
   hidden: { opacity: 0, x: -12 },
@@ -34,12 +34,12 @@ const itemVariants = {
     opacity: 1,
     x: 0,
     transition: {
-      type: "spring" as const,
+      type: 'spring' as const,
       stiffness: 400,
       damping: 30,
     },
   },
-}
+};
 
 const labelVariants = {
   hidden: { opacity: 0, y: -8 },
@@ -47,49 +47,39 @@ const labelVariants = {
     opacity: 1,
     y: 0,
     transition: {
-      type: "spring" as const,
+      type: 'spring' as const,
       stiffness: 400,
       damping: 30,
       delay: 0.15,
     },
   },
-}
+};
 
-export function NavInsightsAurora({ hasDigestEnabled = false }: { hasDigestEnabled?: boolean }) {
-  const pathname = usePathname()
-  const isAnalyticsActive = pathname === "/analytics"
-  const isDigestActive = pathname === "/digest"
-  const isKnowledgeGapsActive = pathname === "/knowledge-gaps"
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  const MotionDiv = mounted ? motion.div : "div"
+export function NavInsightsAurora({
+  hasDigestEnabled = false,
+}: {
+  hasDigestEnabled?: boolean;
+}) {
+  const pathname = usePathname();
+  const isAnalyticsActive = pathname === '/analytics';
+  const isDigestActive = pathname === '/digest';
+  const isKnowledgeGapsActive = pathname === '/knowledge-gaps';
+  const MotionDiv = motion.div;
 
   return (
     <SidebarGroup>
-      <MotionDiv
-        {...(mounted ? {
-          initial: "hidden",
-          animate: "visible",
-          variants: labelVariants,
-        } : {})}
-      >
+      <MotionDiv initial="hidden" animate="visible" variants={labelVariants}>
         <SidebarGroupLabel>Insights</SidebarGroupLabel>
       </MotionDiv>
       <SidebarGroupContent>
         <SidebarMenu>
           <MotionDiv
-            {...(mounted ? {
-              variants: containerVariants,
-              initial: "hidden",
-              animate: "visible",
-            } : {})}
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
             className="space-y-1"
           >
-            <MotionDiv {...(mounted ? { variants: itemVariants } : {})}>
+            <MotionDiv variants={itemVariants}>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
@@ -98,14 +88,17 @@ export function NavInsightsAurora({ hasDigestEnabled = false }: { hasDigestEnabl
                 >
                   <Link href="/analytics" className="group/nav-item">
                     <span className="inline-flex transition-transform duration-200 group-hover/nav-item:scale-110">
-                      <HugeiconsIcon icon={Analytics01Icon} className="size-4" />
+                      <HugeiconsIcon
+                        icon={Analytics01Icon}
+                        className="size-4"
+                      />
                     </span>
                     <span>Analytics</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </MotionDiv>
-            <MotionDiv {...(mounted ? { variants: itemVariants } : {})}>
+            <MotionDiv variants={itemVariants}>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
@@ -122,7 +115,7 @@ export function NavInsightsAurora({ hasDigestEnabled = false }: { hasDigestEnabl
               </SidebarMenuItem>
             </MotionDiv>
             {hasDigestEnabled && (
-              <MotionDiv {...(mounted ? { variants: itemVariants } : {})}>
+              <MotionDiv variants={itemVariants}>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
@@ -143,5 +136,5 @@ export function NavInsightsAurora({ hasDigestEnabled = false }: { hasDigestEnabl
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  )
+  );
 }

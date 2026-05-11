@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 /**
  * Global error boundary for App Router
  * Required to handle errors in the root layout
@@ -23,10 +25,10 @@ export default function GlobalError({
         <div className="flex min-h-screen flex-col items-center justify-center px-4">
           <div className="text-center space-y-6 max-w-md">
             <div className="space-y-2">
-              <h1 className="text-4xl font-bold">Something went wrong</h1>
+              <h1 className="text-4xl font-semibold">Something went wrong</h1>
               {process.env.NODE_ENV === 'development' && error.message && (
-                <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-md">
-                  <p className="text-xs font-mono text-gray-600 dark:text-gray-400">
+                <div className="bg-zinc-100 dark:bg-zinc-800 p-3 rounded-md">
+                  <p className="text-xs font-mono text-zinc-600 dark:text-zinc-400">
                     {error.message}
                   </p>
                 </div>
@@ -40,12 +42,12 @@ export default function GlobalError({
               >
                 Try again
               </button>
-              <a
+              <Link
                 href="/"
-                className="inline-flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 shadow-sm transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                className="inline-flex items-center justify-center rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-6 py-3 text-sm font-medium text-zinc-900 dark:text-zinc-100 shadow-sm transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
               >
                 Go Home
-              </a>
+              </Link>
             </div>
           </div>
         </div>

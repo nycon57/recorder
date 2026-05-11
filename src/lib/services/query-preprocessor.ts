@@ -15,37 +15,44 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 const META_QUESTION_PATTERNS = [
   // "Do I have recordings about X?" → "X"
   {
-    pattern: /^do (i|you|we) have (any )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
+    pattern:
+      /^do (i|you|we) have (any )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
     topicGroup: 4,
   },
   // "What recordings do I have about X?" → "X"
   {
-    pattern: /^what recordings (do (i|you|we) have|are there|exist) (about|on|regarding|for|of) (.+?)(\?|$)/i,
+    pattern:
+      /^what recordings (do (i|you|we) have|are there|exist) (about|on|regarding|for|of) (.+?)(\?|$)/i,
     topicGroup: 4,
   },
   // "Tell me what recordings I have about X" → "X"
   {
-    pattern: /^tell me (what|which) recordings (i|you|we) have (about|on|regarding|for|of) (.+?)(\?|$)/i,
+    pattern:
+      /^tell me (what|which) recordings (i|you|we) have (about|on|regarding|for|of) (.+?)(\?|$)/i,
     topicGroup: 4,
   },
   // "Show me recordings about X" → "X"
   {
-    pattern: /^show me (any |the )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
+    pattern:
+      /^show me (any |the )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
     topicGroup: 3,
   },
   // "Search for recordings about X" → "X"
   {
-    pattern: /^search (for )?(any |the )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
+    pattern:
+      /^search (for )?(any |the )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
     topicGroup: 4,
   },
   // "Find recordings about X" → "X"
   {
-    pattern: /^find (me )?(any |the )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
+    pattern:
+      /^find (me )?(any |the )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
     topicGroup: 4,
   },
   // "Are there recordings about X?" → "X"
   {
-    pattern: /^(are|is) there (any )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
+    pattern:
+      /^(are|is) there (any )?recordings? (about|on|regarding|for|of) (.+?)(\?|$)/i,
     topicGroup: 4,
   },
 ];
@@ -61,7 +68,7 @@ const META_QUESTION_PATTERNS = [
  * @param query - The user's query
  * @returns The extracted topic, or null if not a meta-question
  */
-export function extractTopicFromMetaQuestion(query: string): string | null {
+function extractTopicFromMetaQuestion(query: string): string | null {
   const trimmedQuery = query.trim();
 
   for (const { pattern, topicGroup } of META_QUESTION_PATTERNS) {
@@ -87,7 +94,7 @@ export function extractTopicFromMetaQuestion(query: string): string | null {
  */
 export async function expandShortQuery(
   query: string,
-  orgId: string
+  orgId: string,
 ): Promise<string> {
   const wordCount = query.trim().split(/\s+/).length;
 
@@ -108,31 +115,51 @@ export async function expandShortQuery(
       .limit(3);
 
     if (!recordings || recordings.length === 0) {
-      console.log('[Query Preprocessor] No matching recordings found for expansion');
+      console.log(
+        '[Query Preprocessor] No matching recordings found for expansion',
+      );
       return query;
     }
 
     // Extract key terms from matching recordings
     const titleWords = new Set<string>();
     const stopWords = new Set([
-      'the', 'is', 'at', 'which', 'on', 'a', 'an', 'and', 'or', 'but',
-      'for', 'with', 'to', 'from', 'in', 'of', 'as', 'by', 'that', 'this',
+      'the',
+      'is',
+      'at',
+      'which',
+      'on',
+      'a',
+      'an',
+      'and',
+      'or',
+      'but',
+      'for',
+      'with',
+      'to',
+      'from',
+      'in',
+      'of',
+      'as',
+      'by',
+      'that',
+      'this',
     ]);
 
-    recordings.forEach(r => {
+    recordings.forEach((r) => {
       // Extract meaningful words from titles (skip common words)
       const words = (r.title ?? '')
         .split(/[\s\-_]+/)
-        .filter((w: string) => w.length > 3)
-        .filter((w: string) => !stopWords.has(w.toLowerCase()));
+        .filter(
+          (__item, __index, __array) =>
+            __item.length > 3 && !stopWords.has(__item.toLowerCase()),
+        );
 
       words.forEach((w: string) => titleWords.add(w));
     });
 
     // Limit expansion to avoid too long queries
-    const expansionTerms = Array.from(titleWords)
-      .slice(0, 5)
-      .join(' ');
+    const expansionTerms = Array.from(titleWords).slice(0, 5).join(' ');
 
     const expandedQuery = expansionTerms ? `${query} ${expansionTerms}` : query;
 
@@ -164,7 +191,7 @@ export async function expandShortQuery(
  */
 export async function preprocessQuery(
   query: string,
-  orgId?: string
+  orgId?: string,
 ): Promise<{
   originalQuery: string;
   processedQuery: string;
@@ -215,17 +242,19 @@ export async function preprocessQuery(
 /**
  * Test helper to verify pattern matching
  */
-export async function testQueryPreprocessing(queries: string[]): Promise<void> {
+async function testQueryPreprocessing(queries: string[]): Promise<void> {
   console.log('\n=== Query Preprocessing Tests ===\n');
 
-  for (const query of queries) {
-    const result = await preprocessQuery(query);
-    console.log(`Original: "${result.originalQuery}"`);
-    console.log(`Processed: "${result.processedQuery}"`);
-    console.log(`Transformed: ${result.wasTransformed ? 'Yes' : 'No'}`);
-    if (result.transformation) {
-      console.log(`Method: ${result.transformation}`);
-    }
-    console.log('---');
-  }
+  await Promise.all(
+    Array.from(queries).map(async (query) => {
+      const result = await preprocessQuery(query);
+      console.log(`Original: "${result.originalQuery}"`);
+      console.log(`Processed: "${result.processedQuery}"`);
+      console.log(`Transformed: ${result.wasTransformed ? 'Yes' : 'No'}`);
+      if (result.transformation) {
+        console.log(`Method: ${result.transformation}`);
+      }
+      console.log('---');
+    }),
+  );
 }

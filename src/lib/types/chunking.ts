@@ -71,12 +71,12 @@ export interface StructureElement {
 /**
  * Chunking strategy type
  */
-export type ChunkingStrategy = 'fixed' | 'semantic' | 'adaptive' | 'hybrid';
+type ChunkingStrategy = 'fixed' | 'semantic' | 'adaptive' | 'hybrid';
 
 /**
  * Chunk metadata for database storage
  */
-export interface ChunkMetadata {
+interface ChunkMetadata {
   chunkingStrategy: ChunkingStrategy;
   semanticScore?: number;
   structureType?: string;

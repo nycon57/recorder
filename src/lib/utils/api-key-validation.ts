@@ -37,7 +37,7 @@ export interface ValidatedApiKey {
 export async function validateApiKey(
   apiKey: string,
   requiredScope?: string,
-  ipAddress?: string
+  ipAddress?: string,
 ): Promise<ValidatedApiKey> {
   try {
     // Extract key prefix for lookup optimization
@@ -48,7 +48,9 @@ export async function validateApiKey(
     // We need to fetch candidates and use bcrypt.compare() to find the match
     const { data: apiKeys, error: fetchError } = await supabaseAdmin
       .from('api_keys')
-      .select('id, key_hash, org_id, scopes, rate_limit, status, expires_at, ip_whitelist')
+      .select(
+        'id, key_hash, org_id, scopes, rate_limit, status, expires_at, ip_whitelist',
+      )
       .eq('key_prefix', keyPrefix)
       .eq('status', 'active');
 
@@ -68,15 +70,13 @@ export async function validateApiKey(
     }
 
     // Find matching key using bcrypt.compare() - constant time comparison
-    let matchedKey: (typeof apiKeys)[number] | null = null;
-
-    for (const key of apiKeys) {
-      const isMatch = await bcrypt.compare(apiKey, key.key_hash);
-      if (isMatch) {
-        matchedKey = key;
-        break;
-      }
-    }
+    const keyMatches = await Promise.all(
+      apiKeys.map(async (key) => ({
+        key,
+        isMatch: await bcrypt.compare(apiKey, key.key_hash),
+      })),
+    );
+    const matchedKey = keyMatches.find((match) => match.isMatch)?.key ?? null;
 
     if (!matchedKey) {
       return {
@@ -100,7 +100,10 @@ export async function validateApiKey(
     }
 
     // Check IP whitelist if configured
-    if (matchedKey.ip_whitelist != null && !Array.isArray(matchedKey.ip_whitelist)) {
+    if (
+      matchedKey.ip_whitelist != null &&
+      !Array.isArray(matchedKey.ip_whitelist)
+    ) {
       return {
         valid: false,
         error: 'API key whitelist configuration is invalid',
@@ -108,7 +111,9 @@ export async function validateApiKey(
     }
 
     const ipWhitelist = Array.isArray(matchedKey.ip_whitelist)
-      ? matchedKey.ip_whitelist.filter((value): value is string => typeof value === 'string')
+      ? matchedKey.ip_whitelist.filter(
+          (value): value is string => typeof value === 'string',
+        )
       : [];
 
     if (
@@ -146,7 +151,9 @@ export async function validateApiKey(
 
     // Check scope if required
     const scopes = Array.isArray(matchedKey.scopes)
-      ? matchedKey.scopes.filter((value): value is string => typeof value === 'string')
+      ? matchedKey.scopes.filter(
+          (value): value is string => typeof value === 'string',
+        )
       : [];
 
     if (requiredScope) {
@@ -166,16 +173,22 @@ export async function validateApiKey(
     void Promise.resolve(
       supabaseAdmin.rpc(
         'increment_api_key_usage_count' as never,
-        { p_key_id: matchedKey.id } as never
-      )
+        { p_key_id: matchedKey.id } as never,
+      ),
     )
       .then(({ error }: { error: unknown }) => {
         if (error) {
-          console.error('[API Key Validation] Failed to update usage stats:', error);
+          console.error(
+            '[API Key Validation] Failed to update usage stats:',
+            error,
+          );
         }
       })
       .catch((error: unknown) => {
-        console.error('[API Key Validation] Failed to update usage stats:', error);
+        console.error(
+          '[API Key Validation] Failed to update usage stats:',
+          error,
+        );
       });
 
     return {
@@ -203,7 +216,7 @@ export async function validateApiKey(
  * @param headers - Request headers
  * @returns API key or null if not found
  */
-export function extractApiKey(headers: Headers): string | null {
+function extractApiKey(headers: Headers): string | null {
   // Try Authorization header first (preferred)
   const authHeader = headers.get('authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -225,7 +238,7 @@ export function extractApiKey(headers: Headers): string | null {
  * @param headers - Request headers
  * @returns IP address or undefined if not found
  */
-export function extractIpAddress(headers: Headers): string | undefined {
+function extractIpAddress(headers: Headers): string | undefined {
   const forwarded = headers.get('x-forwarded-for');
   if (forwarded) {
     // X-Forwarded-For can contain multiple IPs, take the first one

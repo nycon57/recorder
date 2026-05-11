@@ -4,7 +4,12 @@ import * as React from 'react';
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Brain, Sparkles } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { ConceptType } from '@/lib/validations/knowledge';
@@ -54,8 +59,13 @@ export function ConceptSection({
   collapsible = true,
   defaultExpanded = true,
 }: ConceptSectionProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['tool', 'process', 'technical_term']));
+  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(
+    null,
+  );
+  const isExpanded = expandedOverride ?? defaultExpanded;
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    new Set(['tool', 'process', 'technical_term']),
+  );
 
   // Group concepts by type
   const groupedConcepts = React.useMemo(() => {
@@ -80,10 +90,19 @@ export function ConceptSection({
     });
 
     // Return only non-empty groups, sorted by priority
-    const sortOrder: ConceptType[] = ['tool', 'process', 'technical_term', 'person', 'organization', 'general'];
-    return sortOrder
-      .filter((type) => groups[type].length > 0)
-      .map((type) => ({ type, concepts: groups[type] }));
+    const sortOrder: ConceptType[] = [
+      'tool',
+      'process',
+      'technical_term',
+      'person',
+      'organization',
+      'general',
+    ];
+    return sortOrder.flatMap((__item, __index, __array) =>
+      groups[__item].length > 0
+        ? [{ type: __item, concepts: groups[__item] }]
+        : [],
+    );
   }, [concepts, showGrouping]);
 
   const toggleGroup = (type: string) => {
@@ -104,7 +123,7 @@ export function ConceptSection({
       <Card className={className}>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Brain className="h-4 w-4" />
+            <Brain className="size-4" />
             {title}
           </CardTitle>
         </CardHeader>
@@ -123,7 +142,7 @@ export function ConceptSection({
       <Card className={className}>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Brain className="h-4 w-4" />
+            <Brain className="size-4" />
             {title}
           </CardTitle>
         </CardHeader>
@@ -140,13 +159,13 @@ export function ConceptSection({
       <Card className={className}>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Brain className="h-4 w-4" />
+            <Brain className="size-4" />
             {title}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="size-4" />
             <span>No concepts detected yet</span>
           </div>
         </CardContent>
@@ -160,17 +179,17 @@ export function ConceptSection({
         <CardTitle className="text-sm font-medium">
           {collapsible ? (
             <button
-              onClick={() => setIsExpanded(!isExpanded)}
+              onClick={() => setExpandedOverride(!isExpanded)}
               className="flex items-center gap-2 hover:text-foreground/80 transition-colors w-full text-left min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded"
               aria-expanded={isExpanded}
               aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${title}`}
             >
               {isExpanded ? (
-                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                <ChevronDown className="size-4" aria-hidden="true" />
               ) : (
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                <ChevronRight className="size-4" aria-hidden="true" />
               )}
-              <Brain className="h-4 w-4" aria-hidden="true" />
+              <Brain className="size-4" aria-hidden="true" />
               {title}
               <span className="ml-auto text-xs text-muted-foreground font-normal">
                 {concepts.length}
@@ -178,7 +197,7 @@ export function ConceptSection({
             </button>
           ) : (
             <div className="flex items-center gap-2">
-              <Brain className="h-4 w-4" aria-hidden="true" />
+              <Brain className="size-4" aria-hidden="true" />
               {title}
               <span className="ml-auto text-xs text-muted-foreground font-normal">
                 {concepts.length}
@@ -248,9 +267,9 @@ function ConceptGroup({
         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${type.replace('_', ' ')} concepts`}
       >
         {isExpanded ? (
-          <ChevronDown className="h-3 w-3" aria-hidden="true" />
+          <ChevronDown className="size-3" aria-hidden="true" />
         ) : (
-          <ChevronRight className="h-3 w-3" aria-hidden="true" />
+          <ChevronRight className="size-3" aria-hidden="true" />
         )}
         <ConceptTypeLabel type={type} size="sm" />
         <span className="ml-auto text-xs text-muted-foreground">

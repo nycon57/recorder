@@ -1,6 +1,8 @@
+import crypto from 'crypto';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import crypto from 'crypto';
+
 import { requireOrg } from '@/lib/utils/api';
 
 /**
@@ -35,6 +37,40 @@ function generateState(orgId: string): string {
   return Buffer.from(stateData).toString('base64url');
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function renderPostRedirectPage(type: string | null): NextResponse {
+  const typeInput = type
+    ? `<input type="hidden" name="type" value="${escapeHtml(type)}">`
+    : '';
+
+  return new NextResponse(
+    `<!doctype html>
+    <html>
+      <head><meta charset="utf-8"><title>Continue to Microsoft</title></head>
+      <body>
+        <form id="oauth-form" method="post" action="/api/integrations/sharepoint/auth">
+          ${typeInput}
+          <button type="submit">Continue to Microsoft</button>
+        </form>
+        <script>document.getElementById('oauth-form').requestSubmit();</script>
+      </body>
+    </html>`,
+    {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    }
+  );
+}
+
 /**
  * Initiates OAuth flow with Microsoft for SharePoint/OneDrive access
  *
@@ -49,6 +85,10 @@ function generateState(orgId: string): string {
  * - NEXT_PUBLIC_APP_URL
  */
 export async function GET(req: NextRequest) {
+  return renderPostRedirectPage(req.nextUrl.searchParams.get('type'));
+}
+
+export async function POST(req: NextRequest) {
   try {
     // Step 1: Authenticate user and get internal org ID
     const { orgId, userId } = await requireOrg();

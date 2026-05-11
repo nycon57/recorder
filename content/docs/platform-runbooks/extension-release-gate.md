@@ -1,3 +1,18 @@
+---
+title: Extension release gate
+description: Release confidence checklist for the Clicky-style browser extension and extension API contract.
+audience: system-admin
+section: platform-runbooks
+order: 30
+related:
+  - platform-runbooks/deployment-lifecycle
+  - platform-runbooks/incident-response
+tags:
+  - runbook
+  - extension
+  - release
+---
+
 # Extension Release Gate
 
 Use this gate before treating the Clicky-style extension arm as production-ready.

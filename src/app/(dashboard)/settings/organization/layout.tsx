@@ -122,9 +122,9 @@ export default function OrganizationSettingsLayout({
     return (
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
         <div className="text-center">
-          <div className="inline-flex h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+          <div className="inline-flex size-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]" />
           <p className="mt-2 text-sm text-muted-foreground">
-            Loading settings...
+            Loading settings…
           </p>
         </div>
       </div>
@@ -137,7 +137,7 @@ export default function OrganizationSettingsLayout({
     return (
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
         <div className="text-center">
-          <Shield className="mx-auto h-12 w-12 text-muted-foreground" />
+          <Shield className="mx-auto size-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold">Access Restricted</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             You need admin privileges to access organization settings.
@@ -189,7 +189,7 @@ export default function OrganizationSettingsLayout({
                 >
                   <Icon
                     className={cn(
-                      'w-5 h-5 mt-0.5 flex-shrink-0',
+                      'size-5 mt-0.5 flex-shrink-0',
                       isActive ? 'text-primary' : 'text-muted-foreground/80',
                     )}
                   />

@@ -14,6 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { requireOrg } from '@/lib/utils/api';
 import { GoogleDriveConnector } from '@/lib/connectors/google-drive';
@@ -28,7 +29,10 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams;
     const folderId = searchParams.get('folderId') || undefined;
     const pageToken = searchParams.get('pageToken') || undefined;
-    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '100'), 100);
+    const pageSize = Math.min(
+      parseInt(searchParams.get('pageSize') || '100'),
+      100,
+    );
     const search = searchParams.get('search') || undefined;
 
     // Get Google Drive connector config
@@ -43,7 +47,7 @@ export async function GET(req: NextRequest) {
     if (configError || !connectorConfig) {
       return NextResponse.json(
         { error: 'Google Drive not connected' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -53,22 +57,27 @@ export async function GET(req: NextRequest) {
       {
         accessToken: credentials.accessToken,
         refreshToken: credentials.refreshToken,
-        expiresAt: credentials.expiresAt ? new Date(credentials.expiresAt) : undefined,
+        expiresAt: credentials.expiresAt
+          ? new Date(credentials.expiresAt)
+          : undefined,
         scopes: credentials.scopes,
       },
       {
         connectorId: connectorConfig.id,
         pageSize,
-      }
+      },
     );
 
     // Test connection first
     const testResult = await connector.testConnection();
     if (!testResult.success) {
-      console.error('[Google Drive Files] Connection test failed:', testResult.message);
+      console.error(
+        '[Google Drive Files] Connection test failed:',
+        testResult.message,
+      );
       return NextResponse.json(
         { error: 'Failed to connect to Google Drive. Please reconnect.' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -83,21 +92,26 @@ export async function GET(req: NextRequest) {
     const files = result.files;
 
     // Get already imported files to mark them (using unified content table)
-    const fileIds = files.filter(f => f.type !== 'folder').map(f => f.id);
-    const { data: importedContent } = fileIds.length > 0
-      ? await supabase
-          .from('content')
-          .select('source_external_id')
-          .eq('org_id', orgId)
-          .eq('source_connector_id', connectorConfig.id)
-          .eq('source_type', 'google_drive')
-          .in('source_external_id', fileIds)
-      : { data: [] };
+    const fileIds = files.flatMap((__item, __index, __array) =>
+      __item.type !== 'folder' ? [__item.id] : [],
+    );
+    const { data: importedContent } =
+      fileIds.length > 0
+        ? await supabase
+            .from('content')
+            .select('source_external_id')
+            .eq('org_id', orgId)
+            .eq('source_connector_id', connectorConfig.id)
+            .eq('source_type', 'google_drive')
+            .in('source_external_id', fileIds)
+        : { data: [] };
 
-    const importedFileIds = new Set((importedContent || []).map(d => d.source_external_id));
+    const importedFileIds = new Set(
+      (importedContent || []).map((d) => d.source_external_id),
+    );
 
     // Transform files for response with support status
-    const transformedFiles = files.map(file => ({
+    const transformedFiles = files.map((file) => ({
       id: file.id,
       name: file.name,
       mimeType: file.mimeType,
@@ -110,7 +124,9 @@ export async function GET(req: NextRequest) {
       isFolder: file.type === 'folder',
       isGoogleWorkspace: file.metadata?.isGoogleWorkspace || false,
       isImported: importedFileIds.has(file.id),
-      isSupported: file.type === 'folder' || connector.isFileTypeSupported(file.mimeType),
+      isSupported:
+        file.type === 'folder' ||
+        connector.isFileTypeSupported(file.mimeType ?? ''),
     }));
 
     // Sort: folders first, then by name (already sorted by API but ensure consistency)
@@ -132,27 +148,31 @@ export async function GET(req: NextRequest) {
     // Handle Google API errors specifically
     if (error?.code === 403) {
       return NextResponse.json(
-        { error: 'Access denied to this folder. You may not have permission to view its contents.' },
-        { status: 403 }
+        {
+          error:
+            'Access denied to this folder. You may not have permission to view its contents.',
+        },
+        { status: 403 },
       );
     }
 
     if (error?.code === 404) {
       return NextResponse.json(
         { error: 'Folder not found. It may have been deleted or moved.' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     // Extract error message from various error formats
-    const errorMessage = error?.message
-      || error?.errors?.[0]?.message
-      || error?.response?.data?.error?.message
-      || 'Failed to list files';
+    const errorMessage =
+      error?.message ||
+      error?.errors?.[0]?.message ||
+      error?.response?.data?.error?.message ||
+      'Failed to list files';
 
     return NextResponse.json(
       { error: errorMessage },
-      { status: error?.code || 500 }
+      { status: error?.code || 500 },
     );
   }
 }

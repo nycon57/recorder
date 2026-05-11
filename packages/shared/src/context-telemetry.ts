@@ -1,4 +1,4 @@
-import type { KnowledgeResolvedFor, PageContext } from './types.js';
+import type { KnowledgeResolvedFor, PageContext } from './types';
 
 export interface SanitizedPageContextLocation {
   host: string;
@@ -50,9 +50,9 @@ export function buildContextSemanticFingerprint(context: PageContext): string {
   const location = sanitizePageContextLocation(context.url);
 
   const currentNav = takeUnique(
-    (context.navigation ?? [])
-      .filter((item) => item.current)
-      .map((item) => `${item.kind}:${item.label}`),
+    (context.navigation ?? []).flatMap((__item, __index, __array) =>
+      __item.current ? [`${__item.kind}:${__item.label}`] : [],
+    ),
     4,
   );
 

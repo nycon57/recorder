@@ -39,7 +39,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { userId } = await requireOrg();
   const query = parseSearchParams<ListFavoritesQueryInput>(
     request,
-    listFavoritesQuerySchema
+    listFavoritesQuerySchema,
   );
 
   // Build query for favorites with content
@@ -57,23 +57,30 @@ export const GET = apiHandler(async (request: NextRequest) => {
         deleted_at
       )
     `,
-      { count: 'exact' }
+      { count: 'exact' },
     )
     .eq('user_id', userId)
     .is('content.deleted_at', null);
 
   // Apply content_type filter
   if (query.content_type) {
-    favoritesQuery = favoritesQuery.eq('content.content_type', query.content_type);
+    favoritesQuery = favoritesQuery.eq(
+      'content.content_type',
+      query.content_type,
+    );
   }
 
   // Apply sorting
   switch (query.sort) {
     case 'created_asc':
-      favoritesQuery = favoritesQuery.order('content(created_at)', { ascending: true });
+      favoritesQuery = favoritesQuery.order('content(created_at)', {
+        ascending: true,
+      });
       break;
     case 'created_desc':
-      favoritesQuery = favoritesQuery.order('content(created_at)', { ascending: false });
+      favoritesQuery = favoritesQuery.order('content(created_at)', {
+        ascending: false,
+      });
       break;
     case 'favorited_asc':
       favoritesQuery = favoritesQuery.order('created_at', { ascending: true });
@@ -86,10 +93,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   // Apply pagination
-  const { data: favorites, error, count } = await favoritesQuery.range(
-    query.offset,
-    query.offset + query.limit - 1
-  );
+  const {
+    data: favorites,
+    error,
+    count,
+  } = await favoritesQuery.range(query.offset, query.offset + query.limit - 1);
 
   if (error) {
     console.error('[GET /api/favorites] Error fetching favorites:', error);
@@ -125,8 +133,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * - recording_id: Recording ID to favorite
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireOrg();
-  const body = await parseBody<AddToFavoritesInput>(request, addToFavoritesSchema);
+  const [{ orgId, userId }, body] = await Promise.all([
+    requireOrg(),
+    parseBody<AddToFavoritesInput>(request, addToFavoritesSchema),
+  ]);
 
   // Verify recording exists and belongs to this org
   const { data: recording, error: recordingError } = await supabaseAdmin
@@ -153,7 +163,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       {
         onConflict: 'user_id,content_id',
         ignoreDuplicates: false,
-      }
+      },
     )
     .select()
     .single();

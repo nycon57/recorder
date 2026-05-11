@@ -57,12 +57,12 @@ export function FeatureHero({ data, icon }: FeatureHeroProps) {
 
         {/* Aurora orbs */}
         <div
-          className="absolute top-[-10%] right-[10%] w-[600px] h-[600px] rounded-full
+          className="absolute top-[-10%] right-[10%] size-[600px] rounded-full
             bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.15)_0%,transparent_70%)]
             blur-[80px] animate-float"
         />
         <div
-          className="absolute bottom-[10%] left-[5%] w-[500px] h-[500px] rounded-full
+          className="absolute bottom-[10%] left-[5%] size-[500px] rounded-full
             bg-[radial-gradient(ellipse_at_center,rgba(44,194,149,0.12)_0%,transparent_70%)]
             blur-[100px] animate-float"
           style={{ animationDelay: '2s' }}
@@ -101,7 +101,7 @@ export function FeatureHero({ data, icon }: FeatureHeroProps) {
                 transition-all duration-300
                 shadow-[0_0_20px_rgba(0,223,130,0.1)]"
             >
-              <Sparkles className="h-3.5 w-3.5 mr-2 text-accent animate-pulse" />
+              <Sparkles className="size-3.5 mr-2 text-accent animate-pulse" />
               <span className="text-sm font-medium text-accent">{data.badge}</span>
             </Badge>
           </motion.div>
@@ -114,10 +114,7 @@ export function FeatureHero({ data, icon }: FeatureHeroProps) {
           >
             <span className="text-foreground">{data.headline}</span>{' '}
             <span
-              className="bg-gradient-to-r from-accent via-secondary to-primary
-                bg-clip-text text-transparent
-                bg-[length:200%_auto] animate-gradient-x
-                drop-shadow-[0_0_40px_rgba(0,223,130,0.4)]"
+              className="bg-[length:200%_auto] animate-gradient-x drop-shadow-[0_0_40px_rgba(0,223,130,0.4)] text-primary"
             >
               {data.highlightedText}
             </span>
@@ -155,7 +152,7 @@ export function FeatureHero({ data, icon }: FeatureHeroProps) {
                     group"
                 >
                   {data.primaryCta.text}
-                  <ArrowRight className="h-5 w-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="size-5 ml-2 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </motion.div>
             </Link>
@@ -191,7 +188,7 @@ export function FeatureHero({ data, icon }: FeatureHeroProps) {
           >
             <motion.div
               className={cn(
-                'w-20 h-20 sm:w-24 sm:h-24 rounded-2xl',
+                'size-20 sm:size-24 rounded-2xl',
                 'bg-accent/10 backdrop-blur-sm',
                 'border border-accent/20',
                 'flex items-center justify-center',
@@ -204,7 +201,7 @@ export function FeatureHero({ data, icon }: FeatureHeroProps) {
               }}
               transition={springTransition}
             >
-              <FeatureIcon name={icon} className="h-10 w-10 sm:h-12 sm:w-12 text-accent" />
+              <FeatureIcon name={icon} className="size-10 sm:size-12 text-accent" />
             </motion.div>
           </motion.div>
         </motion.div>

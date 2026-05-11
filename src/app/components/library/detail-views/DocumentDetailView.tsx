@@ -3,14 +3,27 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
-import { ArrowLeft, FileText as FileTextIcon, AlertCircle, RotateCcw, Trash2, Sparkles } from 'lucide-react';
+import {
+  ArrowLeft,
+  FileText as FileTextIcon,
+  AlertCircle,
+  RotateCcw,
+  Trash2,
+  Sparkles,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import domPurify from 'dompurify';
+import parse from 'html-react-parser';
 
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent } from '@/app/components/ui/card';
-import { ContentTabs, ContentTabsContent, ContentTabsList, ContentTabsTrigger } from '@/app/components/ui/content-tabs';
+import {
+  ContentTabs,
+  ContentTabsContent,
+  ContentTabsList,
+  ContentTabsTrigger,
+} from '@/app/components/ui/content-tabs';
 import { Alert, AlertTitle, AlertDescription } from '@/app/components/ui/alert';
 import {
   AlertDialog,
@@ -25,7 +38,13 @@ import {
 import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import type { ContentType, FileType, Json, RecordingStatus, Tag } from '@/lib/types/database';
+import type {
+  ContentType,
+  FileType,
+  Json,
+  RecordingStatus,
+  Tag,
+} from '@/lib/types/database';
 import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 // New unified components
@@ -92,6 +111,40 @@ interface Recording {
   file_size: number | null;
 }
 
+interface DocumentDetailViewState {
+  isEditModalOpen: boolean;
+  tags: Tag[];
+  showMoveToTrashDialog: boolean;
+  showPermanentDeleteDialog: boolean;
+  showKeyboardShortcuts: boolean;
+  currentHighlightIndex: number;
+  highlightsEnabled: boolean;
+  showHighlightToolbar: boolean;
+}
+
+const createInitialDocumentDetailViewState = (
+  initialTags: Array<InitialTag | null>,
+): DocumentDetailViewState => ({
+  isEditModalOpen: false,
+  tags: initialTags.flatMap((tag): Tag[] =>
+    tag ? [{ ...tag, color: tag.color ?? '#64748b' }] : [],
+  ),
+  showMoveToTrashDialog: false,
+  showPermanentDeleteDialog: false,
+  showKeyboardShortcuts: false,
+  currentHighlightIndex: 0,
+  highlightsEnabled: true,
+  showHighlightToolbar: false,
+});
+
+const documentDetailViewReducer = (
+  state: DocumentDetailViewState,
+  patch: Partial<DocumentDetailViewState>,
+): DocumentDetailViewState => ({
+  ...state,
+  ...patch,
+});
+
 interface DocumentDetailViewProps {
   recording: Recording;
   transcript: Transcript | null; // For documents, transcript contains extracted text
@@ -102,7 +155,9 @@ interface DocumentDetailViewProps {
   initialHighlightId?: string; // Initial chunk to scroll to
 }
 
-const highlightSourcesFetcher = async (url: string): Promise<HighlightSource[] | null> => {
+const highlightSourcesFetcher = async (
+  url: string,
+): Promise<HighlightSource[] | null> => {
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -113,7 +168,13 @@ const highlightSourcesFetcher = async (url: string): Promise<HighlightSource[] |
   return sources || null;
 };
 
-export default function DocumentDetailView({
+export default function DocumentDetailView(
+  props: Parameters<typeof useDocumentDetailViewImplementation>[0],
+) {
+  return useDocumentDetailViewImplementation(props);
+}
+
+function useDocumentDetailViewImplementation({
   recording,
   transcript,
   document,
@@ -122,28 +183,30 @@ export default function DocumentDetailView({
   sourceKey,
   initialHighlightId,
 }: DocumentDetailViewProps) {
-  const router = useRouter();
+  const { back, push, refresh } = useRouter();
 
   const { data: highlightSources } = useSWR(
     sourceKey ? `/api/chat?sourcesKey=${sourceKey}` : null,
-    highlightSourcesFetcher
+    highlightSourcesFetcher,
   );
 
-  const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
-  const [tags, setTags] = React.useState<Tag[]>(() =>
-    initialTags
-      .filter((tag): tag is InitialTag => Boolean(tag))
-      .map((tag) => ({ ...tag, color: tag.color ?? '#64748b' }))
+  const [
+    {
+      isEditModalOpen,
+      tags,
+      showMoveToTrashDialog,
+      showPermanentDeleteDialog,
+      showKeyboardShortcuts,
+      currentHighlightIndex,
+      highlightsEnabled,
+      showHighlightToolbar,
+    },
+    updateViewState,
+  ] = React.useReducer(
+    documentDetailViewReducer,
+    initialTags,
+    createInitialDocumentDetailViewState,
   );
-  const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
-  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
-  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
-
-  // Highlight state
-  const [currentHighlightIndex, setCurrentHighlightIndex] = React.useState(0);
-  const [highlightsEnabled, setHighlightsEnabled] = React.useState(true);
-  const [showHighlightToolbar, setShowHighlightToolbar] = React.useState(false);
-  const [matchedHighlightsCount] = React.useState(0);
   const highlightRefsMapRef = React.useRef<Map<string, HTMLElement>>(new Map());
 
   const isTrashed = !!recording.deleted_at;
@@ -171,21 +234,22 @@ export default function DocumentDetailView({
       })),
     });
 
-    const filtered = highlightSources
-      .filter((source) => {
-        const matches = source.recordingId === recording.id;
-        console.log('[DocumentDetailView] Filtering source:', {
-          sourceRecordingId: source.recordingId,
-          targetRecordingId: recording.id,
-          matches,
-        });
-        return matches;
-      })
-      .map((source) => ({
-        id: source.metadata?.chunkId || source.id,
-        text: source.snippet || '',
-        similarity: source.relevanceScore ?? undefined,
-      }));
+    const filtered = highlightSources.flatMap((source) => {
+      const matches = source.recordingId === recording.id;
+      console.log('[DocumentDetailView] Filtering source:', {
+        sourceRecordingId: source.recordingId,
+        targetRecordingId: recording.id,
+        matches,
+      });
+      if (!matches) return [];
+      return [
+        {
+          id: source.metadata?.chunkId || source.id,
+          text: source.snippet || '',
+          similarity: source.relevanceScore ?? undefined,
+        },
+      ];
+    });
 
     console.log('[DocumentDetailView] Processed highlights:', {
       filteredCount: filtered.length,
@@ -198,60 +262,75 @@ export default function DocumentDetailView({
 
     return filtered;
   }, [highlightSources, recording.id, initialHighlightId]);
+  const matchedHighlightsCount = highlights.length;
 
   // Find initial highlight index based on initialHighlightId
   const initialIndex = React.useMemo(() => {
     if (!initialHighlightId || highlights.length === 0) {
       return 0;
     }
-    const index = highlights.findIndex(h => h.id === initialHighlightId);
+    const index = highlights.findIndex((h) => h.id === initialHighlightId);
     return index >= 0 ? index : 0;
   }, [initialHighlightId, highlights]);
+
+  const scrollToHighlight = React.useCallback(
+    (index: number) => {
+      if (matchedHighlightsCount === 0 || !highlightsEnabled) {
+        return;
+      }
+
+      const currentHighlight = highlights[index];
+      if (!currentHighlight) {
+        return;
+      }
+
+      const element = highlightRefsMapRef.current.get(currentHighlight.id);
+      if (element) {
+        element.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    },
+    [highlights, highlightsEnabled, matchedHighlightsCount],
+  );
 
   // Set initial highlight index and show toolbar if highlights exist
   React.useEffect(() => {
     if (highlights.length > 0) {
-      setCurrentHighlightIndex(initialIndex);
-      setShowHighlightToolbar(true);
-    }
-  }, [highlights.length, initialIndex]);
-
-  // Scroll to current highlight when it changes
-  React.useEffect(() => {
-    if (matchedHighlightsCount === 0 || !highlightsEnabled) {
-      return;
-    }
-
-    const currentHighlight = highlights[currentHighlightIndex];
-    if (!currentHighlight) {
-      return;
-    }
-
-    const element = highlightRefsMapRef.current.get(currentHighlight.id);
-    if (element) {
-      element.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
+      updateViewState({
+        currentHighlightIndex: initialIndex,
+        showHighlightToolbar: true,
       });
+      requestAnimationFrame(() => scrollToHighlight(initialIndex));
     }
-  }, [currentHighlightIndex, highlights, highlightsEnabled, matchedHighlightsCount]);
+  }, [highlights.length, initialIndex, scrollToHighlight]);
 
   // Highlight navigation handlers
   const handlePreviousHighlight = React.useCallback(() => {
-    setCurrentHighlightIndex((prev) => Math.max(0, prev - 1));
-  }, []);
+    const next = Math.max(0, currentHighlightIndex - 1);
+    updateViewState({ currentHighlightIndex: next });
+    requestAnimationFrame(() => scrollToHighlight(next));
+  }, [currentHighlightIndex, scrollToHighlight]);
 
   const handleNextHighlight = React.useCallback(() => {
-    setCurrentHighlightIndex((prev) => Math.min(matchedHighlightsCount - 1, prev + 1));
-  }, [matchedHighlightsCount]);
+    const next = Math.min(
+      matchedHighlightsCount - 1,
+      currentHighlightIndex + 1,
+    );
+    updateViewState({ currentHighlightIndex: next });
+    requestAnimationFrame(() => scrollToHighlight(next));
+  }, [currentHighlightIndex, matchedHighlightsCount, scrollToHighlight]);
 
   const handleToggleHighlights = React.useCallback(() => {
-    setHighlightsEnabled((prev) => !prev);
-  }, []);
+    updateViewState({ highlightsEnabled: !highlightsEnabled });
+  }, [highlightsEnabled]);
 
   const handleCloseToolbar = React.useCallback(() => {
-    setShowHighlightToolbar(false);
-    setHighlightsEnabled(false);
+    updateViewState({
+      showHighlightToolbar: false,
+      highlightsEnabled: false,
+    });
   }, []);
 
   const handleDownload = async () => {
@@ -279,8 +358,9 @@ export default function DocumentDetailView({
   // Keyboard shortcuts (no playback controls for documents)
   useKeyboardShortcuts({
     onDownload: handleDownload,
-    onEdit: () => setIsEditModalOpen(true),
-    onShowShortcuts: () => setShowKeyboardShortcuts((prev) => !prev),
+    onEdit: () => updateViewState({ isEditModalOpen: true }),
+    onShowShortcuts: () =>
+      updateViewState({ showKeyboardShortcuts: !showKeyboardShortcuts }),
   });
 
   const handleRestore = async () => {
@@ -291,7 +371,7 @@ export default function DocumentDetailView({
 
       if (response.ok) {
         toast({ description: 'Item restored successfully' });
-        router.refresh();
+        refresh();
       } else {
         toast({
           variant: 'destructive',
@@ -315,7 +395,7 @@ export default function DocumentDetailView({
 
       if (response.ok) {
         toast({ description: 'Item moved to trash' });
-        router.refresh(); // Refresh to show trashed state
+        refresh(); // Refresh to show trashed state
       } else {
         toast({
           variant: 'destructive',
@@ -333,13 +413,16 @@ export default function DocumentDetailView({
 
   const handlePermanentDelete = async () => {
     try {
-      const response = await fetch(`/api/recordings/${recording.id}?permanent=true`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `/api/recordings/${recording.id}?permanent=true`,
+        {
+          method: 'DELETE',
+        },
+      );
 
       if (response.ok) {
         toast({ description: 'Item permanently deleted' });
-        router.push('/library');
+        push('/library');
       } else {
         toast({
           variant: 'destructive',
@@ -368,7 +451,7 @@ export default function DocumentDetailView({
       }
 
       toast({ description: 'Title updated successfully' });
-      router.refresh();
+      refresh();
     } catch (error) {
       console.error('Update title failed:', error);
       throw error;
@@ -388,7 +471,7 @@ export default function DocumentDetailView({
       }
 
       toast({ description: 'Description updated successfully' });
-      router.refresh();
+      refresh();
     } catch (error) {
       console.error('Update description failed:', error);
       throw error;
@@ -407,9 +490,9 @@ export default function DocumentDetailView({
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto p-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <Button variant="ghost" size="icon" onClick={() => back()}>
               <ArrowLeft className="size-5" />
             </Button>
 
@@ -427,7 +510,7 @@ export default function DocumentDetailView({
                   <InlineEditableField
                     value={recording.description || ''}
                     onSave={handleUpdateDescription}
-                    placeholder="Add a description..."
+                    placeholder="Add a description…"
                     type="textarea"
                     displayAs="description"
                     maxLength={500}
@@ -438,7 +521,10 @@ export default function DocumentDetailView({
                     <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
                       <span>
                         <strong className="text-content-docx font-medium">
-                          {transcript.text.split(/\s+/).filter(Boolean).length.toLocaleString()}
+                          {transcript.text
+                            .split(/\s+/)
+                            .filter(Boolean)
+                            .length.toLocaleString()}
                         </strong>{' '}
                         words
                       </span>
@@ -450,7 +536,11 @@ export default function DocumentDetailView({
                       </span>
                       <span className="hidden sm:inline">
                         <strong className="text-content-docx font-medium">
-                          ~{Math.ceil(transcript.text.split(/\s+/).filter(Boolean).length / 200)}
+                          ~
+                          {Math.ceil(
+                            transcript.text.split(/\s+/).filter(Boolean)
+                              .length / 200,
+                          )}
                         </strong>{' '}
                         min read
                       </span>
@@ -459,7 +549,7 @@ export default function DocumentDetailView({
                 </>
               ) : (
                 <>
-                  <h1 className="text-2xl font-bold truncate">
+                  <h1 className="text-2xl font-semibold truncate">
                     {recording.title || 'Untitled Document'}
                   </h1>
                   {recording.description && (
@@ -472,7 +562,10 @@ export default function DocumentDetailView({
                     <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
                       <span>
                         <strong className="text-content-docx font-medium">
-                          {transcript.text.split(/\s+/).filter(Boolean).length.toLocaleString()}
+                          {transcript.text
+                            .split(/\s+/)
+                            .filter(Boolean)
+                            .length.toLocaleString()}
                         </strong>{' '}
                         words
                       </span>
@@ -484,7 +577,11 @@ export default function DocumentDetailView({
                       </span>
                       <span className="hidden sm:inline">
                         <strong className="text-content-docx font-medium">
-                          ~{Math.ceil(transcript.text.split(/\s+/).filter(Boolean).length / 200)}
+                          ~
+                          {Math.ceil(
+                            transcript.text.split(/\s+/).filter(Boolean)
+                              .length / 200,
+                          )}
                         </strong>{' '}
                         min read
                       </span>
@@ -497,14 +594,16 @@ export default function DocumentDetailView({
             {isTrashed && (
               <div className="flex items-center gap-2">
                 <Button onClick={handleRestore} variant="outline">
-                  <RotateCcw className="w-4 h-4 mr-2" />
+                  <RotateCcw className="size-4 mr-2" />
                   Restore Item
                 </Button>
                 <Button
-                  onClick={() => setShowPermanentDeleteDialog(true)}
+                  onClick={() =>
+                    updateViewState({ showPermanentDeleteDialog: true })
+                  }
                   variant="destructive"
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
+                  <Trash2 className="size-4 mr-2" />
                   Delete Forever
                 </Button>
               </div>
@@ -518,18 +617,22 @@ export default function DocumentDetailView({
         {/* Trash Warning Banner */}
         {isTrashed && recording.deleted_at && (
           <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="size-4" />
             <AlertTitle>This item is in the trash</AlertTitle>
             <AlertDescription>
-              This content was moved to trash on {formatDate(recording.deleted_at)}.
-              You can restore it or permanently delete it.
+              This content was moved to trash on{' '}
+              {formatDate(recording.deleted_at)}. You can restore it or
+              permanently delete it.
             </AlertDescription>
           </Alert>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
-          <div className="lg:col-span-2 space-y-6" style={isTrashed ? { opacity: 0.7 } : undefined}>
+          <div
+            className="lg:col-span-2 space-y-6"
+            style={isTrashed ? { opacity: 0.7 } : undefined}
+          >
             {/* Thumbnail Hero - Only show when thumbnail exists */}
             {recording.thumbnail_url && (
               <ThumbnailHero
@@ -538,17 +641,23 @@ export default function DocumentDetailView({
                 contentType={recording.content_type}
                 editable={!isTrashed}
                 recordingId={recording.id}
-                onThumbnailChange={() => router.refresh()}
+                onThumbnailChange={() => refresh()}
               />
             )}
 
             {document ? (
               <ContentTabs defaultValue="content" className="w-full">
                 <ContentTabsList>
-                  <ContentTabsTrigger value="content" icon={<FileTextIcon className="size-4" />}>
+                  <ContentTabsTrigger
+                    value="content"
+                    icon={<FileTextIcon className="size-4" />}
+                  >
                     Original Content
                   </ContentTabsTrigger>
-                  <ContentTabsTrigger value="insights" icon={<Sparkles className="size-4" />}>
+                  <ContentTabsTrigger
+                    value="insights"
+                    icon={<Sparkles className="size-4" />}
+                  >
                     AI Insights
                   </ContentTabsTrigger>
                 </ContentTabsList>
@@ -573,14 +682,16 @@ export default function DocumentDetailView({
                       <div className="min-h-[400px] max-h-[800px] overflow-y-auto px-6 py-8 sm:px-8 sm:py-10">
                         <div className="ai-insights-prose max-w-3xl mx-auto">
                           {document.html ? (
-                            <div dangerouslySetInnerHTML={{ __html: domPurify.sanitize(document.html) }} />
+                            <div>
+                              {parse(domPurify.sanitize(document.html))}
+                            </div>
                           ) : document.markdown ? (
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {document.markdown}
                             </ReactMarkdown>
                           ) : (
                             <p className="text-muted-foreground italic">
-                              AI insights are being generated...
+                              AI insights are being generated…
                             </p>
                           )}
                         </div>
@@ -622,8 +733,12 @@ export default function DocumentDetailView({
                 tags={tags}
                 document={document}
                 textContent={transcript?.text}
-                onEdit={() => setIsEditModalOpen(true)}
-                onDelete={() => isTrashed ? setShowPermanentDeleteDialog(true) : setShowMoveToTrashDialog(true)}
+                onEdit={() => updateViewState({ isEditModalOpen: true })}
+                onDelete={() =>
+                  isTrashed
+                    ? updateViewState({ showPermanentDeleteDialog: true })
+                    : updateViewState({ showMoveToTrashDialog: true })
+                }
                 onDownload={handleDownload}
               />
             </div>
@@ -635,21 +750,29 @@ export default function DocumentDetailView({
       {isEditModalOpen && (
         <EditRecordingModal
           open={isEditModalOpen}
-          onOpenChange={setIsEditModalOpen}
+          onOpenChange={(isOpen) =>
+            updateViewState({ isEditModalOpen: isOpen })
+          }
           recording={recording}
           initialTags={tags}
-          onTagsChange={setTags}
+          onTagsChange={(nextTags) => updateViewState({ tags: nextTags })}
         />
       )}
 
       {/* Move to Trash Confirmation Dialog */}
-      <AlertDialog open={showMoveToTrashDialog} onOpenChange={setShowMoveToTrashDialog}>
+      <AlertDialog
+        open={showMoveToTrashDialog}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showMoveToTrashDialog: isOpen })
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to move &quot;{recording.title || 'this item'}&quot; to trash?
-              You can restore it later from the trash page.
+              Are you sure you want to move &quot;
+              {recording.title || 'this item'}&quot; to trash? You can restore
+              it later from the trash page.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -665,17 +788,26 @@ export default function DocumentDetailView({
       </AlertDialog>
 
       {/* Permanent Delete Confirmation Dialog */}
-      <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
+      <AlertDialog
+        open={showPermanentDeleteDialog}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showPermanentDeleteDialog: isOpen })
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Permanently Delete?</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">
+              Permanently Delete?
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>
-                  Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
+                  Are you sure you want to permanently delete &quot;
+                  {recording.title || 'this item'}&quot;?
                 </p>
                 <p className="font-semibold text-destructive">
-                  ⚠️ This action cannot be undone. All associated data will be permanently removed:
+                  ⚠️ This action cannot be undone. All associated data will be
+                  permanently removed:
                 </p>
                 <ul className="list-disc list-inside space-y-1">
                   <li>Original file</li>
@@ -701,7 +833,9 @@ export default function DocumentDetailView({
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog
         open={showKeyboardShortcuts}
-        onOpenChange={setShowKeyboardShortcuts}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showKeyboardShortcuts: isOpen })
+        }
         contentType={recording.content_type as ContentType | null}
       />
 

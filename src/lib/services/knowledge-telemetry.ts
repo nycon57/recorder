@@ -9,13 +9,13 @@ export type KnowledgeTelemetryEventType =
   | 'knowledge.extension.query.outcome'
   | 'knowledge.review.outcome';
 
-export type KnowledgeChatAnswerMode =
+type KnowledgeChatAnswerMode =
   | 'compiled-memory'
   | 'discovery'
   | 'tool-discovery'
   | 'empty';
 
-export type KnowledgeReviewOutcome =
+type KnowledgeReviewOutcome =
   | 'approved'
   | 'rejected'
   | 'edited_and_approved'
@@ -60,7 +60,8 @@ interface SharedVendorTelemetryInput {
   routingFailureReason?: string | null;
 }
 
-export interface KnowledgeChatTelemetryPayload extends SharedVendorTelemetryFields {
+export interface KnowledgeChatTelemetryPayload
+  extends SharedVendorTelemetryFields {
   orgId: string;
   userId: string;
   queryId: string;
@@ -140,19 +141,25 @@ export interface KnowledgeReviewTelemetryPayload {
   userId: string;
   pageId: string;
   logEntryIndex: number;
-  action: 'approveContradiction' | 'rejectContradiction' | 'editAndApproveContradiction';
+  action:
+    | 'approveContradiction'
+    | 'rejectContradiction'
+    | 'editAndApproveContradiction';
   outcome: KnowledgeReviewOutcome;
   contentLength: number | null;
   errorMessage: string | null;
 }
 
 export interface KnowledgeReviewTelemetryInput
-  extends Omit<KnowledgeReviewTelemetryPayload, 'contentLength' | 'errorMessage'> {
+  extends Omit<
+    KnowledgeReviewTelemetryPayload,
+    'contentLength' | 'errorMessage'
+  > {
   contentLength?: number | null;
   errorMessage?: string | null;
 }
 
-export interface KnowledgeTelemetryEventRow {
+interface KnowledgeTelemetryEventRow {
   id: string;
   type: KnowledgeTelemetryEventType;
   payload: Json;
@@ -248,8 +255,8 @@ function clampLimit(value: number): number {
 function normalizeSharedVendorTelemetry(
   input: SharedVendorTelemetryInput,
 ): SharedVendorTelemetryFields {
-  const sourceLayers = (['org', 'vendor_training', 'vendor'] as const).filter((layer) =>
-    (input.sourceLayers ?? []).includes(layer),
+  const sourceLayers = (['org', 'vendor_training', 'vendor'] as const).filter(
+    (layer) => (input.sourceLayers ?? []).includes(layer),
   );
   const orgSourcesCount = input.orgSourcesCount ?? 0;
   const vendorTrainingSourcesCount = input.vendorTrainingSourcesCount ?? 0;
@@ -319,8 +326,7 @@ export function buildKnowledgeChatTelemetry(
     args.answerMode !== 'empty' &&
     args.sourcesCount === 0 &&
     args.recordingsCount > 0;
-  const routingFailed =
-    args.routingFailed ?? shouldInferRoutingFailure;
+  const routingFailed = args.routingFailed ?? shouldInferRoutingFailure;
   const sharedVendorTelemetry = normalizeSharedVendorTelemetry({
     ...args,
     routingFailed,
@@ -334,7 +340,7 @@ export function buildKnowledgeChatTelemetry(
     ...args,
     routingFailed,
     routingFailureReason: routingFailed
-      ? args.routingFailureReason ?? 'no_sources'
+      ? (args.routingFailureReason ?? 'no_sources')
       : null,
     ...sharedVendorTelemetry,
     failureClass,
@@ -404,7 +410,7 @@ export async function recordKnowledgeTelemetryEvent(input: {
   }
 }
 
-export function normalizeKnowledgeTelemetryEvent(
+function normalizeKnowledgeTelemetryEvent(
   row: KnowledgeTelemetryEventRow,
 ): KnowledgeTelemetryEvent | null {
   if (!row.type) return null;
@@ -450,12 +456,13 @@ export function summarizeKnowledgeTelemetryEvents(
     vendor_training: 0,
     vendor: 0,
   };
-  const byVendorRetrievalMode: KnowledgeTelemetrySummary['byVendorRetrievalMode'] = {
-    none: 0,
-    exact: 0,
-    semantic: 0,
-    hybrid: 0,
-  };
+  const byVendorRetrievalMode: KnowledgeTelemetrySummary['byVendorRetrievalMode'] =
+    {
+      none: 0,
+      exact: 0,
+      semantic: 0,
+      hybrid: 0,
+    };
   const byFailureClass: KnowledgeTelemetrySummary['byFailureClass'] = {
     none: 0,
     no_sources: 0,
@@ -476,7 +483,8 @@ export function summarizeKnowledgeTelemetryEvents(
       const vendorBasis = readString(event.payload, 'vendorMatchBasis');
       const orgBasis = readString(event.payload, 'orgMatchBasis');
       if (vendorBasis) {
-        byVendorMatchBasis[vendorBasis] = (byVendorMatchBasis[vendorBasis] ?? 0) + 1;
+        byVendorMatchBasis[vendorBasis] =
+          (byVendorMatchBasis[vendorBasis] ?? 0) + 1;
       }
       if (orgBasis) {
         byOrgMatchBasis[orgBasis] = (byOrgMatchBasis[orgBasis] ?? 0) + 1;
@@ -484,7 +492,10 @@ export function summarizeKnowledgeTelemetryEvents(
     }
 
     if (event.type === 'knowledge.chat.outcome') {
-      const answerMode = readString(event.payload, 'answerMode') as KnowledgeChatAnswerMode | null;
+      const answerMode = readString(
+        event.payload,
+        'answerMode',
+      ) as KnowledgeChatAnswerMode | null;
       if (answerMode && answerMode in byChatAnswerMode) {
         byChatAnswerMode[answerMode] += 1;
       }
@@ -511,7 +522,11 @@ export function summarizeKnowledgeTelemetryEvents(
       event.type === 'knowledge.extension.query.outcome'
     ) {
       for (const layer of readStringArray(event.payload, 'sourceLayers')) {
-        if (layer === 'org' || layer === 'vendor_training' || layer === 'vendor') {
+        if (
+          layer === 'org' ||
+          layer === 'vendor_training' ||
+          layer === 'vendor'
+        ) {
           bySourceLayer[layer] += 1;
         }
       }
@@ -540,7 +555,10 @@ export function summarizeKnowledgeTelemetryEvents(
     }
 
     if (event.type === 'knowledge.review.outcome') {
-      const outcome = readString(event.payload, 'outcome') as KnowledgeReviewOutcome | null;
+      const outcome = readString(
+        event.payload,
+        'outcome',
+      ) as KnowledgeReviewOutcome | null;
       if (outcome && outcome in reviewOutcomes) {
         reviewOutcomes[outcome] += 1;
       }
@@ -567,7 +585,9 @@ export function summarizeKnowledgeTelemetryEvents(
   };
 }
 
-export async function listKnowledgeTelemetryEvents(args: KnowledgeTelemetryFilters): Promise<{
+export async function listKnowledgeTelemetryEvents(
+  args: KnowledgeTelemetryFilters,
+): Promise<{
   events: KnowledgeTelemetryEvent[];
   summary: KnowledgeTelemetrySummary;
 }> {
@@ -598,21 +618,28 @@ export async function listKnowledgeTelemetryEvents(args: KnowledgeTelemetryFilte
 
   const { data, error } = await query;
   if (error) {
-    throw new Error(`Failed to load knowledge telemetry events: ${error.message}`);
+    throw new Error(
+      `Failed to load knowledge telemetry events: ${error.message}`,
+    );
   }
 
-  const events = (data ?? [])
-    .map((row) => normalizeKnowledgeTelemetryEvent(row as KnowledgeTelemetryEventRow))
-    .filter((event): event is KnowledgeTelemetryEvent => event !== null);
+  const events = (data ?? []).flatMap((__item, __index, __array) => {
+    const __mapped = normalizeKnowledgeTelemetryEvent(
+      __item as KnowledgeTelemetryEventRow,
+    );
+    return __mapped !== null ? [__mapped] : [];
+  });
 
   const summary = summarizeKnowledgeTelemetryEvents(events);
 
   return { events, summary };
 }
 
-export function summarizeTelemetryQuery(
-  query: string,
-): { queryLength: number; queryWordCount: number; normalizedQuery: string } {
+function summarizeTelemetryQuery(query: string): {
+  queryLength: number;
+  queryWordCount: number;
+  normalizedQuery: string;
+} {
   const normalizedQuery = normalizeText(query);
   return {
     queryLength: normalizedQuery.length,

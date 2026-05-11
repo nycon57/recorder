@@ -90,10 +90,21 @@ interface TeamsTranscript {
   contentUrl?: string;
 }
 
+interface TeamsCalendarEvent {
+  id: string;
+  subject: string;
+  start: { dateTime: string };
+  end: { dateTime: string };
+  onlineMeeting?: {
+    joinUrl?: string;
+  };
+}
+
 export class MicrosoftTeamsConnector implements Connector {
   readonly type = ConnectorType.MICROSOFT_TEAMS;
   readonly name = 'Microsoft Teams';
-  readonly description = 'Sync Microsoft Teams meeting recordings and transcripts';
+  readonly description =
+    'Sync Microsoft Teams meeting recordings and transcripts';
 
   private accessToken: string;
   private refreshToken: string;
@@ -221,32 +232,46 @@ export class MicrosoftTeamsConnector implements Connector {
       await this.ensureValidToken();
 
       // Calculate date range
-      const fromDate = options?.since || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Last 30 days
+      const fromDate =
+        options?.since || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // Last 30 days
       const toDate = new Date();
 
-      console.log(`[Teams Sync] Fetching recordings from ${fromDate.toISOString()} to ${toDate.toISOString()}`);
+      console.log(
+        `[Teams Sync] Fetching recordings from ${fromDate.toISOString()} to ${toDate.toISOString()}`,
+      );
 
       // List meetings with recordings
-      const meetings = await this.listMeetingsWithRecordings(fromDate, toDate, options?.limit);
+      const meetings = await this.listMeetingsWithRecordings(
+        fromDate,
+        toDate,
+        options?.limit,
+      );
 
-      console.log(`[Teams Sync] Found ${meetings.length} meetings with recordings`);
+      console.log(
+        `[Teams Sync] Found ${meetings.length} meetings with recordings`,
+      );
 
       // Process each meeting
-      for (const meeting of meetings) {
-        try {
-          await this.processMeeting(meeting);
-          results.filesProcessed++;
-        } catch (error: unknown) {
-          console.error(`[Teams Sync] Failed to process meeting ${meeting.id}:`, error);
-          results.filesFailed++;
-          results.errors.push({
-            fileId: meeting.id,
-            fileName: meeting.subject,
-            error: this.extractErrorMessage(error),
-            retryable: true,
-          });
-        }
-      }
+      await Promise.all(
+        Array.from(meetings).map(async (meeting) => {
+          try {
+            await this.processMeeting(meeting);
+            results.filesProcessed++;
+          } catch (error: unknown) {
+            console.error(
+              `[Teams Sync] Failed to process meeting ${meeting.id}:`,
+              error,
+            );
+            results.filesFailed++;
+            results.errors.push({
+              fileId: meeting.id,
+              fileName: meeting.subject,
+              error: this.extractErrorMessage(error),
+              retryable: true,
+            });
+          }
+        }),
+      );
 
       results.success = results.filesFailed === 0;
     } catch (error: unknown) {
@@ -273,7 +298,11 @@ export class MicrosoftTeamsConnector implements Connector {
     const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const toDate = new Date();
 
-    const meetings = await this.listMeetingsWithRecordings(fromDate, toDate, options?.limit);
+    const meetings = await this.listMeetingsWithRecordings(
+      fromDate,
+      toDate,
+      options?.limit,
+    );
 
     const files: ConnectorFile[] = [];
 
@@ -346,7 +375,9 @@ export class MicrosoftTeamsConnector implements Connector {
     });
 
     const buffer = Buffer.from(response.data);
-    const contentType = String(response.headers['content-type'] || 'application/octet-stream');
+    const contentType = String(
+      response.headers['content-type'] || 'application/octet-stream',
+    );
 
     return {
       id: fileId,
@@ -381,7 +412,9 @@ export class MicrosoftTeamsConnector implements Connector {
   /**
    * Refresh expired credentials
    */
-  async refreshCredentials(credentials: ConnectorCredentials): Promise<ConnectorCredentials> {
+  async refreshCredentials(
+    credentials: ConnectorCredentials,
+  ): Promise<ConnectorCredentials> {
     this.refreshToken = credentials.refreshToken || this.refreshToken;
     const refreshed = await this.refreshAccessToken();
 
@@ -407,7 +440,7 @@ export class MicrosoftTeamsConnector implements Connector {
   private async listMeetingsWithRecordings(
     fromDate: Date,
     toDate: Date,
-    limit?: number
+    limit?: number,
   ): Promise<TeamsMeeting[]> {
     const meetings: TeamsMeeting[] = [];
 
@@ -423,34 +456,41 @@ export class MicrosoftTeamsConnector implements Connector {
         },
       });
 
-      const events = response.data.value || [];
+      const events: TeamsCalendarEvent[] = Array.isArray(response.data.value)
+        ? response.data.value
+        : [];
 
       // Filter events that have recordings
-      for (const event of events) {
-        if (event.onlineMeeting?.joinUrl) {
-          try {
-            // Try to get recordings for this meeting
-            const recordings = await this.getMeetingRecordings(event.id);
-            const transcripts = await this.getMeetingTranscripts(event.id);
+      await Promise.all(
+        Array.from(events).map(async (event) => {
+          if (event.onlineMeeting?.joinUrl) {
+            try {
+              // Try to get recordings for this meeting
+              const recordings = await this.getMeetingRecordings(event.id);
+              const transcripts = await this.getMeetingTranscripts(event.id);
 
-            if (recordings.length > 0 || transcripts.length > 0) {
-              meetings.push({
-                id: event.id,
-                subject: event.subject,
-                startDateTime: event.start.dateTime,
-                endDateTime: event.end.dateTime,
-                onlineMeeting: {
-                  joinUrl: event.onlineMeeting.joinUrl,
-                  recordings,
-                  transcripts,
-                },
-              });
+              if (recordings.length > 0 || transcripts.length > 0) {
+                meetings.push({
+                  id: event.id,
+                  subject: event.subject,
+                  startDateTime: event.start.dateTime,
+                  endDateTime: event.end.dateTime,
+                  onlineMeeting: {
+                    joinUrl: event.onlineMeeting.joinUrl,
+                    recordings,
+                    transcripts,
+                  },
+                });
+              }
+            } catch (error) {
+              console.error(
+                `[Teams] Failed to get recordings for meeting ${event.id}:`,
+                error,
+              );
             }
-          } catch (error) {
-            console.error(`[Teams] Failed to get recordings for meeting ${event.id}:`, error);
           }
-        }
-      }
+        }),
+      );
     } catch (error) {
       console.error('[Teams] Failed to list meetings:', error);
       throw error;
@@ -462,20 +502,24 @@ export class MicrosoftTeamsConnector implements Connector {
   /**
    * Get recordings for a meeting
    */
-  private async getMeetingRecordings(meetingId: string): Promise<TeamsRecording[]> {
+  private async getMeetingRecordings(
+    meetingId: string,
+  ): Promise<TeamsRecording[]> {
     try {
       // Note: This endpoint requires specific permissions and may not be available in all tenants
       const response = await axios.get(
         `${GRAPH_API_BETA}/me/onlineMeetings/${meetingId}/recordings`,
         {
           headers: { Authorization: `Bearer ${this.accessToken}` },
-        }
+        },
       );
 
       return response.data.value || [];
     } catch {
       // Recording API may not be available
-      console.debug(`[Teams] Could not fetch recordings for meeting ${meetingId}`);
+      console.debug(
+        `[Teams] Could not fetch recordings for meeting ${meetingId}`,
+      );
       return [];
     }
   }
@@ -483,18 +527,22 @@ export class MicrosoftTeamsConnector implements Connector {
   /**
    * Get transcripts for a meeting
    */
-  private async getMeetingTranscripts(meetingId: string): Promise<TeamsTranscript[]> {
+  private async getMeetingTranscripts(
+    meetingId: string,
+  ): Promise<TeamsTranscript[]> {
     try {
       const response = await axios.get(
         `${GRAPH_API_BETA}/me/onlineMeetings/${meetingId}/transcripts`,
         {
           headers: { Authorization: `Bearer ${this.accessToken}` },
-        }
+        },
       );
 
       return response.data.value || [];
     } catch {
-      console.debug(`[Teams] Could not fetch transcripts for meeting ${meetingId}`);
+      console.debug(
+        `[Teams] Could not fetch transcripts for meeting ${meetingId}`,
+      );
       return [];
     }
   }
@@ -507,68 +555,79 @@ export class MicrosoftTeamsConnector implements Connector {
 
     // Process recordings
     if (meeting.onlineMeeting?.recordings) {
-      for (const recording of meeting.onlineMeeting.recordings) {
-        try {
-          // Download recording
-          const fileData = await this.downloadRecording(recording.recordingContentUrl);
+      await Promise.all(
+        Array.from(meeting.onlineMeeting.recordings).map(async (recording) => {
+          try {
+            // Download recording
+            const fileData = await this.downloadRecording(
+              recording.recordingContentUrl,
+            );
 
-          // Store in database
-          await this.storeImportedDocument({
-            externalId: `teams-${meeting.id}-${recording.id}`,
-            title: `${meeting.subject} - Recording`,
-            content: fileData,
-            fileType: 'video/mp4',
-            fileSize: fileData.length,
-            sourceMetadata: {
-              meetingId: meeting.id,
-              subject: meeting.subject,
-              startDateTime: meeting.startDateTime,
-              endDateTime: meeting.endDateTime,
-              recordingId: recording.id,
-              createdDateTime: recording.createdDateTime,
-              duration: recording.recordingDuration,
-            },
-          });
+            // Store in database
+            await this.storeImportedDocument({
+              externalId: `teams-${meeting.id}-${recording.id}`,
+              title: `${meeting.subject} - Recording`,
+              content: fileData,
+              fileType: 'video/mp4',
+              fileSize: fileData.length,
+              sourceMetadata: {
+                meetingId: meeting.id,
+                subject: meeting.subject,
+                startDateTime: meeting.startDateTime,
+                endDateTime: meeting.endDateTime,
+                recordingId: recording.id,
+                createdDateTime: recording.createdDateTime,
+                duration: recording.recordingDuration,
+              },
+            });
 
-          console.log(`[Teams] Stored recording`);
-        } catch (error) {
-          console.error(`[Teams] Failed to download recording ${recording.id}:`, error);
-          throw error;
-        }
-      }
+            console.log(`[Teams] Stored recording`);
+          } catch (error) {
+            console.error(
+              `[Teams] Failed to download recording ${recording.id}:`,
+              error,
+            );
+            throw error;
+          }
+        }),
+      );
     }
 
     // Process transcripts
     if (meeting.onlineMeeting?.transcripts) {
-      for (const transcript of meeting.onlineMeeting.transcripts) {
-        try {
-          // Download transcript
-          const transcriptData = transcript.contentUrl
-            ? await this.downloadTranscript(transcript.contentUrl)
-            : transcript.content || '';
+      await Promise.all(
+        Array.from(meeting.onlineMeeting.transcripts).map(
+          async (transcript) => {
+            try {
+              // Download transcript
+              const transcriptData = transcript.contentUrl
+                ? await this.downloadTranscript(transcript.contentUrl)
+                : transcript.content || '';
 
-          await this.storeImportedDocument({
-            externalId: `teams-${meeting.id}-transcript`,
-            title: `${meeting.subject} - Transcript`,
-            content: transcriptData,
-            fileType: 'text/vtt',
-            fileSize: transcriptData.length,
-            sourceMetadata: {
-              meetingId: meeting.id,
-              subject: meeting.subject,
-              startDateTime: meeting.startDateTime,
-              endDateTime: meeting.endDateTime,
-              transcriptId: transcript.id,
-              createdDateTime: transcript.createdDateTime,
-            },
-          });
+              await this.storeImportedDocument({
+                externalId: `teams-${meeting.id}-transcript`,
+                title: `${meeting.subject} - Transcript`,
+                content: transcriptData,
+                fileType: 'text/vtt',
+                fileSize: transcriptData.length,
+                sourceMetadata: {
+                  meetingId: meeting.id,
+                  subject: meeting.subject,
+                  startDateTime: meeting.startDateTime,
+                  endDateTime: meeting.endDateTime,
+                  transcriptId: transcript.id,
+                  createdDateTime: transcript.createdDateTime,
+                },
+              });
 
-          console.log(`[Teams] Stored transcript`);
-        } catch (error) {
-          console.error(`[Teams] Failed to download transcript:`, error);
-          // Don't throw - transcript is optional
-        }
-      }
+              console.log(`[Teams] Stored transcript`);
+            } catch (error) {
+              console.error(`[Teams] Failed to download transcript:`, error);
+              // Don't throw - transcript is optional
+            }
+          },
+        ),
+      );
     }
   }
 
@@ -598,7 +657,9 @@ export class MicrosoftTeamsConnector implements Connector {
       },
     });
 
-    return typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    return typeof response.data === 'string'
+      ? response.data
+      : JSON.stringify(response.data);
   }
 
   /**
@@ -610,10 +671,13 @@ export class MicrosoftTeamsConnector implements Connector {
 
       const clientId = process.env.MICROSOFT_CLIENT_ID;
       const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
-      const tenantId = this.tenantId || process.env.MICROSOFT_TENANT_ID || 'common';
+      const tenantId =
+        this.tenantId || process.env.MICROSOFT_TENANT_ID || 'common';
 
       if (!clientId || !clientSecret) {
-        console.error('[Teams] Missing MICROSOFT_CLIENT_ID or MICROSOFT_CLIENT_SECRET');
+        console.error(
+          '[Teams] Missing MICROSOFT_CLIENT_ID or MICROSOFT_CLIENT_SECRET',
+        );
         return false;
       }
 
@@ -630,7 +694,7 @@ export class MicrosoftTeamsConnector implements Connector {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
-        }
+        },
       );
 
       this.accessToken = response.data.access_token;
@@ -661,14 +725,18 @@ export class MicrosoftTeamsConnector implements Connector {
     sourceMetadata: Json;
   }): Promise<void> {
     if (!this.connectorId) {
-      throw new Error('Microsoft Teams connector ID is required to store imported documents');
+      throw new Error(
+        'Microsoft Teams connector ID is required to store imported documents',
+      );
     }
 
     const supabase = createClient();
 
     // Convert buffer to base64 if needed
     const content =
-      doc.content instanceof Buffer ? doc.content.toString('base64') : doc.content;
+      doc.content instanceof Buffer
+        ? doc.content.toString('base64')
+        : doc.content;
 
     // Generate content hash for deduplication
     const contentHash = createHash('sha256').update(content).digest('hex');
@@ -715,7 +783,7 @@ export class MicrosoftTeamsConnector implements Connector {
       },
       {
         onConflict: 'connector_id,external_id',
-      }
+      },
     );
 
     if (error) {
@@ -820,14 +888,19 @@ export class MicrosoftTeamsConnector implements Connector {
   /**
    * Get meeting by ID
    */
-  private async getMeetingById(meetingId: string): Promise<TeamsMeeting | null> {
+  private async getMeetingById(
+    meetingId: string,
+  ): Promise<TeamsMeeting | null> {
     try {
-      const response = await axios.get(`${GRAPH_API_BASE}/me/calendar/events/${meetingId}`, {
-        headers: { Authorization: `Bearer ${this.accessToken}` },
-        params: {
-          $select: 'id,subject,start,end,isOnlineMeeting,onlineMeeting',
+      const response = await axios.get(
+        `${GRAPH_API_BASE}/me/calendar/events/${meetingId}`,
+        {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+          params: {
+            $select: 'id,subject,start,end,isOnlineMeeting,onlineMeeting',
+          },
         },
-      });
+      );
 
       const event = response.data;
 
@@ -887,7 +960,10 @@ export class MicrosoftTeamsConnector implements Connector {
       if (axiosError.response?.data) {
         const data = axiosError.response.data as Record<string, unknown>;
         const nestedError = data.error;
-        if (this.isRecord(nestedError) && typeof nestedError.message === 'string') {
+        if (
+          this.isRecord(nestedError) &&
+          typeof nestedError.message === 'string'
+        ) {
           return nestedError.message;
         }
         if (typeof data.message === 'string') return data.message;

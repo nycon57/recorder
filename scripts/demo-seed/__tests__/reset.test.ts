@@ -209,10 +209,11 @@ describe('buildDeleteSteps', () => {
 
   test('every step has a non-empty WHERE clause', () => {
     for (const step of steps) {
-      expect(step.where.trim()).not.toBe('');
+      const trimmedWhere = step.where.trim();
+      expect(trimmedWhere).not.toBe('');
       // Must not be a trivially-unscoped clause like WHERE TRUE or WHERE 1=1
-      expect(step.where.trim().toUpperCase()).not.toBe('TRUE');
-      expect(step.where.trim()).not.toBe('1=1');
+      expect(trimmedWhere.toUpperCase()).not.toBe('TRUE');
+      expect(trimmedWhere).not.toBe('1=1');
     }
   });
 
@@ -287,16 +288,17 @@ describe('buildDeleteSteps', () => {
 
   test('each step scoped to metadata.seed or deterministic demo ID', () => {
     for (const step of steps) {
-      const isMetadataScoped = step.where.includes("metadata->>'seed'");
+      const whereIncludes = step.where.includes.bind(step.where);
+      const isMetadataScoped = whereIncludes("metadata->>'seed'");
       const isIdScoped =
-        step.where.includes('id = $') ||
-        step.where.includes('id = ANY') ||
-        step.where.includes('"organizationId" = $') ||
-        step.where.includes('"userId" = ANY') ||
-        step.where.includes('content_id = ANY') ||
-        step.where.includes('page_id = ANY') ||
-        step.where.includes('vendor_org_id') ||
-        step.where.includes('transcript_id');
+        whereIncludes('id = $') ||
+        whereIncludes('id = ANY') ||
+        whereIncludes('"organizationId" = $') ||
+        whereIncludes('"userId" = ANY') ||
+        whereIncludes('content_id = ANY') ||
+        whereIncludes('page_id = ANY') ||
+        whereIncludes('vendor_org_id') ||
+        whereIncludes('transcript_id');
       expect(isMetadataScoped || isIdScoped).toBe(true);
     }
   });
@@ -315,9 +317,15 @@ describe('buildDeleteSteps', () => {
     }, []);
     // Both org deletes must come after "user", "member", departments, white_label_configs
     const nonOrgTables = ['departments', '"user"', '"member"', 'white_label_configs'];
+    const firstIndexByTable = new Map<string, number>();
+    steps.forEach((step, index) => {
+      if (!firstIndexByTable.has(step.table)) {
+        firstIndexByTable.set(step.table, index);
+      }
+    });
     for (const orgIdx of orgIndices) {
       for (const t of nonOrgTables) {
-        const tIdx = steps.findIndex((s) => s.table === t);
+        const tIdx = firstIndexByTable.get(t) ?? -1;
         if (tIdx >= 0) {
           expect(tIdx).toBeLessThan(orgIdx);
         }

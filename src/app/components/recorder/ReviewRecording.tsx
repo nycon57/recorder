@@ -16,7 +16,7 @@ import { useFFmpeg } from '@/app/hooks/useFFmpeg';
 import { SaveRecordingModal } from '@/app/components/recorder/SaveRecordingModal';
 import { Button } from '@/app/components/ui/button';
 
-export function ReviewRecording() {
+function ReviewRecording() {
   const { recordingBlob, clearRecording } = useRecording();
   const { convertToMP4, isConverting, error: ffmpegError } = useFFmpeg();
   const [videoUrl, setVideoUrl] = useState<string>('');
@@ -104,7 +104,7 @@ export function ReviewRecording() {
       <div className="w-full space-y-4">
         {/* Video Preview */}
         {videoUrl && (
-          <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+          <div className="relative aspect-video bg-zinc-950 rounded-lg overflow-hidden">
             <video
               src={videoUrl}
               controls
@@ -143,7 +143,7 @@ export function ReviewRecording() {
               {isConverting ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Converting...
+                  Converting…
                 </>
               ) : (
                 <>

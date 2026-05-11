@@ -1,7 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { useQuery } from '@tanstack/react-query';
+
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Legend,
+  Tooltip,
+} from '@/app/components/analytics/dynamic-recharts';
 
 interface SearchTypesChartProps {
   timeRange: string;
@@ -22,53 +30,46 @@ const COLORS = [
   'hsl(var(--chart-5))',
 ];
 
+const CustomTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
+        <p className="font-medium">{payload[0].name}</p>
+        <p className="text-sm text-muted-foreground">
+          {payload[0].value} searches ({payload[0].payload.percentage}%)
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function SearchTypesChart({ timeRange }: SearchTypesChartProps) {
-  const [data, setData] = useState<ChartDataPoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data = [],
+    isLoading,
+    error,
+  } = useQuery<ChartDataPoint[], Error>({
+    queryKey: ['analytics', 'user', 'charts', 'types', timeRange],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        `/api/analytics/user/charts/types?timeRange=${timeRange}`,
+        { signal },
+      );
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(
-          `/api/analytics/user/charts/types?timeRange=${timeRange}`,
-          { signal: controller.signal }
-        );
-        if (!response.ok) {
-          setError('Failed to load search types data');
-          return;
-        }
-        const result = await response.json();
-        setData(result.data || []);
-      } catch (err) {
-        // Don't update state if request was aborted
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-        console.error('Error fetching chart data:', err);
-        setError('An error occurred while loading data');
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
+      if (!response.ok) {
+        throw new Error('Failed to load search types data');
       }
-    };
 
-    fetchData();
+      const result = await response.json();
+      return result.data || [];
+    },
+  });
 
-    return () => {
-      controller.abort();
-    };
-  }, [timeRange]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="h-[300px] w-full flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="size-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -76,7 +77,7 @@ export default function SearchTypesChart({ timeRange }: SearchTypesChartProps) {
   if (error) {
     return (
       <div className="h-[300px] w-full flex items-center justify-center">
-        <p className="text-sm text-destructive">{error}</p>
+        <p className="text-sm text-destructive">{error.message}</p>
       </div>
     );
   }
@@ -89,22 +90,6 @@ export default function SearchTypesChart({ timeRange }: SearchTypesChartProps) {
     );
   }
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div
-          className="bg-card border border-border rounded-lg p-3 shadow-lg"
-        >
-          <p className="font-medium">{payload[0].name}</p>
-          <p className="text-sm text-muted-foreground">
-            {payload[0].value} searches ({payload[0].payload.percentage}%)
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
   return (
     <ResponsiveContainer width="100%" height={300}>
       <PieChart>
@@ -113,20 +98,23 @@ export default function SearchTypesChart({ timeRange }: SearchTypesChartProps) {
           cx="50%"
           cy="50%"
           labelLine={false}
-          label={({ name, percentage }) => `${name}: ${percentage}%`}
+          label={({
+            name,
+            percentage,
+          }: {
+            name: string;
+            percentage: number;
+          }) => `${name}: ${percentage}%`}
           outerRadius={80}
           fill="#8884d8"
           dataKey="value"
         >
           {data.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
           ))}
         </Pie>
         <Tooltip content={<CustomTooltip />} />
-        <Legend
-          wrapperStyle={{ fontSize: '12px' }}
-          iconType="circle"
-        />
+        <Legend wrapperStyle={{ fontSize: '12px' }} iconType="circle" />
       </PieChart>
     </ResponsiveContainer>
   );

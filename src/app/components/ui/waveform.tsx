@@ -1,36 +1,40 @@
-"use client"
+'use client';
 
 /* global AnalyserNode, AudioBuffer, AudioBufferSourceNode, AudioContext, HTMLCanvasElement, MediaRecorder, MediaStream, MouseEvent */
 
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type HTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type MutableRefObject,
-} from "react"
+} from 'react';
 
-import { cn } from "@/lib/utils"
+import { cn } from '@/lib/utils';
 
 export type WaveformProps = HTMLAttributes<HTMLDivElement> & {
-  data?: number[]
-  barWidth?: number
-  barGap?: number
-  barRadius?: number
-  barColor?: string
-  fadeEdges?: boolean
-  fadeWidth?: number
-  height?: string | number
-  active?: boolean
-  onBarClick?: (index: number, value: number) => void
-}
+  data?: number[];
+  barWidth?: number;
+  barGap?: number;
+  barRadius?: number;
+  barColor?: string;
+  fadeEdges?: boolean;
+  fadeWidth?: number;
+  height?: string | number;
+  active?: boolean;
+  onBarClick?: (index: number, value: number) => void;
+};
+
+const EMPTY_WAVEFORM_DATA: number[] = [];
 
 export const Waveform = ({
-  data = [],
+  data = EMPTY_WAVEFORM_DATA,
   barWidth = 4,
   barGap = 2,
   barRadius = 2,
@@ -42,132 +46,131 @@ export const Waveform = ({
   className,
   ...props
 }: WaveformProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const heightStyle = typeof height === "number" ? `${height}px` : height
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const heightStyle = typeof height === 'number' ? `${height}px` : height;
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container) return
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
 
     const resizeObserver = new ResizeObserver(() => {
-      const rect = container.getBoundingClientRect()
-      const dpr = window.devicePixelRatio || 1
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
 
-      canvas.width = rect.width * dpr
-      canvas.height = rect.height * dpr
-      canvas.style.width = `${rect.width}px`
-      canvas.style.height = `${rect.height}px`
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      Object.assign(canvas.style, {
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+      });
 
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.scale(dpr, dpr)
-        renderWaveform()
+        ctx.scale(dpr, dpr);
+        renderWaveform();
       }
-    })
+    });
 
     const renderWaveform = () => {
-      const ctx = canvas.getContext("2d")
-      if (!ctx) return
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-      const rect = canvas.getBoundingClientRect()
-      ctx.clearRect(0, 0, rect.width, rect.height)
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
 
       const computedBarColor =
         barColor ||
-        getComputedStyle(canvas).getPropertyValue("--foreground") ||
-        "#000"
+        getComputedStyle(canvas).getPropertyValue('--foreground') ||
+        '#000';
 
-      const barCount = Math.floor(rect.width / (barWidth + barGap))
-      const centerY = rect.height / 2
+      const barCount = Math.floor(rect.width / (barWidth + barGap));
+      const centerY = rect.height / 2;
 
       for (let i = 0; i < barCount; i++) {
-        const dataIndex = Math.floor((i / barCount) * data.length)
-        const value = data[dataIndex] || 0
-        const barHeight = Math.max(4, value * rect.height * 0.8)
-        const x = i * (barWidth + barGap)
-        const y = centerY - barHeight / 2
+        const dataIndex = Math.floor((i / barCount) * data.length);
+        const value = data[dataIndex] || 0;
+        const barHeight = Math.max(4, value * rect.height * 0.8);
+        const x = i * (barWidth + barGap);
+        const y = centerY - barHeight / 2;
 
-        ctx.fillStyle = computedBarColor
-        ctx.globalAlpha = 0.3 + value * 0.7
+        ctx.fillStyle = computedBarColor;
+        ctx.globalAlpha = 0.3 + value * 0.7;
 
         if (barRadius > 0) {
-          ctx.beginPath()
-          ctx.roundRect(x, y, barWidth, barHeight, barRadius)
-          ctx.fill()
+          ctx.beginPath();
+          ctx.roundRect(x, y, barWidth, barHeight, barRadius);
+          ctx.fill();
         } else {
-          ctx.fillRect(x, y, barWidth, barHeight)
+          ctx.fillRect(x, y, barWidth, barHeight);
         }
       }
 
       if (fadeEdges && fadeWidth > 0 && rect.width > 0) {
-        const gradient = ctx.createLinearGradient(0, 0, rect.width, 0)
-        const fadePercent = Math.min(0.2, fadeWidth / rect.width)
+        const gradient = ctx.createLinearGradient(0, 0, rect.width, 0);
+        const fadePercent = Math.min(0.2, fadeWidth / rect.width);
 
-        gradient.addColorStop(0, "rgba(255,255,255,1)")
-        gradient.addColorStop(fadePercent, "rgba(255,255,255,0)")
-        gradient.addColorStop(1 - fadePercent, "rgba(255,255,255,0)")
-        gradient.addColorStop(1, "rgba(255,255,255,1)")
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(fadePercent, 'rgba(255,255,255,0)');
+        gradient.addColorStop(1 - fadePercent, 'rgba(255,255,255,0)');
+        gradient.addColorStop(1, 'rgba(255,255,255,1)');
 
-        ctx.globalCompositeOperation = "destination-out"
-        ctx.fillStyle = gradient
-        ctx.fillRect(0, 0, rect.width, rect.height)
-        ctx.globalCompositeOperation = "source-over"
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, rect.width, rect.height);
+        ctx.globalCompositeOperation = 'source-over';
       }
 
-      ctx.globalAlpha = 1
-    }
+      ctx.globalAlpha = 1;
+    };
 
-    resizeObserver.observe(container)
-    renderWaveform()
+    resizeObserver.observe(container);
+    renderWaveform();
 
-    return () => resizeObserver.disconnect()
-  }, [data, barWidth, barGap, barRadius, barColor, fadeEdges, fadeWidth])
+    return () => resizeObserver.disconnect();
+  }, [data, barWidth, barGap, barRadius, barColor, fadeEdges, fadeWidth]);
 
-  const handleClick = (e: ReactMouseEvent<HTMLCanvasElement>) => {
-    if (!onBarClick) return
+  const handleWaveformClick = (e: ReactMouseEvent<HTMLCanvasElement>) => {
+    if (!onBarClick) return;
 
-    const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect) return
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
-    const x = e.clientX - rect.left
-    const barIndex = Math.floor(x / (barWidth + barGap))
+    const x = e.clientX - rect.left;
+    const barIndex = Math.floor(x / (barWidth + barGap));
     const dataIndex = Math.floor(
-      (barIndex * data.length) / Math.floor(rect.width / (barWidth + barGap))
-    )
+      (barIndex * data.length) / Math.floor(rect.width / (barWidth + barGap)),
+    );
 
     if (dataIndex >= 0 && dataIndex < data.length) {
-      onBarClick(dataIndex, data[dataIndex])
+      onBarClick(dataIndex, data[dataIndex]);
     }
-  }
+  };
 
   return (
     <div
-      className={cn("relative", className)}
+      className={cn('relative', className)}
       ref={containerRef}
       style={{ height: heightStyle }}
       {...props}
     >
       <canvas
-        className="block h-full w-full"
-        onClick={handleClick}
+        className="block size-full"
+        onClick={handleWaveformClick}
         ref={canvasRef}
       />
     </div>
-  )
-}
+  );
+};
 
-export type ScrollingWaveformProps = Omit<
-  WaveformProps,
-  "data" | "onBarClick"
-> & {
-  speed?: number
-  barCount?: number
-  data?: number[]
-}
+type ScrollingWaveformProps = Omit<WaveformProps, 'data' | 'onBarClick'> & {
+  speed?: number;
+  barCount?: number;
+  data?: number[];
+};
 
-export const ScrollingWaveform = ({
+const ScrollingWaveform = ({
   speed = 50,
   barCount = 60,
   barWidth = 4,
@@ -181,166 +184,168 @@ export const ScrollingWaveform = ({
   className,
   ...props
 }: ScrollingWaveformProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const barsRef = useRef<Array<{ x: number; height: number }>>([])
-  const animationRef = useRef<number>(0)
-  const lastTimeRef = useRef<number>(0)
-  const seedRef = useRef(0.5)
-  const dataIndexRef = useRef(0)
-  const heightStyle = typeof height === "number" ? `${height}px` : height
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const barsRef = useRef<Array<{ x: number; height: number }>>([]);
+  const animationRef = useRef<number>(0);
+  const lastTimeRef = useRef<number>(0);
+  const seedRef = useRef(0.5);
+  const dataIndexRef = useRef(0);
+  const heightStyle = typeof height === 'number' ? `${height}px` : height;
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container) return
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
 
     const resizeObserver = new ResizeObserver(() => {
-      const rect = container.getBoundingClientRect()
-      const dpr = window.devicePixelRatio || 1
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
 
-      canvas.width = rect.width * dpr
-      canvas.height = rect.height * dpr
-      canvas.style.width = `${rect.width}px`
-      canvas.style.height = `${rect.height}px`
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      Object.assign(canvas.style, {
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+      });
 
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.scale(dpr, dpr)
+        ctx.scale(dpr, dpr);
       }
 
       if (barsRef.current.length === 0) {
-        const step = barWidth + barGap
-        let currentX = rect.width
-        let index = 0
+        const step = barWidth + barGap;
+        let currentX = rect.width;
+        let index = 0;
         const seededRandom = (i: number) => {
-          const x = Math.sin(seedRef.current * 10000 + i) * 10000
-          return x - Math.floor(x)
-        }
+          const x = Math.sin(seedRef.current * 10000 + i) * 10000;
+          return x - Math.floor(x);
+        };
         while (currentX > -step) {
           barsRef.current.push({
             x: currentX,
             height: 0.2 + seededRandom(index++) * 0.6,
-          })
-          currentX -= step
+          });
+          currentX -= step;
         }
       }
-    })
+    });
 
-    resizeObserver.observe(container)
-    return () => resizeObserver.disconnect()
-  }, [barWidth, barGap])
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [barWidth, barGap]);
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
     const animate = (currentTime: number) => {
       const deltaTime = lastTimeRef.current
         ? (currentTime - lastTimeRef.current) / 1000
-        : 0
-      lastTimeRef.current = currentTime
+        : 0;
+      lastTimeRef.current = currentTime;
 
-      const rect = canvas.getBoundingClientRect()
-      ctx.clearRect(0, 0, rect.width, rect.height)
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
 
       const computedBarColor =
         barColor ||
-        getComputedStyle(canvas).getPropertyValue("--foreground") ||
-        "#000"
+        getComputedStyle(canvas).getPropertyValue('--foreground') ||
+        '#000';
 
-      const step = barWidth + barGap
-      for (let i = 0; i < barsRef.current.length; i++) {
-        barsRef.current[i].x -= speed * deltaTime
+      const step = barWidth + barGap;
+      const currentBars = barsRef.current;
+      for (let i = 0; i < currentBars.length; i++) {
+        currentBars[i].x -= speed * deltaTime;
       }
 
-      barsRef.current = barsRef.current.filter(
-        (bar) => bar.x + barWidth > -step
-      )
+      const visibleBars = currentBars.filter((bar) => bar.x + barWidth > -step);
+      barsRef.current = visibleBars;
 
       while (
-        barsRef.current.length === 0 ||
-        barsRef.current[barsRef.current.length - 1].x < rect.width
+        visibleBars.length === 0 ||
+        visibleBars[visibleBars.length - 1].x < rect.width
       ) {
-        const lastBar = barsRef.current[barsRef.current.length - 1]
-        const nextX = lastBar ? lastBar.x + step : rect.width
+        const lastBar = visibleBars[visibleBars.length - 1];
+        const nextX = lastBar ? lastBar.x + step : rect.width;
 
-        let newHeight: number
+        let newHeight: number;
         if (data && data.length > 0) {
-          newHeight = data[dataIndexRef.current % data.length] || 0.1
-          dataIndexRef.current = (dataIndexRef.current + 1) % data.length
+          newHeight = data[dataIndexRef.current % data.length] || 0.1;
+          dataIndexRef.current = (dataIndexRef.current + 1) % data.length;
         } else {
-          const time = Date.now() / 1000
-          const uniqueIndex = barsRef.current.length + time * 0.01
+          const time = Date.now() / 1000;
+          const uniqueIndex = visibleBars.length + time * 0.01;
           const seededRandom = (index: number) => {
-            const x = Math.sin(seedRef.current * 10000 + index * 137.5) * 10000
-            return x - Math.floor(x)
-          }
-          const wave1 = Math.sin(uniqueIndex * 0.1) * 0.2
-          const wave2 = Math.cos(uniqueIndex * 0.05) * 0.15
-          const randomComponent = seededRandom(uniqueIndex) * 0.4
+            const x = Math.sin(seedRef.current * 10000 + index * 137.5) * 10000;
+            return x - Math.floor(x);
+          };
+          const wave1 = Math.sin(uniqueIndex * 0.1) * 0.2;
+          const wave2 = Math.cos(uniqueIndex * 0.05) * 0.15;
+          const randomComponent = seededRandom(uniqueIndex) * 0.4;
           newHeight = Math.max(
             0.1,
-            Math.min(0.9, 0.3 + wave1 + wave2 + randomComponent)
-          )
+            Math.min(0.9, 0.3 + wave1 + wave2 + randomComponent),
+          );
         }
 
-        barsRef.current.push({
+        visibleBars.push({
           x: nextX,
           height: newHeight,
-        })
-        if (barsRef.current.length > barCount * 2) break
+        });
+        if (visibleBars.length > barCount * 2) break;
       }
 
-      const centerY = rect.height / 2
-      for (const bar of barsRef.current) {
+      const centerY = rect.height / 2;
+      for (const bar of visibleBars) {
         if (bar.x < rect.width && bar.x + barWidth > 0) {
-          const barHeight = Math.max(4, bar.height * rect.height * 0.6)
-          const y = centerY - barHeight / 2
+          const barHeight = Math.max(4, bar.height * rect.height * 0.6);
+          const y = centerY - barHeight / 2;
 
-          ctx.fillStyle = computedBarColor
-          ctx.globalAlpha = 0.3 + bar.height * 0.7
+          ctx.fillStyle = computedBarColor;
+          ctx.globalAlpha = 0.3 + bar.height * 0.7;
 
           if (barRadius > 0) {
-            ctx.beginPath()
-            ctx.roundRect(bar.x, y, barWidth, barHeight, barRadius)
-            ctx.fill()
+            ctx.beginPath();
+            ctx.roundRect(bar.x, y, barWidth, barHeight, barRadius);
+            ctx.fill();
           } else {
-            ctx.fillRect(bar.x, y, barWidth, barHeight)
+            ctx.fillRect(bar.x, y, barWidth, barHeight);
           }
         }
       }
 
       if (fadeEdges && fadeWidth > 0) {
-        const gradient = ctx.createLinearGradient(0, 0, rect.width, 0)
-        const fadePercent = Math.min(0.2, fadeWidth / rect.width)
+        const gradient = ctx.createLinearGradient(0, 0, rect.width, 0);
+        const fadePercent = Math.min(0.2, fadeWidth / rect.width);
 
-        gradient.addColorStop(0, "rgba(255,255,255,1)")
-        gradient.addColorStop(fadePercent, "rgba(255,255,255,0)")
-        gradient.addColorStop(1 - fadePercent, "rgba(255,255,255,0)")
-        gradient.addColorStop(1, "rgba(255,255,255,1)")
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(fadePercent, 'rgba(255,255,255,0)');
+        gradient.addColorStop(1 - fadePercent, 'rgba(255,255,255,0)');
+        gradient.addColorStop(1, 'rgba(255,255,255,1)');
 
-        ctx.globalCompositeOperation = "destination-out"
-        ctx.fillStyle = gradient
-        ctx.fillRect(0, 0, rect.width, rect.height)
-        ctx.globalCompositeOperation = "source-over"
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, rect.width, rect.height);
+        ctx.globalCompositeOperation = 'source-over';
       }
 
-      ctx.globalAlpha = 1
+      ctx.globalAlpha = 1;
 
-      animationRef.current = requestAnimationFrame(animate)
-    }
+      animationRef.current = requestAnimationFrame(animate);
+    };
 
-    animationRef.current = requestAnimationFrame(animate)
+    animationRef.current = requestAnimationFrame(animate);
 
     return () => {
       if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
+        cancelAnimationFrame(animationRef.current);
       }
-    }
+    };
   }, [
     speed,
     barCount,
@@ -351,29 +356,29 @@ export const ScrollingWaveform = ({
     fadeEdges,
     fadeWidth,
     data,
-  ])
+  ]);
 
   return (
     <div
-      className={cn("relative flex items-center", className)}
+      className={cn('relative flex items-center', className)}
       ref={containerRef}
       style={{ height: heightStyle }}
       {...props}
     >
-      <canvas className="block h-full w-full" ref={canvasRef} />
+      <canvas className="block size-full" ref={canvasRef} />
     </div>
-  )
-}
+  );
+};
 
 export type AudioScrubberProps = WaveformProps & {
-  currentTime?: number
-  duration?: number
-  onSeek?: (time: number) => void
-  showHandle?: boolean
-}
+  currentTime?: number;
+  duration?: number;
+  onSeek?: (time: number) => void;
+  showHandle?: boolean;
+};
 
 export const AudioScrubber = ({
-  data = [],
+  data = EMPTY_WAVEFORM_DATA,
   currentTime = 0,
   duration = 100,
   onSeek,
@@ -386,9 +391,9 @@ export const AudioScrubber = ({
   className,
   ...props
 }: AudioScrubberProps) => {
-  const [isDragging, setIsDragging] = useState(false)
-  const [localProgress, setLocalProgress] = useState(0)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [isDragging, setIsDragging] = useState(false);
+  const [localProgress, setLocalProgress] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const waveformData = useMemo(
     () =>
@@ -396,35 +401,36 @@ export const AudioScrubber = ({
         ? data
         : Array.from(
             { length: 100 },
-            (_, index) => 0.5 + Math.sin(index * 1.618) * 0.3
+            (_, index) => 0.5 + Math.sin(index * 1.618) * 0.3,
           ),
-    [data]
-  )
+    [data],
+  );
 
-  const syncedProgress = duration > 0 ? currentTime / duration : 0
-  const displayProgress = isDragging ? localProgress : syncedProgress
+  const syncedProgress = duration > 0 ? currentTime / duration : 0;
+  const displayProgress = isDragging ? localProgress : syncedProgress;
 
   const handleScrub = useCallback(
     (clientX: number) => {
-      const container = containerRef.current
-      if (!container) return
+      const container = containerRef.current;
+      if (!container) return;
 
-      const rect = container.getBoundingClientRect()
-      const x = Math.max(0, Math.min(clientX - rect.left, rect.width))
-      const progress = x / rect.width
-      const newTime = progress * duration
+      const rect = container.getBoundingClientRect();
+      const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+      const progress = x / rect.width;
+      const newTime = progress * duration;
 
-      setLocalProgress(progress)
-      onSeek?.(newTime)
+      setLocalProgress(progress);
+      onSeek?.(newTime);
     },
-    [duration, onSeek]
-  )
+    [duration, onSeek],
+  );
+  const handleScrubEvent = useEffectEvent(handleScrub);
 
   const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragging(true)
-    handleScrub(e.clientX)
-  }
+    e.preventDefault();
+    setIsDragging(true);
+    handleScrub(e.clientX);
+  };
 
   /**
    * ACCESSIBILITY: Keyboard handler for arrow key navigation
@@ -436,58 +442,58 @@ export const AudioScrubber = ({
    */
   const handleKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (!onSeek || duration <= 0) return
+      if (!onSeek || duration <= 0) return;
 
-      const SEEK_STEP = 5 // seconds
-      let newTime = currentTime
+      const SEEK_STEP = 5; // seconds
+      let newTime = currentTime;
 
       switch (e.key) {
-        case "ArrowLeft":
-          e.preventDefault()
-          newTime = Math.max(0, currentTime - SEEK_STEP)
-          break
-        case "ArrowRight":
-          e.preventDefault()
-          newTime = Math.min(duration, currentTime + SEEK_STEP)
-          break
-        case "Home":
-          e.preventDefault()
-          newTime = 0
-          break
-        case "End":
-          e.preventDefault()
-          newTime = duration
-          break
+        case 'ArrowLeft':
+          e.preventDefault();
+          newTime = Math.max(0, currentTime - SEEK_STEP);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          newTime = Math.min(duration, currentTime + SEEK_STEP);
+          break;
+        case 'Home':
+          e.preventDefault();
+          newTime = 0;
+          break;
+        case 'End':
+          e.preventDefault();
+          newTime = duration;
+          break;
         default:
-          return // Don't call onSeek for other keys
+          return; // Don't call onSeek for other keys
       }
 
-      onSeek(newTime)
+      onSeek(newTime);
     },
-    [currentTime, duration, onSeek]
-  )
+    [currentTime, duration, onSeek],
+  );
 
   useEffect(() => {
-    if (!isDragging) return
+    if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      handleScrub(e.clientX)
-    }
+      handleScrubEvent(e.clientX);
+    };
 
     const handleMouseUp = () => {
-      setIsDragging(false)
-    }
+      setIsDragging(false);
+    };
 
-    document.addEventListener("mousemove", handleMouseMove)
-    document.addEventListener("mouseup", handleMouseUp)
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseup", handleMouseUp)
-    }
-  }, [isDragging, duration, handleScrub])
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
 
-  const heightStyle = typeof height === "number" ? `${height}px` : height
+  const heightStyle = typeof height === 'number' ? `${height}px` : height;
 
   return (
     <div
@@ -496,7 +502,7 @@ export const AudioScrubber = ({
       aria-valuemin={0}
       aria-valuenow={currentTime}
       aria-valuetext={`${Math.floor(currentTime)} of ${Math.floor(duration)} seconds`}
-      className={cn("relative cursor-pointer select-none", className)}
+      className={cn('relative cursor-pointer select-none', className)}
       onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
       ref={containerRef}
@@ -526,24 +532,24 @@ export const AudioScrubber = ({
 
       {showHandle && (
         <div
-          className="border-background bg-primary pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-lg transition-transform hover:scale-110"
+          className="border-background bg-primary pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-lg transition-transform hover:scale-110"
           style={{ left: `${displayProgress * 100}%` }}
         />
       )}
     </div>
-  )
-}
+  );
+};
 
-export type MicrophoneWaveformProps = WaveformProps & {
-  active?: boolean
-  processing?: boolean
-  fftSize?: number
-  smoothingTimeConstant?: number
-  sensitivity?: number
-  onError?: (error: Error) => void
-}
+type MicrophoneWaveformProps = WaveformProps & {
+  active?: boolean;
+  processing?: boolean;
+  fftSize?: number;
+  smoothingTimeConstant?: number;
+  sensitivity?: number;
+  onError?: (error: Error) => void;
+};
 
-export const MicrophoneWaveform = ({
+const MicrophoneWaveform = ({
   active = false,
   processing = false,
   fftSize = 256,
@@ -552,224 +558,224 @@ export const MicrophoneWaveform = ({
   onError,
   ...props
 }: MicrophoneWaveformProps) => {
-  const [data, setData] = useState<number[]>([])
-  const analyserRef = useRef<AnalyserNode | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const animationIdRef = useRef<number | null>(null)
-  const processingAnimationRef = useRef<number | null>(null)
-  const lastActiveDataRef = useRef<number[]>([])
-  const transitionProgressRef = useRef(0)
+  const [data, dispatchData] = useReducer(
+    (_current: number[], nextData: number[]) => nextData,
+    [],
+  );
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animationIdRef = useRef<number | null>(null);
+  const processingAnimationRef = useRef<number | null>(null);
+  const lastActiveDataRef = useRef<number[]>([]);
+  const transitionProgressRef = useRef(0);
 
   useEffect(() => {
     if (processing && !active) {
-      let time = 0
-      transitionProgressRef.current = 0
+      let time = 0;
+      transitionProgressRef.current = 0;
 
       const animateProcessing = () => {
-        time += 0.03
+        time += 0.03;
         transitionProgressRef.current = Math.min(
           1,
-          transitionProgressRef.current + 0.02
-        )
+          transitionProgressRef.current + 0.02,
+        );
 
-        const processingData = []
-        const barCount = 45
+        const processingData = [];
+        const barCount = 45;
 
         for (let i = 0; i < barCount; i++) {
-          const normalizedPosition = (i - barCount / 2) / (barCount / 2)
-          const centerWeight = 1 - Math.abs(normalizedPosition) * 0.4
+          const normalizedPosition = (i - barCount / 2) / (barCount / 2);
+          const centerWeight = 1 - Math.abs(normalizedPosition) * 0.4;
 
-          const wave1 = Math.sin(time * 1.5 + i * 0.15) * 0.25
-          const wave2 = Math.sin(time * 0.8 - i * 0.1) * 0.2
-          const wave3 = Math.cos(time * 2 + i * 0.05) * 0.15
-          const combinedWave = wave1 + wave2 + wave3
-          const processingValue = (0.2 + combinedWave) * centerWeight
+          const wave1 = Math.sin(time * 1.5 + i * 0.15) * 0.25;
+          const wave2 = Math.sin(time * 0.8 - i * 0.1) * 0.2;
+          const wave3 = Math.cos(time * 2 + i * 0.05) * 0.15;
+          const combinedWave = wave1 + wave2 + wave3;
+          const processingValue = (0.2 + combinedWave) * centerWeight;
 
-          let finalValue = processingValue
+          let finalValue = processingValue;
           if (
             lastActiveDataRef.current.length > 0 &&
             transitionProgressRef.current < 1
           ) {
             const lastDataIndex = Math.floor(
-              (i / barCount) * lastActiveDataRef.current.length
-            )
-            const lastValue = lastActiveDataRef.current[lastDataIndex] || 0
+              (i / barCount) * lastActiveDataRef.current.length,
+            );
+            const lastValue = lastActiveDataRef.current[lastDataIndex] || 0;
             finalValue =
               lastValue * (1 - transitionProgressRef.current) +
-              processingValue * transitionProgressRef.current
+              processingValue * transitionProgressRef.current;
           }
 
-          processingData.push(Math.max(0.05, Math.min(1, finalValue)))
+          processingData.push(Math.max(0.05, Math.min(1, finalValue)));
         }
 
-        setData(processingData)
+        dispatchData(processingData);
         processingAnimationRef.current =
-          requestAnimationFrame(animateProcessing)
-      }
+          requestAnimationFrame(animateProcessing);
+      };
 
-      animateProcessing()
+      animateProcessing();
 
       return () => {
         if (processingAnimationRef.current) {
-          cancelAnimationFrame(processingAnimationRef.current)
+          cancelAnimationFrame(processingAnimationRef.current);
         }
-      }
+      };
     } else if (!active && !processing) {
       if (data.length > 0) {
-        let fadeProgress = 0
+        let fadeProgress = 0;
         const fadeToIdle = () => {
-          fadeProgress += 0.03
+          fadeProgress += 0.03;
           if (fadeProgress < 1) {
-            const fadedData = data.map((value) => value * (1 - fadeProgress))
-            setData(fadedData)
-            requestAnimationFrame(fadeToIdle)
+            const fadedData = data.map((value) => value * (1 - fadeProgress));
+            dispatchData(fadedData);
+            requestAnimationFrame(fadeToIdle);
           } else {
-            setData([])
+            dispatchData([]);
           }
-        }
-        fadeToIdle()
+        };
+        fadeToIdle();
       }
-      return
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- Including animated data restarts the fade loop on every frame.
-  }, [processing, active])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Including animated data restarts the fade loop on every frame.
+  }, [processing, active]);
 
   useEffect(() => {
     if (!active) {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (
         audioContextRef.current &&
-        audioContextRef.current.state !== "closed"
+        audioContextRef.current.state !== 'closed'
       ) {
-        audioContextRef.current.close()
+        audioContextRef.current.close();
       }
       if (animationIdRef.current) {
-        cancelAnimationFrame(animationIdRef.current)
+        cancelAnimationFrame(animationIdRef.current);
       }
-      return
+      return;
     }
 
     const setupMicrophone = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
-        })
-        streamRef.current = stream
+        });
+        streamRef.current = stream;
 
         const audioContext = new (window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext })
-            .webkitAudioContext)()
-        const analyser = audioContext.createAnalyser()
-        analyser.fftSize = fftSize
-        analyser.smoothingTimeConstant = smoothingTimeConstant
+            .webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = fftSize;
+        analyser.smoothingTimeConstant = smoothingTimeConstant;
 
-        const source = audioContext.createMediaStreamSource(stream)
-        source.connect(analyser)
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
 
-        audioContextRef.current = audioContext
-        analyserRef.current = analyser
+        audioContextRef.current = audioContext;
+        analyserRef.current = analyser;
 
-        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
         const updateData = () => {
-          if (!analyserRef.current || !active) return
+          if (!analyserRef.current || !active) return;
 
-          analyserRef.current.getByteFrequencyData(dataArray)
+          analyserRef.current.getByteFrequencyData(dataArray);
 
-          const startFreq = Math.floor(dataArray.length * 0.05)
-          const endFreq = Math.floor(dataArray.length * 0.4)
-          const relevantData = dataArray.slice(startFreq, endFreq)
+          const startFreq = Math.floor(dataArray.length * 0.05);
+          const endFreq = Math.floor(dataArray.length * 0.4);
+          const relevantData = dataArray.slice(startFreq, endFreq);
 
-          const halfLength = Math.floor(relevantData.length / 2)
-          const normalizedData = []
+          const halfLength = Math.floor(relevantData.length / 2);
+          const normalizedData = [];
 
           for (let i = halfLength - 1; i >= 0; i--) {
-            const value = Math.min(1, (relevantData[i] / 255) * sensitivity)
-            normalizedData.push(value)
+            const value = Math.min(1, (relevantData[i] / 255) * sensitivity);
+            normalizedData.push(value);
           }
 
           for (let i = 0; i < halfLength; i++) {
-            const value = Math.min(1, (relevantData[i] / 255) * sensitivity)
-            normalizedData.push(value)
+            const value = Math.min(1, (relevantData[i] / 255) * sensitivity);
+            normalizedData.push(value);
           }
 
-          setData(normalizedData)
-          lastActiveDataRef.current = normalizedData
+          dispatchData(normalizedData);
+          lastActiveDataRef.current = normalizedData;
 
-          animationIdRef.current = requestAnimationFrame(updateData)
-        }
+          animationIdRef.current = requestAnimationFrame(updateData);
+        };
 
-        updateData()
+        updateData();
       } catch (error) {
-        onError?.(error as Error)
+        onError?.(error as Error);
       }
-    }
+    };
 
-    setupMicrophone()
+    setupMicrophone();
 
     return () => {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (
         audioContextRef.current &&
-        audioContextRef.current.state !== "closed"
+        audioContextRef.current.state !== 'closed'
       ) {
-        audioContextRef.current.close()
+        audioContextRef.current.close();
       }
       if (animationIdRef.current) {
-        cancelAnimationFrame(animationIdRef.current)
+        cancelAnimationFrame(animationIdRef.current);
       }
-    }
-  }, [active, fftSize, smoothingTimeConstant, sensitivity, onError])
+    };
+  }, [active, fftSize, smoothingTimeConstant, sensitivity, onError]);
 
-  return <Waveform data={data} {...props} />
-}
+  return <Waveform data={data} {...props} />;
+};
 
-export type StaticWaveformProps = WaveformProps & {
-  bars?: number
-  seed?: number
-}
+type StaticWaveformProps = WaveformProps & {
+  bars?: number;
+  seed?: number;
+};
 
-export const StaticWaveform = ({
+const StaticWaveform = ({
   bars = 40,
   seed = 42,
   ...props
 }: StaticWaveformProps) => {
   const data = useMemo(() => {
     const random = (seedValue: number) => {
-      const x = Math.sin(seedValue) * 10000
-      return x - Math.floor(x)
-    }
+      const x = Math.sin(seedValue) * 10000;
+      return x - Math.floor(x);
+    };
 
-    return Array.from({ length: bars }, (_, i) => 0.2 + random(seed + i) * 0.6)
-  }, [bars, seed])
+    return Array.from({ length: bars }, (_, i) => 0.2 + random(seed + i) * 0.6);
+  }, [bars, seed]);
 
-  return <Waveform data={data} {...props} />
-}
+  return <Waveform data={data} {...props} />;
+};
 
-export type LiveMicrophoneWaveformProps = Omit<
-  ScrollingWaveformProps,
-  "barCount"
-> & {
-  active?: boolean
-  fftSize?: number
-  smoothingTimeConstant?: number
-  sensitivity?: number
-  onError?: (error: Error) => void
-  historySize?: number
-  updateRate?: number
-  savedHistoryRef?: MutableRefObject<number[]>
-  dragOffset?: number
-  setDragOffset?: (offset: number) => void
-  enableAudioPlayback?: boolean
-  playbackRate?: number
-}
+type LiveMicrophoneWaveformProps = Omit<ScrollingWaveformProps, 'barCount'> & {
+  active?: boolean;
+  fftSize?: number;
+  smoothingTimeConstant?: number;
+  sensitivity?: number;
+  onError?: (error: Error) => void;
+  historySize?: number;
+  updateRate?: number;
+  savedHistoryRef?: MutableRefObject<number[]>;
+  dragOffset?: number;
+  setDragOffset?: (offset: number) => void;
+  enableAudioPlayback?: boolean;
+  playbackRate?: number;
+};
 
-export const LiveMicrophoneWaveform = ({
+const useLiveMicrophoneWaveformImplementation = ({
   active = false,
   fftSize = 256,
   smoothingTimeConstant = 0.8,
@@ -792,165 +798,173 @@ export const LiveMicrophoneWaveform = ({
   playbackRate = 1,
   ...props
 }: LiveMicrophoneWaveformProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const internalHistoryRef = useRef<number[]>([])
-  const historyRef = savedHistoryRef || internalHistoryRef
-  const analyserRef = useRef<AnalyserNode | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const animationRef = useRef<number>(0)
-  const lastUpdateRef = useRef<number>(0)
-  const [internalDragOffset, setInternalDragOffset] = useState(0)
-  const [isDragging, setIsDragging] = useState(false)
-  const [playbackPosition, setPlaybackPosition] = useState<number | null>(null)
-  const dragStartXRef = useRef<number>(0)
-  const dragStartOffsetRef = useRef<number>(0)
-  const playbackStartTimeRef = useRef<number>(0)
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const internalHistoryRef = useRef<number[]>([]);
+  const historyRef = savedHistoryRef || internalHistoryRef;
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animationRef = useRef<number>(0);
+  const lastUpdateRef = useRef<number>(0);
+  const [internalDragOffset, setInternalDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useReducer(
+    (_state: boolean, nextState: boolean) => nextState,
+    false,
+  );
+  const [playbackPosition, setPlaybackPosition] = useReducer(
+    (_state: number | null, nextState: number | null) => nextState,
+    null,
+  );
+  const dragStartXRef = useRef<number>(0);
+  const dragStartOffsetRef = useRef<number>(0);
+  const playbackStartTimeRef = useRef<number>(0);
 
   // Audio recording and playback refs
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
-  const audioBufferRef = useRef<AudioBuffer | null>(null)
-  const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null)
-  const scrubSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
+  const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const scrubSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   // Use external drag state if provided, otherwise use internal
-  const dragOffset = externalDragOffset ?? internalDragOffset
-  const setDragOffset = externalSetDragOffset ?? setInternalDragOffset
+  const dragOffset = externalDragOffset ?? internalDragOffset;
+  const updateDragOffset = externalSetDragOffset ?? setInternalDragOffset;
 
-  const heightStyle = typeof height === "number" ? `${height}px` : height
+  const heightStyle = typeof height === 'number' ? `${height}px` : height;
 
   const processAudioBlob = useCallback(async (blob: Blob) => {
     try {
-      const arrayBuffer = await blob.arrayBuffer()
+      const arrayBuffer = await blob.arrayBuffer();
       if (audioContextRef.current) {
         const audioBuffer =
-          await audioContextRef.current.decodeAudioData(arrayBuffer)
-        audioBufferRef.current = audioBuffer
+          await audioContextRef.current.decodeAudioData(arrayBuffer);
+        audioBufferRef.current = audioBuffer;
       }
     } catch (error) {
-      console.error("Error processing audio:", error)
+      console.error('Error processing audio:', error);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container) return
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
 
     const resizeObserver = new ResizeObserver(() => {
-      const rect = container.getBoundingClientRect()
-      const dpr = window.devicePixelRatio || 1
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
 
-      canvas.width = rect.width * dpr
-      canvas.height = rect.height * dpr
-      canvas.style.width = `${rect.width}px`
-      canvas.style.height = `${rect.height}px`
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      Object.assign(canvas.style, {
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+      });
 
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.scale(dpr, dpr)
+        ctx.scale(dpr, dpr);
       }
-    })
+    });
 
-    resizeObserver.observe(container)
-    return () => resizeObserver.disconnect()
-  }, [])
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!active) {
       if (
         mediaRecorderRef.current &&
-        mediaRecorderRef.current.state !== "inactive"
+        mediaRecorderRef.current.state !== 'inactive'
       ) {
-        mediaRecorderRef.current.stop()
+        mediaRecorderRef.current.stop();
       }
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
       // Process recorded audio when stopping
       if (enableAudioPlayback && audioChunksRef.current.length > 0) {
         const audioBlob = new Blob(audioChunksRef.current, {
-          type: "audio/webm",
-        })
-        processAudioBlob(audioBlob)
+          type: 'audio/webm',
+        });
+        processAudioBlob(audioBlob);
       }
-      return
+      return;
     }
 
-    setDragOffset?.(0)
-    historyRef.current = []
-    audioChunksRef.current = []
-    audioBufferRef.current = null
-    setPlaybackPosition(null)
+    updateDragOffset?.(0);
+    historyRef.current = [];
+    audioChunksRef.current = [];
+    audioBufferRef.current = null;
+    setPlaybackPosition(null);
 
     const setupMicrophone = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
-        })
-        streamRef.current = stream
+        });
+        streamRef.current = stream;
 
         const audioContext = new (window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext })
-            .webkitAudioContext)()
-        const analyser = audioContext.createAnalyser()
-        analyser.fftSize = fftSize
-        analyser.smoothingTimeConstant = smoothingTimeConstant
+            .webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = fftSize;
+        analyser.smoothingTimeConstant = smoothingTimeConstant;
 
-        const source = audioContext.createMediaStreamSource(stream)
-        source.connect(analyser)
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
 
-        audioContextRef.current = audioContext
-        analyserRef.current = analyser
+        audioContextRef.current = audioContext;
+        analyserRef.current = analyser;
 
         if (enableAudioPlayback) {
-          const mediaRecorder = new MediaRecorder(stream)
-          mediaRecorderRef.current = mediaRecorder
+          const mediaRecorder = new MediaRecorder(stream);
+          mediaRecorderRef.current = mediaRecorder;
 
           mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
-              audioChunksRef.current.push(event.data)
+              audioChunksRef.current.push(event.data);
             }
-          }
+          };
 
-          mediaRecorder.start(100)
+          mediaRecorder.start(100);
         }
       } catch (error) {
-        onError?.(error as Error)
+        onError?.(error as Error);
       }
-    }
+    };
 
-    setupMicrophone()
+    setupMicrophone();
 
     return () => {
       if (
         mediaRecorderRef.current &&
-        mediaRecorderRef.current.state !== "inactive"
+        mediaRecorderRef.current.state !== 'inactive'
       ) {
-        mediaRecorderRef.current.stop()
+        mediaRecorderRef.current.stop();
       }
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (sourceNodeRef.current) {
-        sourceNodeRef.current.stop()
+        sourceNodeRef.current.stop();
       }
       if (scrubSourceRef.current) {
-        scrubSourceRef.current.stop()
+        scrubSourceRef.current.stop();
       }
-    }
+    };
   }, [
     active,
     fftSize,
     smoothingTimeConstant,
     onError,
-    setDragOffset,
+    updateDragOffset,
     enableAudioPlayback,
     historyRef,
     processAudioBlob,
-  ])
+  ]);
 
   const playScrubSound = useCallback(
     (position: number, direction: number) => {
@@ -959,43 +973,43 @@ export const LiveMicrophoneWaveform = ({
         !audioBufferRef.current ||
         !audioContextRef.current
       )
-        return
+        return;
 
       if (scrubSourceRef.current) {
         try {
-          scrubSourceRef.current.stop()
+          scrubSourceRef.current.stop();
         } catch (err) {
-          console.error('[Waveform] Error stopping scrubSourceRef:', err)
+          console.error('[Waveform] Error stopping scrubSourceRef:', err);
         }
       }
 
-      const source = audioContextRef.current.createBufferSource()
-      source.buffer = audioBufferRef.current
+      const source = audioContextRef.current.createBufferSource();
+      source.buffer = audioBufferRef.current;
 
-      const speed = Math.abs(direction)
+      const speed = Math.abs(direction);
       const playbackRate =
         direction > 0
           ? Math.min(3, 1 + speed * 0.1)
-          : Math.max(-3, -1 - speed * 0.1)
+          : Math.max(-3, -1 - speed * 0.1);
 
-      source.playbackRate.value = playbackRate
+      source.playbackRate.value = playbackRate;
 
-      const filter = audioContextRef.current.createBiquadFilter()
-      filter.type = "lowpass"
-      filter.frequency.value = Math.max(200, 2000 - speed * 100)
+      const filter = audioContextRef.current.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = Math.max(200, 2000 - speed * 100);
 
-      source.connect(filter)
-      filter.connect(audioContextRef.current.destination)
+      source.connect(filter);
+      filter.connect(audioContextRef.current.destination);
 
       const startTime = Math.max(
         0,
-        Math.min(position, audioBufferRef.current.duration - 0.1)
-      )
-      source.start(0, startTime, 0.1)
-      scrubSourceRef.current = source
+        Math.min(position, audioBufferRef.current.duration - 0.1),
+      );
+      source.start(0, startTime, 0.1);
+      scrubSourceRef.current = source;
     },
-    [enableAudioPlayback]
-  )
+    [enableAudioPlayback],
+  );
 
   const playFromPosition = useCallback(
     (position: number) => {
@@ -1004,43 +1018,45 @@ export const LiveMicrophoneWaveform = ({
         !audioBufferRef.current ||
         !audioContextRef.current
       )
-        return
+        return;
 
       if (sourceNodeRef.current) {
         try {
-          sourceNodeRef.current.stop()
+          sourceNodeRef.current.stop();
         } catch (err) {
-          console.error('[Waveform] Error stopping sourceNodeRef:', err)
+          console.error('[Waveform] Error stopping sourceNodeRef:', err);
         }
       }
 
-      const source = audioContextRef.current.createBufferSource()
-      source.buffer = audioBufferRef.current
-      source.playbackRate.value = playbackRate
-      source.connect(audioContextRef.current.destination)
+      const source = audioContextRef.current.createBufferSource();
+      source.buffer = audioBufferRef.current;
+      source.playbackRate.value = playbackRate;
+      source.connect(audioContextRef.current.destination);
 
       const startTime = Math.max(
         0,
-        Math.min(position, audioBufferRef.current.duration)
-      )
-      source.start(0, startTime)
-      sourceNodeRef.current = source
+        Math.min(position, audioBufferRef.current.duration),
+      );
+      source.start(0, startTime);
+      sourceNodeRef.current = source;
 
       playbackStartTimeRef.current =
-        audioContextRef.current.currentTime - startTime
-      setPlaybackPosition(startTime)
+        audioContextRef.current.currentTime - startTime;
+      setPlaybackPosition(startTime);
 
       source.onended = () => {
-        setPlaybackPosition(null)
-      }
+        setPlaybackPosition(null);
+      };
     },
-    [enableAudioPlayback, playbackRate]
-  )
+    [enableAudioPlayback, playbackRate],
+  );
+  const playScrubSoundEvent = useEffectEvent(playScrubSound);
+  const playFromPositionEvent = useEffectEvent(playFromPosition);
 
   useEffect(() => {
-    if (playbackPosition === null || !audioBufferRef.current) return
+    if (playbackPosition === null || !audioBufferRef.current) return;
 
-    let animationId: number
+    let animationId: number;
     const updatePlaybackVisual = () => {
       if (
         audioContextRef.current &&
@@ -1048,134 +1064,134 @@ export const LiveMicrophoneWaveform = ({
         audioBufferRef.current
       ) {
         const elapsed =
-          audioContextRef.current.currentTime - playbackStartTimeRef.current
-        const currentPos = playbackPosition + elapsed * playbackRate
+          audioContextRef.current.currentTime - playbackStartTimeRef.current;
+        const currentPos = playbackPosition + elapsed * playbackRate;
 
         if (currentPos < audioBufferRef.current.duration) {
-          const progressRatio = currentPos / audioBufferRef.current.duration
+          const progressRatio = currentPos / audioBufferRef.current.duration;
           const currentBarIndex = Math.floor(
-            progressRatio * historyRef.current.length
-          )
-          const step = barWidth + barGap
+            progressRatio * historyRef.current.length,
+          );
+          const step = barWidth + barGap;
 
           const containerWidth =
-            containerRef.current?.getBoundingClientRect().width || 0
-          const viewBars = Math.floor(containerWidth / step)
+            containerRef.current?.getBoundingClientRect().width || 0;
+          const viewBars = Math.floor(containerWidth / step);
           const targetOffset =
-            -(currentBarIndex - (historyRef.current.length - viewBars)) * step
+            -(currentBarIndex - (historyRef.current.length - viewBars)) * step;
           const clampedOffset = Math.max(
             -(historyRef.current.length - viewBars) * step,
-            Math.min(0, targetOffset)
-          )
+            Math.min(0, targetOffset),
+          );
 
-          setDragOffset?.(clampedOffset)
-          animationId = requestAnimationFrame(updatePlaybackVisual)
+          updateDragOffset?.(clampedOffset);
+          animationId = requestAnimationFrame(updatePlaybackVisual);
         } else {
-          setPlaybackPosition(null)
-          const step = barWidth + barGap
+          setPlaybackPosition(null);
+          const step = barWidth + barGap;
           const containerWidth =
-            containerRef.current?.getBoundingClientRect().width || 0
-          const viewBars = Math.floor(containerWidth / step)
-          setDragOffset?.(-(historyRef.current.length - viewBars) * step)
+            containerRef.current?.getBoundingClientRect().width || 0;
+          const viewBars = Math.floor(containerWidth / step);
+          updateDragOffset?.(-(historyRef.current.length - viewBars) * step);
         }
       }
-    }
+    };
 
-    animationId = requestAnimationFrame(updatePlaybackVisual)
+    animationId = requestAnimationFrame(updatePlaybackVisual);
 
     return () => {
-      if (animationId) cancelAnimationFrame(animationId)
-    }
+      if (animationId) cancelAnimationFrame(animationId);
+    };
   }, [
     playbackPosition,
     playbackRate,
     barWidth,
     barGap,
-    setDragOffset,
+    updateDragOffset,
     historyRef,
-  ])
+  ]);
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     if (!active && historyRef.current.length === 0 && playbackPosition === null)
-      return
+      return;
 
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
     const animate = (currentTime: number) => {
       if (active && currentTime - lastUpdateRef.current > updateRate) {
-        lastUpdateRef.current = currentTime
+        lastUpdateRef.current = currentTime;
 
         if (analyserRef.current) {
           const dataArray = new Uint8Array(
-            analyserRef.current.frequencyBinCount
-          )
-          analyserRef.current.getByteFrequencyData(dataArray)
+            analyserRef.current.frequencyBinCount,
+          );
+          analyserRef.current.getByteFrequencyData(dataArray);
 
-          let sum = 0
+          let sum = 0;
           for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i]
+            sum += dataArray[i];
           }
-          const average = (sum / dataArray.length / 255) * sensitivity
+          const average = (sum / dataArray.length / 255) * sensitivity;
 
-          historyRef.current.push(Math.min(1, Math.max(0.05, average)))
+          historyRef.current.push(Math.min(1, Math.max(0.05, average)));
 
           if (historyRef.current.length > historySize) {
-            historyRef.current.shift()
+            historyRef.current.shift();
           }
         }
       }
 
-      const rect = canvas.getBoundingClientRect()
-      ctx.clearRect(0, 0, rect.width, rect.height)
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
 
       const computedBarColor =
         barColor ||
-        getComputedStyle(canvas).getPropertyValue("--foreground") ||
-        "#000"
+        getComputedStyle(canvas).getPropertyValue('--foreground') ||
+        '#000';
 
-      const step = barWidth + barGap
-      const barCount = Math.floor(rect.width / step)
-      const centerY = rect.height / 2
+      const step = barWidth + barGap;
+      const barCount = Math.floor(rect.width / step);
+      const centerY = rect.height / 2;
 
-      const dataToRender = historyRef.current
+      const dataToRender = historyRef.current;
 
       if (dataToRender.length > 0) {
-        const offsetInBars = Math.floor(dragOffset / step)
+        const offsetInBars = Math.floor(dragOffset / step);
 
         for (let i = 0; i < barCount; i++) {
-          let dataIndex
+          let dataIndex;
 
           if (active) {
-            dataIndex = dataToRender.length - 1 - i
+            dataIndex = dataToRender.length - 1 - i;
           } else {
             dataIndex = Math.max(
               0,
               Math.min(
                 dataToRender.length - 1,
-                dataToRender.length - 1 - i - Math.floor(offsetInBars)
-              )
-            )
+                dataToRender.length - 1 - i - Math.floor(offsetInBars),
+              ),
+            );
           }
 
           if (dataIndex >= 0 && dataIndex < dataToRender.length) {
-            const value = dataToRender[dataIndex]
+            const value = dataToRender[dataIndex];
             if (value !== undefined) {
-              const x = rect.width - (i + 1) * step
-              const barHeight = Math.max(4, value * rect.height * 0.7)
-              const y = centerY - barHeight / 2
+              const x = rect.width - (i + 1) * step;
+              const barHeight = Math.max(4, value * rect.height * 0.7);
+              const y = centerY - barHeight / 2;
 
-              ctx.fillStyle = computedBarColor
-              ctx.globalAlpha = 0.3 + value * 0.7
+              ctx.fillStyle = computedBarColor;
+              ctx.globalAlpha = 0.3 + value * 0.7;
 
               if (barRadius > 0) {
-                ctx.beginPath()
-                ctx.roundRect(x, y, barWidth, barHeight, barRadius)
-                ctx.fill()
+                ctx.beginPath();
+                ctx.roundRect(x, y, barWidth, barHeight, barRadius);
+                ctx.fill();
               } else {
-                ctx.fillRect(x, y, barWidth, barHeight)
+                ctx.fillRect(x, y, barWidth, barHeight);
               }
             }
           }
@@ -1183,34 +1199,34 @@ export const LiveMicrophoneWaveform = ({
       }
 
       if (fadeEdges && fadeWidth > 0) {
-        const gradient = ctx.createLinearGradient(0, 0, rect.width, 0)
-        const fadePercent = Math.min(0.2, fadeWidth / rect.width)
+        const gradient = ctx.createLinearGradient(0, 0, rect.width, 0);
+        const fadePercent = Math.min(0.2, fadeWidth / rect.width);
 
-        gradient.addColorStop(0, "rgba(255,255,255,1)")
-        gradient.addColorStop(fadePercent, "rgba(255,255,255,0)")
-        gradient.addColorStop(1 - fadePercent, "rgba(255,255,255,0)")
-        gradient.addColorStop(1, "rgba(255,255,255,1)")
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(fadePercent, 'rgba(255,255,255,0)');
+        gradient.addColorStop(1 - fadePercent, 'rgba(255,255,255,0)');
+        gradient.addColorStop(1, 'rgba(255,255,255,1)');
 
-        ctx.globalCompositeOperation = "destination-out"
-        ctx.fillStyle = gradient
-        ctx.fillRect(0, 0, rect.width, rect.height)
-        ctx.globalCompositeOperation = "source-over"
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, rect.width, rect.height);
+        ctx.globalCompositeOperation = 'source-over';
       }
 
-      ctx.globalAlpha = 1
+      ctx.globalAlpha = 1;
 
-      animationRef.current = requestAnimationFrame(animate)
-    }
+      animationRef.current = requestAnimationFrame(animate);
+    };
 
     if (active || historyRef.current.length > 0 || playbackPosition !== null) {
-      animationRef.current = requestAnimationFrame(animate)
+      animationRef.current = requestAnimationFrame(animate);
     }
 
     return () => {
       if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
+        cancelAnimationFrame(animationRef.current);
       }
-    }
+    };
   }, [
     active,
     sensitivity,
@@ -1225,16 +1241,16 @@ export const LiveMicrophoneWaveform = ({
     dragOffset,
     playbackPosition,
     historyRef,
-  ])
+  ]);
 
   const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
-    if (active || historyRef.current.length === 0) return
+    if (active || historyRef.current.length === 0) return;
 
-    e.preventDefault()
-    setIsDragging(true)
-    dragStartXRef.current = e.clientX
-    dragStartOffsetRef.current = dragOffset
-  }
+    e.preventDefault();
+    setIsDragging(true);
+    dragStartXRef.current = e.clientX;
+    dragStartOffsetRef.current = dragOffset;
+  };
 
   /**
    * ACCESSIBILITY: Keyboard handler for scrubbing through recorded audio
@@ -1246,55 +1262,56 @@ export const LiveMicrophoneWaveform = ({
    */
   const handleKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (active || historyRef.current.length === 0) return
+      if (active || historyRef.current.length === 0) return;
 
-      const step = barWidth + barGap
-      const maxBars = historyRef.current.length
-      const viewWidth = containerRef.current?.getBoundingClientRect().width || 0
-      const viewBars = Math.floor(viewWidth / step)
-      const maxOffset = Math.max(0, (maxBars - viewBars) * step)
+      const step = barWidth + barGap;
+      const maxBars = historyRef.current.length;
+      const viewWidth =
+        containerRef.current?.getBoundingClientRect().width || 0;
+      const viewBars = Math.floor(viewWidth / step);
+      const maxOffset = Math.max(0, (maxBars - viewBars) * step);
 
-      let newOffset = dragOffset
-      const SEEK_BARS = 10 // Number of bars to skip per keypress
+      let newOffset = dragOffset;
+      const SEEK_BARS = 10; // Number of bars to skip per keypress
 
       switch (e.key) {
-        case "ArrowLeft":
-          e.preventDefault()
-          newOffset = Math.max(0, dragOffset - SEEK_BARS * step)
-          break
-        case "ArrowRight":
-          e.preventDefault()
-          newOffset = Math.min(maxOffset, dragOffset + SEEK_BARS * step)
-          break
-        case "Home":
-          e.preventDefault()
-          newOffset = 0
-          break
-        case "End":
-          e.preventDefault()
-          newOffset = maxOffset
-          break
+        case 'ArrowLeft':
+          e.preventDefault();
+          newOffset = Math.max(0, dragOffset - SEEK_BARS * step);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          newOffset = Math.min(maxOffset, dragOffset + SEEK_BARS * step);
+          break;
+        case 'Home':
+          e.preventDefault();
+          newOffset = 0;
+          break;
+        case 'End':
+          e.preventDefault();
+          newOffset = maxOffset;
+          break;
         default:
-          return
+          return;
       }
 
-      setDragOffset?.(newOffset)
+      updateDragOffset?.(newOffset);
 
       // Play audio at new position if audio playback is enabled
       if (enableAudioPlayback && audioBufferRef.current) {
-        const offsetBars = Math.floor(newOffset / step)
+        const offsetBars = Math.floor(newOffset / step);
         const rightmostBarIndex = Math.max(
           0,
-          Math.min(maxBars - 1, maxBars - 1 - offsetBars)
-        )
+          Math.min(maxBars - 1, maxBars - 1 - offsetBars),
+        );
         const audioPosition =
-          (rightmostBarIndex / maxBars) * audioBufferRef.current.duration
+          (rightmostBarIndex / maxBars) * audioBufferRef.current.duration;
         playFromPosition(
           Math.max(
             0,
-            Math.min(audioBufferRef.current.duration - 0.1, audioPosition)
-          )
-        )
+            Math.min(audioBufferRef.current.duration - 0.1, audioPosition),
+          ),
+        );
       }
     },
     [
@@ -1303,122 +1320,120 @@ export const LiveMicrophoneWaveform = ({
       barWidth,
       barGap,
       dragOffset,
-      setDragOffset,
+      updateDragOffset,
       enableAudioPlayback,
       playFromPosition,
-    ]
-  )
+    ],
+  );
 
   useEffect(() => {
-    if (!isDragging) return
+    if (!isDragging) return;
 
-    let lastScrubTime = 0
-    let lastMouseX = dragStartXRef.current
+    let lastScrubTime = 0;
+    let lastMouseX = dragStartXRef.current;
     const handleMouseMove = (e: MouseEvent) => {
-      const deltaX = e.clientX - dragStartXRef.current
-      const newOffset = dragStartOffsetRef.current - deltaX * 0.5 // Reduce sensitivity
+      const deltaX = e.clientX - dragStartXRef.current;
+      const newOffset = dragStartOffsetRef.current - deltaX * 0.5; // Reduce sensitivity
 
-      const step = barWidth + barGap
-      const maxBars = historyRef.current.length
-      const viewWidth = canvasRef.current?.getBoundingClientRect().width || 0
-      const viewBars = Math.floor(viewWidth / step)
+      const step = barWidth + barGap;
+      const maxBars = historyRef.current.length;
+      const viewWidth = canvasRef.current?.getBoundingClientRect().width || 0;
+      const viewBars = Math.floor(viewWidth / step);
 
-      const maxOffset = Math.max(0, (maxBars - viewBars) * step)
-      const minOffset = 0
-      const clampedOffset = Math.max(minOffset, Math.min(maxOffset, newOffset))
+      const maxOffset = Math.max(0, (maxBars - viewBars) * step);
+      const minOffset = 0;
+      const clampedOffset = Math.max(minOffset, Math.min(maxOffset, newOffset));
 
-      setDragOffset?.(clampedOffset)
+      updateDragOffset?.(clampedOffset);
 
-      const now = Date.now()
+      const now = Date.now();
       if (
         enableAudioPlayback &&
         audioBufferRef.current &&
         now - lastScrubTime > 50
       ) {
-        lastScrubTime = now
-        const offsetBars = Math.floor(clampedOffset / step)
+        lastScrubTime = now;
+        const offsetBars = Math.floor(clampedOffset / step);
         const rightmostBarIndex = Math.max(
           0,
-          Math.min(maxBars - 1, maxBars - 1 - offsetBars)
-        )
+          Math.min(maxBars - 1, maxBars - 1 - offsetBars),
+        );
         const audioPosition =
-          (rightmostBarIndex / maxBars) * audioBufferRef.current.duration
-        const direction = e.clientX - lastMouseX
-        lastMouseX = e.clientX
-        playScrubSound(
+          (rightmostBarIndex / maxBars) * audioBufferRef.current.duration;
+        const direction = e.clientX - lastMouseX;
+        lastMouseX = e.clientX;
+        playScrubSoundEvent(
           Math.max(
             0,
-            Math.min(audioBufferRef.current.duration - 0.1, audioPosition)
+            Math.min(audioBufferRef.current.duration - 0.1, audioPosition),
           ),
-          direction
-        )
+          direction,
+        );
       }
-    }
+    };
 
     const handleMouseUp = () => {
-      setIsDragging(false)
+      setIsDragging(false);
 
       if (enableAudioPlayback && audioBufferRef.current) {
-        const step = barWidth + barGap
-        const maxBars = historyRef.current.length
-        const offsetBars = Math.floor(dragOffset / step)
+        const step = barWidth + barGap;
+        const maxBars = historyRef.current.length;
+        const offsetBars = Math.floor(dragOffset / step);
         const rightmostBarIndex = Math.max(
           0,
-          Math.min(maxBars - 1, maxBars - 1 - offsetBars)
-        )
+          Math.min(maxBars - 1, maxBars - 1 - offsetBars),
+        );
         const audioPosition =
-          (rightmostBarIndex / maxBars) * audioBufferRef.current.duration
-        playFromPosition(
+          (rightmostBarIndex / maxBars) * audioBufferRef.current.duration;
+        playFromPositionEvent(
           Math.max(
             0,
-            Math.min(audioBufferRef.current.duration - 0.1, audioPosition)
-          )
-        )
+            Math.min(audioBufferRef.current.duration - 0.1, audioPosition),
+          ),
+        );
       }
 
       if (scrubSourceRef.current) {
         try {
-          scrubSourceRef.current.stop()
+          scrubSourceRef.current.stop();
         } catch (err) {
-          console.error('[Waveform] Error stopping scrubSourceRef:', err)
+          console.error('[Waveform] Error stopping scrubSourceRef:', err);
         }
       }
-    }
+    };
 
-    document.addEventListener("mousemove", handleMouseMove)
-    document.addEventListener("mouseup", handleMouseUp)
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseup", handleMouseUp)
-    }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
   }, [
     isDragging,
     barWidth,
     barGap,
-    setDragOffset,
+    updateDragOffset,
     dragOffset,
     enableAudioPlayback,
-    playScrubSound,
-    playFromPosition,
     historyRef,
-  ])
+  ]);
 
   /* eslint-disable react-hooks/refs -- historyRef stores the retained waveform buffer for scrubber ARIA affordances. */
   return (
     <div
       className={cn(
-        "relative flex items-center",
-        !active && historyRef.current.length > 0 && "cursor-pointer",
-        className
+        'relative flex items-center',
+        !active && historyRef.current.length > 0 && 'cursor-pointer',
+        className,
       )}
       onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
       ref={containerRef}
-      role={!active && historyRef.current.length > 0 ? "slider" : undefined}
+      role="slider"
       aria-label={
         !active && historyRef.current.length > 0
-          ? "Recording playback scrubber. Use arrow keys to navigate, Home for start, End for end."
+          ? 'Recording playback scrubber. Use arrow keys to navigate, Home for start, End for end.'
           : undefined
       }
       aria-valuenow={
@@ -1436,27 +1451,28 @@ export const LiveMicrophoneWaveform = ({
       style={{ height: heightStyle }}
       {...props}
     >
-      <canvas className="block h-full w-full" ref={canvasRef} />
+      <canvas className="block size-full" ref={canvasRef} />
     </div>
-  )
+  );
   /* eslint-enable react-hooks/refs */
-}
+};
 
-export type RecordingWaveformProps = Omit<
-  WaveformProps,
-  "data" | "onBarClick"
-> & {
-  recording?: boolean
-  fftSize?: number
-  smoothingTimeConstant?: number
-  sensitivity?: number
-  onError?: (error: Error) => void
-  onRecordingComplete?: (data: number[]) => void
-  updateRate?: number
-  showHandle?: boolean
-}
+const LiveMicrophoneWaveform = (
+  props: Parameters<typeof useLiveMicrophoneWaveformImplementation>[0],
+) => useLiveMicrophoneWaveformImplementation(props);
 
-export const RecordingWaveform = ({
+type RecordingWaveformProps = Omit<WaveformProps, 'data' | 'onBarClick'> & {
+  recording?: boolean;
+  fftSize?: number;
+  smoothingTimeConstant?: number;
+  sensitivity?: number;
+  onError?: (error: Error) => void;
+  onRecordingComplete?: (data: number[]) => void;
+  updateRate?: number;
+  showHandle?: boolean;
+};
+
+const useRecordingWaveformImplementation = ({
   recording = false,
   fftSize = 256,
   smoothingTimeConstant = 0.8,
@@ -1473,160 +1489,186 @@ export const RecordingWaveform = ({
   className,
   ...props
 }: RecordingWaveformProps) => {
-  const [recordedData, setRecordedData] = useState<number[]>([])
-  const [viewPosition, setViewPosition] = useState(1)
-  const [isDragging, setIsDragging] = useState(false)
-  const [isRecordingComplete, setIsRecordingComplete] = useState(false)
+  const [recordingState, dispatchRecordingState] = useReducer(
+    (
+      state: {
+        recordedData: number[];
+        viewPosition: number;
+        isRecordingComplete: boolean;
+      },
+      patch: Partial<{
+        recordedData: number[];
+        viewPosition: number;
+        isRecordingComplete: boolean;
+      }>,
+    ) => ({ ...state, ...patch }),
+    {
+      recordedData: [],
+      viewPosition: 1,
+      isRecordingComplete: false,
+    },
+  );
+  const { recordedData, viewPosition, isRecordingComplete } = recordingState;
+  const [isDragging, setIsDragging] = useReducer(
+    (_state: boolean, nextState: boolean) => nextState,
+    false,
+  );
 
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const recordingDataRef = useRef<number[]>([])
-  const analyserRef = useRef<AnalyserNode | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const animationRef = useRef<number>(0)
-  const lastUpdateRef = useRef<number>(0)
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const recordingDataRef = useRef<number[]>([]);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animationRef = useRef<number>(0);
+  const lastUpdateRef = useRef<number>(0);
 
-  const heightStyle = typeof height === "number" ? `${height}px` : height
+  const heightStyle = typeof height === 'number' ? `${height}px` : height;
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container) return
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
 
     const resizeObserver = new ResizeObserver(() => {
-      const rect = container.getBoundingClientRect()
-      const dpr = window.devicePixelRatio || 1
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
 
-      canvas.width = rect.width * dpr
-      canvas.height = rect.height * dpr
-      canvas.style.width = `${rect.width}px`
-      canvas.style.height = `${rect.height}px`
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      Object.assign(canvas.style, {
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+      });
 
-      const ctx = canvas.getContext("2d")
+      const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.scale(dpr, dpr)
+        ctx.scale(dpr, dpr);
       }
-    })
+    });
 
-    resizeObserver.observe(container)
-    return () => resizeObserver.disconnect()
-  }, [])
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!recording) {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (
         audioContextRef.current &&
-        audioContextRef.current.state !== "closed"
+        audioContextRef.current.state !== 'closed'
       ) {
-        audioContextRef.current.close()
+        audioContextRef.current.close();
       }
 
       if (recordingDataRef.current.length > 0) {
-        setRecordedData([...recordingDataRef.current])
-        setIsRecordingComplete(true)
-        onRecordingComplete?.(recordingDataRef.current)
+        dispatchRecordingState({
+          recordedData: [...recordingDataRef.current],
+          isRecordingComplete: true,
+        });
+        onRecordingComplete?.(recordingDataRef.current);
       }
-      return
+      return;
     }
 
-    setIsRecordingComplete(false)
-    recordingDataRef.current = []
-    setRecordedData([])
-    setViewPosition(1)
+    recordingDataRef.current = [];
+    dispatchRecordingState({
+      isRecordingComplete: false,
+      recordedData: [],
+      viewPosition: 1,
+    });
 
     const setupMicrophone = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
-        })
-        streamRef.current = stream
+        });
+        streamRef.current = stream;
 
         const audioContext = new (window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext })
-            .webkitAudioContext)()
-        const analyser = audioContext.createAnalyser()
-        analyser.fftSize = fftSize
-        analyser.smoothingTimeConstant = smoothingTimeConstant
+            .webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = fftSize;
+        analyser.smoothingTimeConstant = smoothingTimeConstant;
 
-        const source = audioContext.createMediaStreamSource(stream)
-        source.connect(analyser)
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
 
-        audioContextRef.current = audioContext
-        analyserRef.current = analyser
+        audioContextRef.current = audioContext;
+        analyserRef.current = analyser;
       } catch (error) {
-        onError?.(error as Error)
+        onError?.(error as Error);
       }
-    }
+    };
 
-    setupMicrophone()
+    setupMicrophone();
 
     return () => {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (
         audioContextRef.current &&
-        audioContextRef.current.state !== "closed"
+        audioContextRef.current.state !== 'closed'
       ) {
-        audioContextRef.current.close()
+        audioContextRef.current.close();
       }
-    }
-  }, [recording, fftSize, smoothingTimeConstant, onError, onRecordingComplete])
+    };
+  }, [recording, fftSize, smoothingTimeConstant, onError, onRecordingComplete]);
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
     const animate = (currentTime: number) => {
       if (recording && currentTime - lastUpdateRef.current > updateRate) {
-        lastUpdateRef.current = currentTime
+        lastUpdateRef.current = currentTime;
 
         if (analyserRef.current) {
           const dataArray = new Uint8Array(
-            analyserRef.current.frequencyBinCount
-          )
-          analyserRef.current.getByteFrequencyData(dataArray)
+            analyserRef.current.frequencyBinCount,
+          );
+          analyserRef.current.getByteFrequencyData(dataArray);
 
-          let sum = 0
+          let sum = 0;
           for (let i = 0; i < dataArray.length; i++) {
-            sum += dataArray[i]
+            sum += dataArray[i];
           }
-          const average = (sum / dataArray.length / 255) * sensitivity
+          const average = (sum / dataArray.length / 255) * sensitivity;
 
-          recordingDataRef.current.push(Math.min(1, Math.max(0.05, average)))
+          recordingDataRef.current.push(Math.min(1, Math.max(0.05, average)));
         }
       }
 
-      const rect = canvas.getBoundingClientRect()
-      ctx.clearRect(0, 0, rect.width, rect.height)
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
 
       const computedBarColor =
         barColor ||
-        getComputedStyle(canvas).getPropertyValue("--foreground") ||
-        "#000"
+        getComputedStyle(canvas).getPropertyValue('--foreground') ||
+        '#000';
 
-      const dataToRender = recording ? recordingDataRef.current : recordedData
+      const dataToRender = recording ? recordingDataRef.current : recordedData;
 
       if (dataToRender.length > 0) {
-        const step = barWidth + barGap
-        const barsVisible = Math.floor(rect.width / step)
-        const centerY = rect.height / 2
+        const step = barWidth + barGap;
+        const barsVisible = Math.floor(rect.width / step);
+        const centerY = rect.height / 2;
 
-        let startIndex = 0
+        let startIndex = 0;
         if (!recording && isRecordingComplete) {
-          const totalBars = dataToRender.length
+          const totalBars = dataToRender.length;
           if (totalBars > barsVisible) {
-            startIndex = Math.floor((totalBars - barsVisible) * viewPosition)
+            startIndex = Math.floor((totalBars - barsVisible) * viewPosition);
           }
         } else if (recording) {
-          startIndex = Math.max(0, dataToRender.length - barsVisible)
+          startIndex = Math.max(0, dataToRender.length - barsVisible);
         }
 
         for (
@@ -1634,53 +1676,53 @@ export const RecordingWaveform = ({
           i < barsVisible && startIndex + i < dataToRender.length;
           i++
         ) {
-          const value = dataToRender[startIndex + i] || 0.1
-          const x = i * step
-          const barHeight = Math.max(4, value * rect.height * 0.7)
-          const y = centerY - barHeight / 2
+          const value = dataToRender[startIndex + i] || 0.1;
+          const x = i * step;
+          const barHeight = Math.max(4, value * rect.height * 0.7);
+          const y = centerY - barHeight / 2;
 
-          ctx.fillStyle = computedBarColor
-          ctx.globalAlpha = 0.3 + value * 0.7
+          ctx.fillStyle = computedBarColor;
+          ctx.globalAlpha = 0.3 + value * 0.7;
 
           if (barRadius > 0) {
-            ctx.beginPath()
-            ctx.roundRect(x, y, barWidth, barHeight, barRadius)
-            ctx.fill()
+            ctx.beginPath();
+            ctx.roundRect(x, y, barWidth, barHeight, barRadius);
+            ctx.fill();
           } else {
-            ctx.fillRect(x, y, barWidth, barHeight)
+            ctx.fillRect(x, y, barWidth, barHeight);
           }
         }
 
         if (!recording && isRecordingComplete && showHandle) {
-          const indicatorX = rect.width * viewPosition
+          const indicatorX = rect.width * viewPosition;
 
-          ctx.strokeStyle = computedBarColor
-          ctx.globalAlpha = 0.5
-          ctx.lineWidth = 2
-          ctx.beginPath()
-          ctx.moveTo(indicatorX, 0)
-          ctx.lineTo(indicatorX, rect.height)
-          ctx.stroke()
-          ctx.fillStyle = computedBarColor
-          ctx.globalAlpha = 1
-          ctx.beginPath()
-          ctx.arc(indicatorX, centerY, 6, 0, Math.PI * 2)
-          ctx.fill()
+          ctx.strokeStyle = computedBarColor;
+          ctx.globalAlpha = 0.5;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(indicatorX, 0);
+          ctx.lineTo(indicatorX, rect.height);
+          ctx.stroke();
+          ctx.fillStyle = computedBarColor;
+          ctx.globalAlpha = 1;
+          ctx.beginPath();
+          ctx.arc(indicatorX, centerY, 6, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
 
-      ctx.globalAlpha = 1
+      ctx.globalAlpha = 1;
 
-      animationRef.current = requestAnimationFrame(animate)
-    }
+      animationRef.current = requestAnimationFrame(animate);
+    };
 
-    animationRef.current = requestAnimationFrame(animate)
+    animationRef.current = requestAnimationFrame(animate);
 
     return () => {
       if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
+        cancelAnimationFrame(animationRef.current);
       }
-    }
+    };
   }, [
     recording,
     recordedData,
@@ -1693,29 +1735,30 @@ export const RecordingWaveform = ({
     barGap,
     barRadius,
     barColor,
-  ])
+  ]);
 
   const handleScrub = useCallback(
     (clientX: number) => {
-      const container = containerRef.current
-      if (!container || recording || !isRecordingComplete) return
+      const container = containerRef.current;
+      if (!container || recording || !isRecordingComplete) return;
 
-      const rect = container.getBoundingClientRect()
-      const x = Math.max(0, Math.min(clientX - rect.left, rect.width))
-      const position = x / rect.width
+      const rect = container.getBoundingClientRect();
+      const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+      const position = x / rect.width;
 
-      setViewPosition(position)
+      dispatchRecordingState({ viewPosition: position });
     },
-    [recording, isRecordingComplete]
-  )
+    [recording, isRecordingComplete],
+  );
+  const handleScrubEvent = useEffectEvent(handleScrub);
 
   const handleMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
-    if (recording || !isRecordingComplete) return
+    if (recording || !isRecordingComplete) return;
 
-    e.preventDefault()
-    setIsDragging(true)
-    handleScrub(e.clientX)
-  }
+    e.preventDefault();
+    setIsDragging(true);
+    handleScrub(e.clientX);
+  };
 
   /**
    * ACCESSIBILITY: Keyboard handler for scrubbing through recording
@@ -1727,62 +1770,62 @@ export const RecordingWaveform = ({
    */
   const handleKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (recording || !isRecordingComplete) return
+      if (recording || !isRecordingComplete) return;
 
-      const POSITION_STEP = 0.05 // 5% per keypress
-      let newPosition = viewPosition
+      const POSITION_STEP = 0.05; // 5% per keypress
+      let newPosition = viewPosition;
 
       switch (e.key) {
-        case "ArrowLeft":
-          e.preventDefault()
-          newPosition = Math.max(0, viewPosition - POSITION_STEP)
-          break
-        case "ArrowRight":
-          e.preventDefault()
-          newPosition = Math.min(1, viewPosition + POSITION_STEP)
-          break
-        case "Home":
-          e.preventDefault()
-          newPosition = 0
-          break
-        case "End":
-          e.preventDefault()
-          newPosition = 1
-          break
+        case 'ArrowLeft':
+          e.preventDefault();
+          newPosition = Math.max(0, viewPosition - POSITION_STEP);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          newPosition = Math.min(1, viewPosition + POSITION_STEP);
+          break;
+        case 'Home':
+          e.preventDefault();
+          newPosition = 0;
+          break;
+        case 'End':
+          e.preventDefault();
+          newPosition = 1;
+          break;
         default:
-          return
+          return;
       }
 
-      setViewPosition(newPosition)
+      dispatchRecordingState({ viewPosition: newPosition });
     },
-    [recording, isRecordingComplete, viewPosition]
-  )
+    [recording, isRecordingComplete, viewPosition],
+  );
 
   useEffect(() => {
-    if (!isDragging) return
+    if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      handleScrub(e.clientX)
-    }
+      handleScrubEvent(e.clientX);
+    };
 
     const handleMouseUp = () => {
-      setIsDragging(false)
-    }
+      setIsDragging(false);
+    };
 
-    document.addEventListener("mousemove", handleMouseMove)
-    document.addEventListener("mouseup", handleMouseUp)
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseup", handleMouseUp)
-    }
-  }, [isDragging, handleScrub])
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
 
   return (
     <div
       aria-label={
         isRecordingComplete && !recording
-          ? "Recording scrubber. Use arrow keys to navigate, Home for start, End for end."
+          ? 'Recording scrubber. Use arrow keys to navigate, Home for start, End for end.'
           : undefined
       }
       aria-valuenow={
@@ -1791,19 +1834,23 @@ export const RecordingWaveform = ({
       aria-valuemin={isRecordingComplete && !recording ? 0 : undefined}
       aria-valuemax={isRecordingComplete && !recording ? 100 : undefined}
       className={cn(
-        "relative flex items-center",
-        isRecordingComplete && !recording && "cursor-pointer",
-        className
+        'relative flex items-center',
+        isRecordingComplete && !recording && 'cursor-pointer',
+        className,
       )}
       onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
       ref={containerRef}
-      role={isRecordingComplete && !recording ? "slider" : undefined}
+      role="slider"
       style={{ height: heightStyle }}
       tabIndex={isRecordingComplete && !recording ? 0 : undefined}
       {...props}
     >
-      <canvas className="block h-full w-full" ref={canvasRef} />
+      <canvas className="block size-full" ref={canvasRef} />
     </div>
-  )
-}
+  );
+};
+
+const RecordingWaveform = (
+  props: Parameters<typeof useRecordingWaveformImplementation>[0],
+) => useRecordingWaveformImplementation(props);

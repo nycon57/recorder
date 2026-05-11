@@ -86,6 +86,10 @@ interface Organization {
 }
 
 export default function GeneralSettingsPage() {
+  return useGeneralSettingsPageImplementation();
+}
+
+function useGeneralSettingsPageImplementation() {
   const queryClient = useQueryClient();
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -240,7 +244,7 @@ export default function GeneralSettingsPage() {
   if (isLoading) {
     return (
       <div className="trbd-stack flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -258,7 +262,7 @@ export default function GeneralSettingsPage() {
           </p>
         </div>
         <div className="trbd-icon-chip" aria-hidden="true">
-          <BadgeIcon className="h-5 w-5" />
+          <BadgeIcon className="size-5" />
         </div>
       </div>
 
@@ -266,9 +270,9 @@ export default function GeneralSettingsPage() {
       {stats && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Members</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+              <Users className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.members.total}</div>
@@ -287,9 +291,9 @@ export default function GeneralSettingsPage() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Storage</CardTitle>
-              <HardDrive className="h-4 w-4 text-muted-foreground" />
+              <HardDrive className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
@@ -310,11 +314,11 @@ export default function GeneralSettingsPage() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 Active Sessions
               </CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
+              <Activity className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
@@ -325,9 +329,9 @@ export default function GeneralSettingsPage() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Plan</CardTitle>
-              <BadgeIcon className="h-4 w-4 text-muted-foreground" />
+              <BadgeIcon className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold capitalize">
@@ -368,19 +372,20 @@ export default function GeneralSettingsPage() {
             <Label>Organization Logo</Label>
             <div className="flex items-center gap-4">
               {currentLogo && (
-                <div className="relative w-20 h-20 rounded-lg border overflow-hidden bg-muted">
+                <div className="relative size-20 rounded-lg border overflow-hidden bg-muted">
                   <Image
                     src={currentLogo}
                     alt="Organization logo"
                     fill
+                    sizes="80px"
                     className="object-contain p-2"
                   />
                   <button
                     type="button"
                     onClick={handleRemoveLogo}
-                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:bg-destructive/90 transition-colors"
+                    className="absolute top-1 right-1 size-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:bg-destructive/90 transition-colors"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="size-3" />
                   </button>
                 </div>
               )}
@@ -403,12 +408,12 @@ export default function GeneralSettingsPage() {
                 >
                   {isUploadingLogo ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Uploading...
+                      <Loader2 className="size-4 mr-2 animate-spin" />
+                      Uploading…
                     </>
                   ) : (
                     <>
-                      <Upload className="w-4 h-4 mr-2" />
+                      <Upload className="size-4 mr-2" />
                       Upload Logo
                     </>
                   )}
@@ -485,7 +490,7 @@ export default function GeneralSettingsPage() {
                 <FormLabel>Description</FormLabel>
                 <FormControl>
                   <Textarea
-                    placeholder="Tell us about your organization..."
+                    placeholder="Tell us about your organization…"
                     className="min-h-24"
                     {...field}
                   />
@@ -539,12 +544,12 @@ export default function GeneralSettingsPage() {
             >
               {updateMutation.isPending ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                  Saving…
                 </>
               ) : updateMutation.isSuccess && !form.formState.isDirty ? (
                 <span className="inline-flex items-center gap-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
-                  <Check className="w-4 h-4 text-primary" />
+                  <Check className="size-4 text-primary" />
                   Saved
                 </span>
               ) : (
@@ -558,7 +563,7 @@ export default function GeneralSettingsPage() {
             )}
             {updateMutation.isSuccess && !form.formState.isDirty && (
               <p className="text-sm text-primary animate-in fade-in slide-in-from-left-2 duration-200 flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5" />
+                <Check className="size-3.5" />
                 Changes saved successfully
               </p>
             )}
@@ -577,18 +582,26 @@ export default function GeneralSettingsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {Object.entries(organization.features)
-                .filter((entry) => entry[1])
-                .map(([feature]) => (
-                  <div key={feature} className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-primary rounded-full" />
-                    <span className="text-sm">
-                      {feature
-                        .replace(/_/g, ' ')
-                        .replace(/\b\w/g, (l) => l.toUpperCase())}
-                    </span>
-                  </div>
-                ))}
+              {Object.entries(organization.features).flatMap(
+                (__item, __index, __array) =>
+                  __item[1]
+                    ? [
+                        (([feature]) => (
+                          <div
+                            key={feature}
+                            className="flex items-center gap-x-2"
+                          >
+                            <div className="size-2 bg-primary rounded-full" />
+                            <span className="text-sm">
+                              {feature
+                                .replace(/_/g, ' ')
+                                .replace(/\b\w/g, (l) => l.toUpperCase())}
+                            </span>
+                          </div>
+                        ))(__item),
+                      ]
+                    : [],
+              )}
             </div>
             {Object.values(organization.features).every((v) => !v) && (
               <p className="text-sm text-muted-foreground">

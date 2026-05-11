@@ -13,8 +13,12 @@
  */
 
 import { useState, useCallback } from 'react';
-import { formatDistanceToNow } from 'date-fns';
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+} from 'lucide-react';
 
 import { useFetchWithAbort } from '@/app/hooks/useFetchWithAbort';
 import { Button } from '@/app/components/ui/button';
@@ -26,6 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/app/components/ui/table';
+import { formatStableDateTime } from '@/lib/utils/formatting';
+
 import { JobDetailDialog } from './job-detail-dialog';
 import { ReSyncButton } from './re-sync-button';
 
@@ -63,16 +69,16 @@ export function FailureLogTable() {
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 
-  const handlePrev = useCallback(() => setOffset((o) => Math.max(0, o - PAGE_SIZE)), []);
-  const handleNext = useCallback(
-    () => setOffset((o) => o + PAGE_SIZE),
-    []
+  const handlePrev = useCallback(
+    () => setOffset((o) => Math.max(0, o - PAGE_SIZE)),
+    [],
   );
+  const handleNext = useCallback(() => setOffset((o) => o + PAGE_SIZE), []);
 
   if (loading && failures.length === 0) {
     return (
       <div className="flex min-h-[10rem] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -80,7 +86,7 @@ export function FailureLogTable() {
   if (error && failures.length === 0) {
     return (
       <div className="flex items-center gap-2 text-sm text-destructive py-4">
-        <AlertTriangle className="h-4 w-4 shrink-0" />
+        <AlertTriangle className="size-4 shrink-0" />
         {error.message.includes('403')
           ? 'Access denied.'
           : 'Failed to load failure log.'}
@@ -119,13 +125,16 @@ export function FailureLogTable() {
               return (
                 <TableRow key={row.id}>
                   <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDistanceToNow(new Date(row.created_at), { addSuffix: true })}
+                    {formatStableDateTime(row.created_at)}
                   </TableCell>
 
                   <TableCell className="text-xs font-medium">{app}</TableCell>
 
                   <TableCell className="max-w-[260px] text-xs text-destructive">
-                    <span className="line-clamp-2" title={row.error ?? undefined}>
+                    <span
+                      className="line-clamp-2"
+                      title={row.error ?? undefined}
+                    >
                       {row.error ?? '—'}
                     </span>
                   </TableCell>
@@ -135,18 +144,22 @@ export function FailureLogTable() {
                   </TableCell>
 
                   <TableCell className="text-xs text-muted-foreground">
-                    {row.triggeredByEmail ?? (
-                      row.payload?.triggered_by_user_id
-                        ? String(row.payload.triggered_by_user_id).slice(0, 8) + '…'
-                        : '—'
-                    )}
+                    {row.triggeredByEmail ??
+                      (row.payload?.triggered_by_user_id
+                        ? String(row.payload.triggered_by_user_id).slice(0, 8) +
+                          '…'
+                        : '—')}
                   </TableCell>
 
                   <TableCell>
                     <JobDetailDialog
                       job={row}
                       trigger={
-                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs font-mono">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs font-mono"
+                        >
                           {row.id.slice(0, 8)}…
                         </Button>
                       }
@@ -187,18 +200,18 @@ export function FailureLogTable() {
               size="sm"
               onClick={handlePrev}
               disabled={offset === 0}
-              className="h-7 w-7 p-0"
+              className="size-7 p-0"
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
+              <ChevronLeft className="size-3.5" />
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={handleNext}
               disabled={currentPage >= totalPages}
-              className="h-7 w-7 p-0"
+              className="size-7 p-0"
             >
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="size-3.5" />
             </Button>
           </div>
         </div>

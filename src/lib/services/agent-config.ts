@@ -194,7 +194,7 @@ function tierMeetsRequirement(actual: PlanTier, required: PlanTier): boolean {
  * Determine the minimum plan tier an agent requires.
  * Returns 'enterprise' for unknown agents (safest default).
  */
-export function getRequiredTierForAgent(agentType: string): PlanTier {
+function getRequiredTierForAgent(agentType: string): PlanTier {
   for (const tier of TIERS_ASCENDING) {
     if (TIER_ALLOWED_AGENTS[tier].has(agentType)) return tier;
   }
@@ -252,14 +252,13 @@ export async function getAgentSettings(orgId: string): Promise<OrgAgentSettings>
  * the global kill switch is off, or the individual toggle is off.
  */
 export async function isAgentEnabled(orgId: string, agentType: string): Promise<boolean> {
-  const [planTier, settings] = await Promise.all([
-    getOrgPlanTier(orgId),
-    getAgentSettings(orgId),
-  ]);
+  const planTier = await getOrgPlanTier(orgId);
 
   if (!planTierAllowsAgent(planTier, agentType)) {
     return false;
   }
+
+  const settings = await getAgentSettings(orgId);
 
   if (!settings.global_agent_enabled) {
     return false;

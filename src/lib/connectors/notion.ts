@@ -106,7 +106,10 @@ type NotionTitleSource = NotionRecord & {
   url?: string;
   parent?: NotionRecord;
   title?: NotionRichText[];
-  properties?: Record<string, NotionRecord & { title?: NotionRichText[]; type?: string }>;
+  properties?: Record<
+    string,
+    NotionRecord & { title?: NotionRichText[]; type?: string }
+  >;
 };
 
 interface ImportedDocumentRow {
@@ -140,14 +143,19 @@ export class NotionConnector implements Connector {
   private orgId?: string;
   private connectorId?: string;
 
-  constructor(credentials: ConnectorCredentials, config?: { orgId: string; connectorId?: string }) {
+  constructor(
+    credentials: ConnectorCredentials,
+    config?: { orgId: string; connectorId?: string },
+  ) {
     if (!credentials.accessToken) {
       throw new Error('Notion access token is required');
     }
 
     this.accessToken = credentials.accessToken;
     this.refreshToken = credentials.refreshToken;
-    this.expiresAt = credentials.expiresAt ? new Date(credentials.expiresAt) : undefined;
+    this.expiresAt = credentials.expiresAt
+      ? new Date(credentials.expiresAt)
+      : undefined;
     this.orgId = config?.orgId;
     this.connectorId = config?.connectorId;
 
@@ -175,7 +183,8 @@ export class NotionConnector implements Connector {
     this.turndownService.addRule('codeBlock', {
       filter: ['pre'],
       replacement: (content, node) => {
-        const language = (node as HTMLElement).getAttribute('data-language') || '';
+        const language =
+          (node as HTMLElement).getAttribute('data-language') || '';
         return `\n\`\`\`${language}\n${content}\n\`\`\`\n`;
       },
     });
@@ -224,7 +233,9 @@ export class NotionConnector implements Connector {
       console.error('[Notion] Authentication failed:', error);
       return {
         success: false,
-        error: this.extractErrorMessage(error) || 'Failed to authenticate with Notion',
+        error:
+          this.extractErrorMessage(error) ||
+          'Failed to authenticate with Notion',
       };
     }
   }
@@ -264,7 +275,8 @@ export class NotionConnector implements Connector {
       console.error('[Notion] Connection test failed:', error);
       return {
         success: false,
-        message: this.extractErrorMessage(error) || 'Failed to connect to Notion',
+        message:
+          this.extractErrorMessage(error) || 'Failed to connect to Notion',
       };
     }
   }
@@ -290,13 +302,19 @@ export class NotionConnector implements Connector {
       });
 
       // Search for pages and databases
-      let hasMore = true;
-      let startCursor: string | undefined;
-      let processedCount = 0;
+      const processSearchPage = async (
+        startCursor?: string,
+        processedCount = 0,
+      ): Promise<void> => {
+        if (options?.limit && processedCount >= options.limit) {
+          return;
+        }
 
-      while (hasMore && (!options?.limit || processedCount < options.limit)) {
         const searchParams: Record<string, unknown> = {
-          page_size: Math.min(100, options?.limit ? options.limit - processedCount : 100),
+          page_size: Math.min(
+            100,
+            options?.limit ? options.limit - processedCount : 100,
+          ),
         };
 
         if (startCursor) {
@@ -312,38 +330,64 @@ export class NotionConnector implements Connector {
           };
         }
 
-        const searchResult = await this.notion.search(searchParams as Parameters<Client['search']>[0]);
+        const searchResult = await this.notion.search(
+          searchParams as Parameters<Client['search']>[0],
+        );
 
         // Process each result
-        for (const item of searchResult.results) {
-          try {
-            if (item.object === 'page') {
-              await this.processPage(item as unknown as NotionPage);
-              result.filesProcessed++;
-            } else if ((item.object as string) === 'database') {
-              await this.processDatabase(item as unknown as NotionDatabase);
-              result.filesProcessed++;
+        const pageResults = await Promise.all(
+          Array.from(searchResult.results).map(async (item) => {
+            try {
+              if (item.object === 'page') {
+                await this.processPage(item as unknown as NotionPage);
+                result.filesProcessed++;
+              } else if ((item.object as string) === 'database') {
+                await this.processDatabase(item as unknown as NotionDatabase);
+                result.filesProcessed++;
+              }
+
+              return 1;
+            } catch (error: unknown) {
+              console.error(
+                `[Notion Sync] Failed to process ${item.object} ${item.id}:`,
+                error,
+              );
+              result.filesFailed++;
+              result.errors.push({
+                fileId: item.id,
+                fileName: this.extractTitle(item),
+                error: this.extractErrorMessage(error),
+                retryable: true,
+              });
+              return 0;
             }
+          }),
+        );
 
-            processedCount++;
-          } catch (error: unknown) {
-            console.error(`[Notion Sync] Failed to process ${item.object} ${item.id}:`, error);
-            result.filesFailed++;
-            result.errors.push({
-              fileId: item.id,
-              fileName: this.extractTitle(item),
-              error: this.extractErrorMessage(error),
-              retryable: true,
-            });
-          }
+        const nextProcessedCount =
+          processedCount +
+          pageResults.reduce<number>(
+            (total, processed) => total + processed,
+            0,
+          );
+
+        if (
+          searchResult.has_more &&
+          (!options?.limit || nextProcessedCount < options.limit)
+        ) {
+          await processSearchPage(
+            searchResult.next_cursor || undefined,
+            nextProcessedCount,
+          );
         }
+      };
 
-        hasMore = searchResult.has_more;
-        startCursor = searchResult.next_cursor || undefined;
-      }
+      await processSearchPage();
 
       // Mark as success if less than 10% failed
-      result.success = result.filesFailed === 0 || result.filesFailed < result.filesProcessed * 0.1;
+      result.success =
+        result.filesFailed === 0 ||
+        result.filesFailed < result.filesProcessed * 0.1;
 
       console.log('[Notion Sync] Sync completed', {
         processed: result.filesProcessed,
@@ -370,16 +414,19 @@ export class NotionConnector implements Connector {
    */
   async listFiles(options?: ListOptions): Promise<ConnectorFile[]> {
     try {
-      const files: ConnectorFile[] = [];
       const limit = options?.limit || 100;
       const offset = options?.offset || 0;
 
-      let hasMore = true;
-      let startCursor: string | undefined;
-      let count = 0;
-      let skipped = 0;
+      const collectFiles = async (
+        startCursor: string | undefined,
+        count: number,
+        skipped: number,
+        files: ConnectorFile[],
+      ): Promise<ConnectorFile[]> => {
+        if (count >= limit) {
+          return files;
+        }
 
-      while (hasMore && count < limit) {
         const searchParams: Parameters<Client['search']>[0] = {
           page_size: Math.min(100, limit - count),
         };
@@ -389,31 +436,44 @@ export class NotionConnector implements Connector {
         }
 
         const searchResult = await this.notion.search(searchParams);
+        let nextCount = count;
+        let nextSkipped = skipped;
+        const nextFiles = [...files];
 
         for (const item of searchResult.results) {
           // Skip offset
-          if (skipped < offset) {
-            skipped++;
+          if (nextSkipped < offset) {
+            nextSkipped++;
             continue;
           }
 
           const file = this.convertToConnectorFile(item);
           if (file) {
-            files.push(file);
-            count++;
+            nextFiles.push(file);
+            nextCount++;
           }
 
-          if (count >= limit) break;
+          if (nextCount >= limit) break;
         }
 
-        hasMore = searchResult.has_more && count < limit;
-        startCursor = searchResult.next_cursor || undefined;
-      }
+        if (searchResult.has_more && nextCount < limit) {
+          return collectFiles(
+            searchResult.next_cursor || undefined,
+            nextCount,
+            nextSkipped,
+            nextFiles,
+          );
+        }
 
-      return files;
+        return nextFiles;
+      };
+
+      return collectFiles(undefined, 0, 0, []);
     } catch (error: unknown) {
       console.error('[Notion] Failed to list files:', error);
-      throw new Error(`Failed to list Notion files: ${this.extractErrorMessage(error)}`);
+      throw new Error(
+        `Failed to list Notion files: ${this.extractErrorMessage(error)}`,
+      );
     }
   }
 
@@ -446,7 +506,9 @@ export class NotionConnector implements Connector {
         };
       } catch {
         // Try as database
-        const database = await this.notion.databases.retrieve({ database_id: cleanId });
+        const database = await this.notion.databases.retrieve({
+          database_id: cleanId,
+        });
         const content = await this.extractDatabaseContent(cleanId);
         const title = this.extractTitle(database);
 
@@ -465,19 +527,25 @@ export class NotionConnector implements Connector {
       }
     } catch (error: unknown) {
       console.error(`[Notion] Failed to download file ${fileId}:`, error);
-      throw new Error(`Failed to download Notion file: ${this.extractErrorMessage(error)}`);
+      throw new Error(
+        `Failed to download Notion file: ${this.extractErrorMessage(error)}`,
+      );
     }
   }
 
   /**
    * Refresh expired credentials (Notion tokens don't expire unless revoked)
    */
-  async refreshCredentials(credentials: ConnectorCredentials): Promise<ConnectorCredentials> {
+  async refreshCredentials(
+    credentials: ConnectorCredentials,
+  ): Promise<ConnectorCredentials> {
     // Notion access tokens don't expire, but we can test if they're still valid
     const authResult = await this.authenticate(credentials);
 
     if (!authResult.success) {
-      throw new Error('Failed to refresh Notion credentials: ' + authResult.error);
+      throw new Error(
+        'Failed to refresh Notion credentials: ' + authResult.error,
+      );
     }
 
     return credentials;
@@ -541,7 +609,10 @@ export class NotionConnector implements Connector {
 
       console.log(`[Notion] Processed database: ${title}`);
     } catch (error: unknown) {
-      console.error(`[Notion] Failed to process database ${database.id}:`, error);
+      console.error(
+        `[Notion] Failed to process database ${database.id}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -561,16 +632,17 @@ export class NotionConnector implements Connector {
     const markdown: string[] = [];
 
     // Get database metadata
-    const database = await this.notion.databases.retrieve({ database_id: databaseId });
+    const database = await this.notion.databases.retrieve({
+      database_id: databaseId,
+    });
     const title = this.extractTitle(database);
     markdown.push(`# ${title}\n`);
 
     // Get database pages
-    let hasMore = true;
-    let startCursor: string | undefined;
-    const pages: NotionTitleSource[] = [];
-
-    while (hasMore) {
+    const loadDatabasePages = async (
+      startCursor?: string,
+      pages: NotionTitleSource[] = [],
+    ): Promise<NotionTitleSource[]> => {
       const queryParams: {
         database_id: string;
         page_size: number;
@@ -584,31 +656,40 @@ export class NotionConnector implements Connector {
         queryParams.start_cursor = startCursor;
       }
 
-      const response = await (this.notion.databases as unknown as NotionDatabaseQueryClient).query(queryParams);
-      pages.push(...(response.results as unknown as NotionTitleSource[]));
+      const response = await (
+        this.notion.databases as unknown as NotionDatabaseQueryClient
+      ).query(queryParams);
+      const nextPages = pages.concat(
+        response.results as unknown as NotionTitleSource[],
+      );
 
-      hasMore = response.has_more;
-      startCursor = response.next_cursor || undefined;
-    }
+      return response.has_more
+        ? loadDatabasePages(response.next_cursor || undefined, nextPages)
+        : nextPages;
+    };
+
+    const pages = await loadDatabasePages();
 
     markdown.push(`\nFound ${pages.length} pages in this database.\n`);
 
     // Extract properties from each page
-    for (const page of pages.slice(0, 50)) {
-      // Limit to first 50 pages
-      const pageTitle = this.extractTitle(page);
-      markdown.push(`\n## ${pageTitle}\n`);
-
-      // Extract page content
-      try {
-        if (page.id) {
-          const content = await this.extractPageContent(page.id);
-          markdown.push(content);
+    await Promise.all(
+      Array.from(pages.slice(0, 50)).map(async (page) => {
+        const pageTitle = this.extractTitle(page);
+        markdown.push(`\n## ${pageTitle}\n`);
+        try {
+          if (page.id) {
+            const content = await this.extractPageContent(page.id);
+            markdown.push(content);
+          }
+        } catch (error) {
+          console.error(
+            `[Notion] Failed to extract page content for ${page.id}:`,
+            error,
+          );
         }
-      } catch (error) {
-        console.error(`[Notion] Failed to extract page content for ${page.id}:`, error);
-      }
-    }
+      }),
+    );
 
     return markdown.join('\n');
   }
@@ -617,11 +698,10 @@ export class NotionConnector implements Connector {
    * Get all child blocks recursively
    */
   private async getBlockChildren(blockId: string): Promise<NotionBlock[]> {
-    const blocks: NotionBlock[] = [];
-    let hasMore = true;
-    let startCursor: string | undefined;
-
-    while (hasMore) {
+    const loadBlocks = async (
+      startCursor?: string,
+      blocks: NotionBlock[] = [],
+    ): Promise<NotionBlock[]> => {
       const params: Parameters<Client['blocks']['children']['list']>[0] = {
         block_id: blockId,
         page_size: 100,
@@ -632,23 +712,31 @@ export class NotionConnector implements Connector {
       }
 
       const response = await this.notion.blocks.children.list(params);
-      blocks.push(...(response.results as NotionBlock[]));
+      const nextBlocks = blocks.concat(response.results as NotionBlock[]);
 
-      hasMore = response.has_more;
-      startCursor = response.next_cursor || undefined;
-    }
+      return response.has_more
+        ? loadBlocks(response.next_cursor || undefined, nextBlocks)
+        : nextBlocks;
+    };
+
+    const blocks = await loadBlocks();
 
     // Get children of blocks that have children
-    for (const block of blocks) {
-      if (block.has_children) {
-        try {
-          const children = await this.getBlockChildren(block.id);
-          block.children = children;
-        } catch (error) {
-          console.error(`[Notion] Failed to get children for block ${block.id}:`, error);
+    await Promise.all(
+      Array.from(blocks).map(async (block) => {
+        if (block.has_children) {
+          try {
+            const children = await this.getBlockChildren(block.id);
+            block.children = children;
+          } catch (error) {
+            console.error(
+              `[Notion] Failed to get children for block ${block.id}:`,
+              error,
+            );
+          }
         }
-      }
-    }
+      }),
+    );
 
     return blocks;
   }
@@ -656,19 +744,27 @@ export class NotionConnector implements Connector {
   /**
    * Convert Notion blocks to Markdown
    */
-  private async blocksToMarkdown(blocks: NotionBlock[], indent: number = 0): Promise<string> {
+  private async blocksToMarkdown(
+    blocks: NotionBlock[],
+    indent: number = 0,
+  ): Promise<string> {
     const markdown: string[] = [];
 
-    for (const block of blocks) {
-      try {
-        const blockMarkdown = await this.blockToMarkdown(block, indent);
-        if (blockMarkdown) {
-          markdown.push(blockMarkdown);
+    await Promise.all(
+      Array.from(blocks).map(async (block) => {
+        try {
+          const blockMarkdown = await this.blockToMarkdown(block, indent);
+          if (blockMarkdown) {
+            markdown.push(blockMarkdown);
+          }
+        } catch (error) {
+          console.error(
+            `[Notion] Failed to convert block ${block.id} to markdown:`,
+            error,
+          );
         }
-      } catch (error) {
-        console.error(`[Notion] Failed to convert block ${block.id} to markdown:`, error);
-      }
-    }
+      }),
+    );
 
     return markdown.join('\n');
   }
@@ -676,7 +772,10 @@ export class NotionConnector implements Connector {
   /**
    * Convert single Notion block to Markdown
    */
-  private async blockToMarkdown(block: NotionBlock, indent: number = 0): Promise<string> {
+  private async blockToMarkdown(
+    block: NotionBlock,
+    indent: number = 0,
+  ): Promise<string> {
     const indentStr = '  '.repeat(indent);
     const type = block.type;
     const blockData = block[type] as NotionBlockData | undefined;
@@ -693,34 +792,47 @@ export class NotionConnector implements Connector {
         break;
 
       case 'heading_1':
-        markdown = indentStr + '# ' + this.extractRichText(blockData.rich_text) + '\n';
+        markdown =
+          indentStr + '# ' + this.extractRichText(blockData.rich_text) + '\n';
         break;
 
       case 'heading_2':
-        markdown = indentStr + '## ' + this.extractRichText(blockData.rich_text) + '\n';
+        markdown =
+          indentStr + '## ' + this.extractRichText(blockData.rich_text) + '\n';
         break;
 
       case 'heading_3':
-        markdown = indentStr + '### ' + this.extractRichText(blockData.rich_text) + '\n';
+        markdown =
+          indentStr + '### ' + this.extractRichText(blockData.rich_text) + '\n';
         break;
 
       case 'bulleted_list_item':
-        markdown = indentStr + '- ' + this.extractRichText(blockData.rich_text) + '\n';
+        markdown =
+          indentStr + '- ' + this.extractRichText(blockData.rich_text) + '\n';
         break;
 
       case 'numbered_list_item':
-        markdown = indentStr + '1. ' + this.extractRichText(blockData.rich_text) + '\n';
+        markdown =
+          indentStr + '1. ' + this.extractRichText(blockData.rich_text) + '\n';
         break;
 
       case 'to_do': {
         const checked = blockData.checked ? 'x' : ' ';
-        markdown = indentStr + `- [${checked}] ` + this.extractRichText(blockData.rich_text) + '\n';
+        markdown =
+          indentStr +
+          `- [${checked}] ` +
+          this.extractRichText(blockData.rich_text) +
+          '\n';
         break;
       }
 
       case 'toggle':
         markdown = indentStr + '<details>\n';
-        markdown += indentStr + '<summary>' + this.extractRichText(blockData.rich_text) + '</summary>\n';
+        markdown +=
+          indentStr +
+          '<summary>' +
+          this.extractRichText(blockData.rich_text) +
+          '</summary>\n';
         if (block.children) {
           markdown += await this.blocksToMarkdown(block.children, indent + 1);
         }
@@ -728,7 +840,8 @@ export class NotionConnector implements Connector {
         break;
 
       case 'quote':
-        markdown = indentStr + '> ' + this.extractRichText(blockData.rich_text) + '\n';
+        markdown =
+          indentStr + '> ' + this.extractRichText(blockData.rich_text) + '\n';
         break;
 
       case 'callout':
@@ -739,7 +852,8 @@ export class NotionConnector implements Connector {
       case 'code': {
         const language = blockData.language || '';
         markdown = indentStr + '```' + language + '\n';
-        markdown += indentStr + this.extractRichText(blockData.rich_text) + '\n';
+        markdown +=
+          indentStr + this.extractRichText(blockData.rich_text) + '\n';
         markdown += indentStr + '```\n';
         break;
       }
@@ -763,7 +877,8 @@ export class NotionConnector implements Connector {
 
       case 'file': {
         const fileUrl = this.extractFileUrl(blockData);
-        const fileName = this.extractRichText(blockData.caption || []) || 'File';
+        const fileName =
+          this.extractRichText(blockData.caption || []) || 'File';
         markdown = indentStr + `[${fileName}](${fileUrl})\n`;
         break;
       }
@@ -777,7 +892,8 @@ export class NotionConnector implements Connector {
       case 'bookmark': {
         const bookmarkUrl = blockData.url;
         const bookmarkCaption = this.extractRichText(blockData.caption || []);
-        markdown = indentStr + `[${bookmarkCaption || bookmarkUrl}](${bookmarkUrl})\n`;
+        markdown =
+          indentStr + `[${bookmarkCaption || bookmarkUrl}](${bookmarkUrl})\n`;
         break;
       }
 
@@ -809,15 +925,13 @@ export class NotionConnector implements Connector {
       default:
         // Handle unknown block types
         if (blockData.rich_text) {
-          markdown = indentStr + this.extractRichText(blockData.rich_text) + '\n';
+          markdown =
+            indentStr + this.extractRichText(blockData.rich_text) + '\n';
         }
     }
 
     // Add children if not already processed
-    if (
-      block.children &&
-      !['toggle', 'column_list', 'column'].includes(type)
-    ) {
+    if (block.children && !['toggle', 'column_list', 'column'].includes(type)) {
       markdown += await this.blocksToMarkdown(block.children, indent + 1);
     }
 
@@ -873,7 +987,9 @@ export class NotionConnector implements Connector {
    */
   private async extractTable(tableBlock: NotionBlock): Promise<string> {
     const markdown: string[] = [];
-    const tableData = tableBlock.table as { has_column_header?: boolean } | undefined;
+    const tableData = tableBlock.table as
+      | { has_column_header?: boolean }
+      | undefined;
 
     if (!tableBlock.children || tableBlock.children.length === 0) {
       return '';
@@ -886,9 +1002,13 @@ export class NotionConnector implements Connector {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       if (row.type === 'table_row') {
-        const tableRow = row.table_row as { cells?: NotionRichText[][] } | undefined;
+        const tableRow = row.table_row as
+          | { cells?: NotionRichText[][] }
+          | undefined;
         const cells = tableRow?.cells || [];
-        const cellContent = cells.map((cell) => this.extractRichText(cell)).join(' | ');
+        const cellContent = cells
+          .map((cell) => this.extractRichText(cell))
+          .join(' | ');
         markdown.push('| ' + cellContent + ' |');
 
         // Add separator after header row
@@ -919,14 +1039,18 @@ export class NotionConnector implements Connector {
     // For pages
     if (titleSource.properties) {
       // Look for title property
-      const titleProp = Object.values(titleSource.properties).find((prop) => prop.type === 'title');
+      const titleProp = Object.values(titleSource.properties).find(
+        (prop) => prop.type === 'title',
+      );
       if (titleProp?.title) {
         return this.extractRichText(titleProp.title) || 'Untitled';
       }
 
       // Fallback to Name property
       if (titleSource.properties.Name?.title) {
-        return this.extractRichText(titleSource.properties.Name.title) || 'Untitled';
+        return (
+          this.extractRichText(titleSource.properties.Name.title) || 'Untitled'
+        );
       }
     }
 
@@ -939,7 +1063,8 @@ export class NotionConnector implements Connector {
   private extractUserName(user: unknown): string {
     if (!this.isRecord(user)) return 'Unknown User';
     if (typeof user.name === 'string') return user.name;
-    if (this.isRecord(user.person) && typeof user.person.email === 'string') return user.person.email;
+    if (this.isRecord(user.person) && typeof user.person.email === 'string')
+      return user.person.email;
     if (
       this.isRecord(user.bot) &&
       this.isRecord(user.bot.owner) &&
@@ -964,7 +1089,8 @@ export class NotionConnector implements Connector {
       const file: ConnectorFile = {
         id: item.id,
         name: this.extractTitle(item),
-        type: typeof notionItem.object === 'string' ? notionItem.object : 'notion',
+        type:
+          typeof notionItem.object === 'string' ? notionItem.object : 'notion',
         mimeType: 'text/markdown',
         modifiedAt: new Date(notionItem.last_edited_time || Date.now()),
         createdAt: new Date(notionItem.created_time || Date.now()),
@@ -1000,7 +1126,9 @@ export class NotionConnector implements Connector {
     }
 
     if (!this.connectorId) {
-      throw new Error('Notion connector ID is required to store imported documents');
+      throw new Error(
+        'Notion connector ID is required to store imported documents',
+      );
     }
 
     try {
@@ -1037,7 +1165,8 @@ export class NotionConnector implements Connector {
               file_size: Buffer.byteLength(doc.content, 'utf8'),
               source_metadata: doc.sourceMetadata,
               last_synced_at: now,
-              sync_count: ((existing as ImportedDocumentRow).sync_count || 0) + 1,
+              sync_count:
+                ((existing as ImportedDocumentRow).sync_count || 0) + 1,
               processing_status: 'pending',
               chunks_generated: false,
               embeddings_generated: false,
@@ -1056,7 +1185,8 @@ export class NotionConnector implements Connector {
               file_size: Buffer.byteLength(doc.content, 'utf8'),
               source_metadata: doc.sourceMetadata,
               last_synced_at: now,
-              sync_count: ((existing as ImportedDocumentRow).sync_count || 0) + 1,
+              sync_count:
+                ((existing as ImportedDocumentRow).sync_count || 0) + 1,
             })
             .eq('id', existing.id);
         }

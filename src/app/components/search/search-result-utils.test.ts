@@ -33,8 +33,13 @@ describe('search-result-utils', () => {
   });
 
   it('splits snippet text into highlighted parts', () => {
-    const parts = getHighlightParts('Launch notes mention Q4 trends', 'launch q4');
-    const highlighted = parts.filter((part) => part.highlighted).map((part) => part.text.toLowerCase());
+    const parts = getHighlightParts(
+      'Launch notes mention Q4 trends',
+      'launch q4',
+    );
+    const highlighted = parts.flatMap((__item, __index, __array) =>
+      __item.highlighted ? [__item.text.toLowerCase()] : [],
+    );
 
     expect(highlighted).toEqual(['launch', 'q4']);
   });

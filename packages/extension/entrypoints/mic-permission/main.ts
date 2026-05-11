@@ -208,10 +208,14 @@ function setStatus(
 function setBusy(isBusy: boolean): void {
   primaryActionButton.disabled = isBusy;
   closeButton.disabled = isBusy;
-  primaryActionButton.style.opacity = isBusy ? '0.7' : '1';
-  closeButton.style.opacity = isBusy ? '0.7' : '1';
-  primaryActionButton.style.cursor = isBusy ? 'wait' : 'pointer';
-  closeButton.style.cursor = isBusy ? 'wait' : 'pointer';
+  Object.assign(primaryActionButton.style, {
+    opacity: isBusy ? '0.7' : '1',
+    cursor: isBusy ? 'wait' : 'pointer',
+  });
+  Object.assign(closeButton.style, {
+    opacity: isBusy ? '0.7' : '1',
+    cursor: isBusy ? 'wait' : 'pointer',
+  });
 }
 
 function renderView(errorMessage?: string): void {

@@ -21,7 +21,7 @@ import { apiFetch } from './api-client.js';
 // Types
 // ---------------------------------------------------------------------------
 
-export interface UploadProgress {
+interface UploadProgress {
   /** Bytes uploaded so far */
   uploaded: number;
   /** Total bytes */
@@ -30,15 +30,15 @@ export interface UploadProgress {
   percent: number;
 }
 
-export interface RetryInfo {
+interface RetryInfo {
   /** Current attempt (1-indexed) */
   attempt: number;
   /** Maximum attempts */
   maxAttempts: number;
 }
 
-export type UploadProgressCallback = (progress: UploadProgress) => void;
-export type RetryCallback = (info: RetryInfo) => void;
+type UploadProgressCallback = (progress: UploadProgress) => void;
+type RetryCallback = (info: RetryInfo) => void;
 
 interface UploadInitResponse {
   recordingId: string;
@@ -68,7 +68,10 @@ const MAX_ATTEMPTS = 3;
 const BASE_DELAY_MS = 1000; // 1s, 2s, 4s
 
 function createUploadIdempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID();
   }
 
@@ -87,20 +90,21 @@ async function withRetry<T>(
   fn: () => Promise<T>,
   onRetry?: RetryCallback,
 ): Promise<T> {
-  let lastError: Error | undefined;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  const runAttempt = async (attempt: number): Promise<T> => {
     try {
       return await fn();
     } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      if (attempt < MAX_ATTEMPTS) {
-        const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-        onRetry?.({ attempt: attempt + 1, maxAttempts: MAX_ATTEMPTS });
-        await sleep(delay);
-      }
+      const error = err instanceof Error ? err : new Error(String(err));
+      if (attempt >= MAX_ATTEMPTS) throw error;
+
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      onRetry?.({ attempt: attempt + 1, maxAttempts: MAX_ATTEMPTS });
+      await sleep(delay);
+      return runAttempt(attempt + 1);
     }
-  }
-  throw lastError;
+  };
+
+  return runAttempt(1);
 }
 
 // ---------------------------------------------------------------------------

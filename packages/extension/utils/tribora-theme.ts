@@ -35,4 +35,4 @@ export const TRIBORA_EXTENSION_THEME = {
   },
 } as const;
 
-export type TriboraExtensionTheme = typeof TRIBORA_EXTENSION_THEME;
+type TriboraExtensionTheme = typeof TRIBORA_EXTENSION_THEME;

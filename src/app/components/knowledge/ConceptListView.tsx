@@ -66,7 +66,7 @@ export function ConceptListView({
   viewMode = 'list',
 }: ConceptListViewProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(['tool', 'process', 'technical_term'])
+    new Set(['tool', 'process', 'technical_term']),
   );
 
   // Group concepts by type
@@ -99,13 +99,17 @@ export function ConceptListView({
       'general',
     ];
 
-    return sortOrder
-      .filter((type) => groups[type].length > 0)
-      .map((type) => ({
-        type,
-        concepts: groups[type],
-        count: groups[type].length,
-      }));
+    return sortOrder.flatMap((__item, __index, __array) =>
+      groups[__item].length > 0
+        ? [
+            {
+              type: __item,
+              concepts: groups[__item],
+              count: groups[__item].length,
+            },
+          ]
+        : [],
+    );
   }, [concepts]);
 
   const toggleGroup = (type: string) => {
@@ -135,7 +139,7 @@ export function ConceptListView({
       <div
         className={cn(
           'flex flex-col items-center justify-center text-center py-12 px-4',
-          className
+          className,
         )}
       >
         <div className="inline-flex items-center justify-center rounded-full bg-muted p-4 mb-4">
@@ -143,12 +147,15 @@ export function ConceptListView({
         </div>
         <h3 className="text-lg font-semibold mb-2">No Concepts Found</h3>
         <p className="text-sm text-muted-foreground max-w-md mb-4">
-          No concepts have been detected in your content yet. Add more content to start building
-          your knowledge graph.
+          No concepts have been detected in your content yet. Add more content
+          to start building your knowledge graph.
         </p>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Sparkles className="size-4" />
-          <span>Concepts will appear here as they&apos;re extracted from your content</span>
+          <span>
+            Concepts will appear here as they&apos;re extracted from your
+            content
+          </span>
         </div>
       </div>
     );
@@ -215,9 +222,15 @@ function ConceptGroup({
         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${type.replace('_', ' ')} concepts group`}
       >
         {isExpanded ? (
-          <ChevronDown className="size-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+          <ChevronDown
+            className="size-4 text-muted-foreground flex-shrink-0"
+            aria-hidden="true"
+          />
         ) : (
-          <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+          <ChevronRight
+            className="size-4 text-muted-foreground flex-shrink-0"
+            aria-hidden="true"
+          />
         )}
         <ConceptTypeLabel type={type} size="md" />
         <div
@@ -237,14 +250,16 @@ function ConceptGroup({
             'pl-6',
             viewMode === 'grid'
               ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'
-              : 'space-y-2'
+              : 'space-y-2',
           )}
         >
           {concepts.map((concept) => (
             <ConceptCard
               key={concept.id}
               concept={concept}
-              onClick={onConceptClick ? () => onConceptClick(concept.id) : undefined}
+              onClick={
+                onConceptClick ? () => onConceptClick(concept.id) : undefined
+              }
               isSelected={selectedConceptId === concept.id}
               viewMode={viewMode}
             />
@@ -271,7 +286,12 @@ interface ConceptCardProps {
   viewMode: 'list' | 'grid';
 }
 
-function ConceptCard({ concept, onClick, isSelected, viewMode }: ConceptCardProps) {
+function ConceptCard({
+  concept,
+  onClick,
+  isSelected,
+  viewMode,
+}: ConceptCardProps) {
   const color = CONCEPT_TYPE_COLORS[concept.conceptType];
 
   if (viewMode === 'grid') {
@@ -284,13 +304,15 @@ function ConceptCard({ concept, onClick, isSelected, viewMode }: ConceptCardProp
           isSelected
             ? 'border-foreground/40 bg-muted/50 ring-2 ring-offset-2 ring-foreground/10'
             : 'border-border bg-card',
-          onClick && 'cursor-pointer'
+          onClick && 'cursor-pointer',
         )}
         aria-label={`${concept.name} concept, ${concept.mentionCount} mentions`}
         aria-pressed={isSelected}
       >
         <div className="flex items-start justify-between w-full gap-2 mb-2">
-          <h4 className="font-medium text-sm line-clamp-2 flex-1">{concept.name}</h4>
+          <h4 className="font-medium text-sm line-clamp-2 flex-1">
+            {concept.name}
+          </h4>
           <span
             className="flex-shrink-0 inline-flex items-center justify-center rounded-full text-xs font-medium px-2 py-0.5"
             style={{
@@ -303,7 +325,9 @@ function ConceptCard({ concept, onClick, isSelected, viewMode }: ConceptCardProp
           </span>
         </div>
         {concept.description && (
-          <p className="text-xs text-muted-foreground line-clamp-2">{concept.description}</p>
+          <p className="text-xs text-muted-foreground line-clamp-2">
+            {concept.description}
+          </p>
         )}
       </button>
     );
@@ -319,7 +343,7 @@ function ConceptCard({ concept, onClick, isSelected, viewMode }: ConceptCardProp
         isSelected
           ? 'border-foreground/40 bg-muted/50 ring-2 ring-offset-2 ring-foreground/10'
           : 'border-border bg-card',
-        onClick && 'cursor-pointer'
+        onClick && 'cursor-pointer',
       )}
       aria-label={`${concept.name} concept, ${concept.mentionCount} mentions`}
       aria-pressed={isSelected}
@@ -327,7 +351,9 @@ function ConceptCard({ concept, onClick, isSelected, viewMode }: ConceptCardProp
       <div className="flex-1 min-w-0">
         <h4 className="font-medium text-sm truncate mb-0.5">{concept.name}</h4>
         {concept.description && (
-          <p className="text-xs text-muted-foreground line-clamp-1">{concept.description}</p>
+          <p className="text-xs text-muted-foreground line-clamp-1">
+            {concept.description}
+          </p>
         )}
       </div>
       <span
@@ -376,7 +402,7 @@ export function ConceptListViewSkeleton({
               'pl-6',
               viewMode === 'grid'
                 ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'
-                : 'space-y-2'
+                : 'space-y-2',
             )}
           >
             {Array.from({ length: itemsPerGroup }).map((_, itemIndex) => (
@@ -384,7 +410,7 @@ export function ConceptListViewSkeleton({
                 key={itemIndex}
                 className={cn(
                   viewMode === 'grid' ? 'h-24' : 'h-16',
-                  'rounded-lg bg-muted animate-pulse'
+                  'rounded-lg bg-muted animate-pulse',
                 )}
               />
             ))}
@@ -405,7 +431,7 @@ interface ConceptListViewHeaderProps {
   className?: string;
 }
 
-export function ConceptListViewHeader({
+function ConceptListViewHeader({
   viewMode,
   onViewModeChange,
   conceptCount,

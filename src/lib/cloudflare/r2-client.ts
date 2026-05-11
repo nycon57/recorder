@@ -19,6 +19,7 @@ import {
   type DeleteObjectsCommandInput,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
 import { getR2Config, getR2Endpoint } from './r2-config';
 
 /**
@@ -407,7 +408,7 @@ export class R2Client {
  * Get R2 client instance (convenience function with lazy initialization)
  * Returns null if R2 is not configured
  */
-export function getR2Client(): R2Client | null {
+function getR2Client(): R2Client | null {
   return R2Client.getInstance();
 }
 

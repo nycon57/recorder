@@ -32,6 +32,7 @@ import {
   type SourceLifecycleJobType,
 } from '@/lib/utils/status-helpers';
 import { requireOrg } from '@/lib/utils/api';
+import type { Json } from '@/lib/types/database';
 import { generateStoragePath } from '@/lib/validations/library';
 
 interface ImportRequest {
@@ -113,13 +114,20 @@ function toText(content: string | Buffer): string {
   return Buffer.isBuffer(content) ? content.toString('utf-8') : content;
 }
 
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
 function getExtractionJob(
   mimeType: string,
   recordingId: string,
   orgId: string,
   storagePath: string,
 ): {
-  type: Extract<SourceLifecycleJobType, 'extract_text_pdf' | 'extract_text_docx'>;
+  type: Extract<
+    SourceLifecycleJobType,
+    'extract_text_pdf' | 'extract_text_docx'
+  >;
   payload: {
     recordingId: string;
     orgId: string;
@@ -198,7 +206,11 @@ async function rollbackCreatedImport(
   }
 }
 
-export async function POST(req: NextRequest) {
+export function POST(props: Parameters<typeof handlePostImplementation>[0]) {
+  return handlePostImplementation(props);
+}
+
+async function handlePostImplementation(req: NextRequest) {
   try {
     const { orgId, userId } = await requireOrg();
     const supabase = createAdminClient();
@@ -238,8 +250,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create connector instance
-    const credentials =
-      connectorConfig.credentials as GoogleDriveCredentials;
+    const credentials = connectorConfig.credentials as GoogleDriveCredentials;
     const connector = new GoogleDriveConnector(
       {
         accessToken: credentials.accessToken,
@@ -297,291 +308,291 @@ export async function POST(req: NextRequest) {
       skipped: fileIds.length - newFileIds.length,
     };
 
-    for (const fileId of newFileIds) {
-      try {
-        // Download file content
-        console.log(`[Google Drive Import] Downloading file ${fileId}`);
-        const fileContent = await connector.downloadFile(fileId);
-
-        // Check if file type is supported
-        if (
-          !SUPPORTED_MIME_TYPES.has(fileContent.mimeType) &&
-          !fileContent.mimeType.startsWith('text/')
-        ) {
-          results.failed.push({
-            fileId,
-            error: `Unsupported file type: ${fileContent.mimeType}`,
-          });
-          continue;
-        }
-
-        const textLike = isTextLikeMimeType(fileContent.mimeType);
-        const binaryDocument = isBinaryDocumentMimeType(fileContent.mimeType);
-
-        if (!textLike && !binaryDocument) {
-          results.failed.push({
-            fileId,
-            error: `Import processing is not available for file type: ${fileContent.mimeType}`,
-          });
-          continue;
-        }
-
-        // Generate content hash for deduplication
-        const hash = crypto.createHash('sha256');
-        if (textLike) {
-          hash.update(toText(fileContent.content), 'utf-8');
-        } else {
-          hash.update(new Uint8Array(toBuffer(fileContent.content)));
-        }
-        const contentHash = hash.digest('hex');
-
-        // Determine content_type and file_type
-        const contentType = getContentType(fileContent.mimeType);
-        const fileType = getFileType(fileContent.mimeType);
-
-        // Create content record (unified content table - Option A architecture)
-        const { data: contentRecord, error: insertError } = await supabase
-          .from('content')
-          .insert({
-            org_id: orgId,
-            created_by: userId,
-            title: fileContent.title,
-            content_type: contentType,
-            file_type: fileType,
-            status: SOURCE_STATUS.UPLOADED,
-            // Source tracking columns (new unified architecture)
-            source_type: 'google_drive',
-            source_connector_id: connectorConfig.id,
-            source_external_id: fileId,
-            source_url: fileContent.metadata?.webViewLink || null,
-            // Metadata
-            metadata: {
-              originalMimeType:
-                fileContent.metadata?.originalMimeType || fileContent.mimeType,
-              importedMimeType: fileContent.mimeType,
-              exportedMimeType:
-                fileContent.metadata?.originalMimeType &&
-                fileContent.metadata.originalMimeType !== fileContent.mimeType
-                  ? fileContent.mimeType
-                  : null,
-              modifiedTime: fileContent.metadata?.modifiedTime,
-              createdTime: fileContent.metadata?.createdTime,
-              owners: fileContent.metadata?.owners,
-              size: fileContent.size,
-              source: 'google_drive',
-              sourceFileId: fileId,
-              sourceConnectorId: connectorConfig.id,
-            },
-          })
-          .select('id')
-          .single();
-
-        if (insertError) {
-          console.error(
-            `[Google Drive Import] Failed to insert content:`,
-            insertError,
+    await Promise.all(
+      newFileIds.map(async (fileId) => {
+        const failedImports = results.failed;
+        try {
+          // Download file content
+          console.log(`[Google Drive Import] Downloading file ${fileId}`);
+          const fileContent = await connector.downloadFile(fileId);
+          const originalMimeType = stringOrNull(
+            fileContent.metadata?.originalMimeType,
           );
-          results.failed.push({
-            fileId,
-            error: insertError.message,
-          });
-          continue;
-        }
 
-        // Create connector_sync_state entry for sync tracking
-        const { error: syncStateError } = await supabase
-          .from('connector_sync_state')
-          .insert({
-            content_id: contentRecord.id,
-            connector_id: connectorConfig.id,
-            external_id: fileId,
-            content_hash: contentHash,
-            sync_status: 'synced',
-            external_modified_at: fileContent.metadata?.modifiedTime || null,
-            last_synced_at: new Date().toISOString(),
-            sync_metadata: {
-              originalMimeType:
-                fileContent.metadata?.originalMimeType || fileContent.mimeType,
-              importedMimeType: fileContent.mimeType,
-              exportedAs:
-                fileContent.metadata?.originalMimeType &&
-                fileContent.metadata.originalMimeType !== fileContent.mimeType
-                  ? fileContent.mimeType
-                  : null,
-              webViewLink: fileContent.metadata?.webViewLink,
-            },
-          });
+          // Check if file type is supported
+          if (
+            !SUPPORTED_MIME_TYPES.has(fileContent.mimeType) &&
+            !fileContent.mimeType.startsWith('text/')
+          ) {
+            failedImports.push({
+              fileId,
+              error: `Unsupported file type: ${fileContent.mimeType}`,
+            });
+            return;
+          }
 
-        if (syncStateError) {
-          console.error(
-            `[Google Drive Import] Failed to create sync state:`,
-            syncStateError,
-          );
-          // Continue anyway - content is created, sync state is supplementary
-        }
+          const textLike = isTextLikeMimeType(fileContent.mimeType);
+          const binaryDocument = isBinaryDocumentMimeType(fileContent.mimeType);
 
-        let jobError: { message: string } | null = null;
-        let uploadedStoragePath: string | undefined;
+          if (!textLike && !binaryDocument) {
+            failedImports.push({
+              fileId,
+              error: `Import processing is not available for file type: ${fileContent.mimeType}`,
+            });
+            return;
+          }
 
-        if (textLike) {
-          const textContent = toText(fileContent.content);
-          const { data: transcript, error: transcriptError } = await supabase
-            .from('transcripts')
+          // Generate content hash for deduplication
+          const hash = crypto.createHash('sha256');
+          if (textLike) {
+            hash.update(toText(fileContent.content), 'utf-8');
+          } else {
+            hash.update(new Uint8Array(toBuffer(fileContent.content)));
+          }
+          const contentHash = hash.digest('hex');
+
+          // Determine content_type and file_type
+          const contentType = getContentType(fileContent.mimeType);
+          const fileType = getFileType(fileContent.mimeType);
+
+          // Create content record (unified content table - Option A architecture)
+          const { data: contentRecord, error: insertError } = await supabase
+            .from('content')
             .insert({
-              content_id: contentRecord.id,
-              text: textContent,
-              language: 'en', // Could be detected in the future
-              provider: 'google_drive_import',
-              words_json: {
-                importSource: 'google_drive',
+              org_id: orgId,
+              created_by: userId,
+              title: fileContent.title,
+              content_type: contentType,
+              file_type: fileType,
+              status: SOURCE_STATUS.UPLOADED,
+              // Source tracking columns (new unified architecture)
+              source_type: 'google_drive',
+              source_connector_id: connectorConfig.id,
+              source_external_id: fileId,
+              source_url: stringOrNull(fileContent.metadata?.webViewLink),
+              // Metadata
+              metadata: {
+                originalMimeType: originalMimeType || fileContent.mimeType,
+                importedMimeType: fileContent.mimeType,
+                exportedMimeType:
+                  originalMimeType && originalMimeType !== fileContent.mimeType
+                    ? fileContent.mimeType
+                    : null,
+                modifiedTime: fileContent.metadata?.modifiedTime,
+                createdTime: fileContent.metadata?.createdTime,
+                owners: fileContent.metadata?.owners,
+                size: fileContent.size,
+                source: 'google_drive',
                 sourceFileId: fileId,
                 sourceConnectorId: connectorConfig.id,
-                originalMimeType:
-                  fileContent.metadata?.originalMimeType ||
-                  fileContent.mimeType,
-                importedMimeType: fileContent.mimeType,
-              },
+              } as Json,
             })
             .select('id')
             .single();
 
-          if (transcriptError || !transcript) {
+          if (insertError) {
             console.error(
-              `[Google Drive Import] Failed to create transcript:`,
-              transcriptError,
+              `[Google Drive Import] Failed to insert content:`,
+              insertError,
             );
-            await rollbackCreatedImport(supabase, contentRecord.id);
-            results.failed.push({
+            failedImports.push({
               fileId,
-              error: 'Failed to store content text',
+              error: insertError.message,
             });
-            continue;
+            return;
           }
 
-          const { error } = await supabase.from('jobs').insert({
-            type: 'doc_generate',
-            status: 'pending',
-            content_id: contentRecord.id,
-            payload: {
-              recordingId: contentRecord.id,
-              transcriptId: transcript.id,
+          // Create connector_sync_state entry for sync tracking
+          const { error: syncStateError } = await supabase
+            .from('connector_sync_state')
+            .insert({
+              content_id: contentRecord.id,
+              connector_id: connectorConfig.id,
+              external_id: fileId,
+              content_hash: contentHash,
+              sync_status: 'synced',
+              external_modified_at: fileContent.metadata?.modifiedTime || null,
+              last_synced_at: new Date().toISOString(),
+              sync_metadata: {
+                originalMimeType: originalMimeType || fileContent.mimeType,
+                importedMimeType: fileContent.mimeType,
+                exportedAs:
+                  originalMimeType && originalMimeType !== fileContent.mimeType
+                    ? fileContent.mimeType
+                    : null,
+                webViewLink: fileContent.metadata?.webViewLink,
+              },
+            });
+
+          if (syncStateError) {
+            console.error(
+              `[Google Drive Import] Failed to create sync state:`,
+              syncStateError,
+            );
+            // Continue anyway - content is created, sync state is supplementary
+          }
+
+          let jobError: { message: string } | null = null;
+          let uploadedStoragePath: string | undefined;
+
+          if (textLike) {
+            const textContent = toText(fileContent.content);
+            const { data: transcript, error: transcriptError } = await supabase
+              .from('transcripts')
+              .insert({
+                content_id: contentRecord.id,
+                text: textContent,
+                language: 'en', // Could be detected in the future
+                provider: 'google_drive_import',
+                words_json: {
+                  importSource: 'google_drive',
+                  sourceFileId: fileId,
+                  sourceConnectorId: connectorConfig.id,
+                  originalMimeType: originalMimeType || fileContent.mimeType,
+                  importedMimeType: fileContent.mimeType,
+                } as Json,
+              })
+              .select('id')
+              .single();
+
+            if (transcriptError || !transcript) {
+              console.error(
+                `[Google Drive Import] Failed to create transcript:`,
+                transcriptError,
+              );
+              await rollbackCreatedImport(supabase, contentRecord.id);
+              failedImports.push({
+                fileId,
+                error: 'Failed to store content text',
+              });
+              return;
+            }
+
+            const { error } = await supabase.from('jobs').insert({
+              type: 'doc_generate',
+              status: 'pending',
+              content_id: contentRecord.id,
+              payload: {
+                recordingId: contentRecord.id,
+                transcriptId: transcript.id,
+                orgId,
+              },
+              dedupe_key: `doc_generate:${contentRecord.id}`,
+            });
+            jobError = error;
+
+            await supabase
+              .from('content')
+              .update({
+                status:
+                  getQueuedSourceStatusForJob('doc_generate') ??
+                  SOURCE_STATUS.DOCUMENT_GENERATING,
+              })
+              .eq('id', contentRecord.id);
+          } else {
+            const storagePath = generateStoragePath(
               orgId,
-            },
-            dedupe_key: `doc_generate:${contentRecord.id}`,
-          });
-          jobError = error;
-
-          await supabase
-            .from('content')
-            .update({
-              status:
-                getQueuedSourceStatusForJob('doc_generate') ??
-                SOURCE_STATUS.DOCUMENT_GENERATING,
-            })
-            .eq('id', contentRecord.id);
-        } else {
-          const storagePath = generateStoragePath(
-            orgId,
-            'document',
-            contentRecord.id,
-            fileType,
-          );
-          const rawContent = toBuffer(fileContent.content);
-          const { error: uploadError } = await supabase.storage
-            .from('content')
-            .upload(storagePath, rawContent, {
-              contentType: fileContent.mimeType,
-              upsert: false,
-            });
-
-          if (uploadError) {
-            console.error(
-              `[Google Drive Import] Failed to upload binary document:`,
-              uploadError,
+              'document',
+              contentRecord.id,
+              fileType,
             );
-            await rollbackCreatedImport(supabase, contentRecord.id);
-            results.failed.push({
-              fileId,
-              error: 'Failed to store binary document',
+            const rawContent = toBuffer(fileContent.content);
+            const { error: uploadError } = await supabase.storage
+              .from('content')
+              .upload(storagePath, rawContent, {
+                contentType: fileContent.mimeType,
+                upsert: false,
+              });
+
+            if (uploadError) {
+              console.error(
+                `[Google Drive Import] Failed to upload binary document:`,
+                uploadError,
+              );
+              await rollbackCreatedImport(supabase, contentRecord.id);
+              failedImports.push({
+                fileId,
+                error: 'Failed to store binary document',
+              });
+              return;
+            }
+
+            const extractionJob = getExtractionJob(
+              fileContent.mimeType,
+              contentRecord.id,
+              orgId,
+              storagePath,
+            );
+
+            if (!extractionJob) {
+              await rollbackCreatedImport(
+                supabase,
+                contentRecord.id,
+                storagePath,
+              );
+              failedImports.push({
+                fileId,
+                error: `No extraction job is available for file type: ${fileContent.mimeType}`,
+              });
+              return;
+            }
+            uploadedStoragePath = storagePath;
+
+            const { error } = await supabase.from('jobs').insert({
+              type: extractionJob.type,
+              status: 'pending',
+              content_id: contentRecord.id,
+              payload: extractionJob.payload,
+              dedupe_key: `${extractionJob.type}:${contentRecord.id}`,
             });
-            continue;
+            jobError = error;
+
+            await supabase
+              .from('content')
+              .update({
+                storage_path_raw: storagePath,
+                status:
+                  getQueuedSourceStatusForJob(extractionJob.type) ??
+                  SOURCE_STATUS.UPLOADED,
+              })
+              .eq('id', contentRecord.id);
           }
 
-          const extractionJob = getExtractionJob(
-            fileContent.mimeType,
-            contentRecord.id,
-            orgId,
-            storagePath,
-          );
-
-          if (!extractionJob) {
+          if (jobError) {
+            console.error(
+              `[Google Drive Import] Failed to create processing job:`,
+              jobError,
+            );
+            // Content is created, job failed - update status
             await rollbackCreatedImport(
               supabase,
               contentRecord.id,
-              storagePath,
+              uploadedStoragePath,
             );
-            results.failed.push({
+            failedImports.push({
               fileId,
-              error: `No extraction job is available for file type: ${fileContent.mimeType}`,
+              error: jobError.message,
             });
-            continue;
+            return;
           }
-          uploadedStoragePath = storagePath;
 
-          const { error } = await supabase.from('jobs').insert({
-            type: extractionJob.type,
-            status: 'pending',
-            content_id: contentRecord.id,
-            payload: extractionJob.payload,
-            dedupe_key: `${extractionJob.type}:${contentRecord.id}`,
-          });
-          jobError = error;
-
-          await supabase
-            .from('content')
-            .update({
-              storage_path_raw: storagePath,
-              status:
-                getQueuedSourceStatusForJob(extractionJob.type) ??
-                SOURCE_STATUS.UPLOADED,
-            })
-            .eq('id', contentRecord.id);
-        }
-
-        if (jobError) {
+          results.imported.push(fileId);
+          console.log(
+            `[Google Drive Import] Successfully imported ${fileContent.title}`,
+          );
+        } catch (fileError) {
           console.error(
-            `[Google Drive Import] Failed to create processing job:`,
-            jobError,
+            `[Google Drive Import] Error importing file ${fileId}:`,
+            fileError,
           );
-          // Content is created, job failed - update status
-          await rollbackCreatedImport(
-            supabase,
-            contentRecord.id,
-            uploadedStoragePath,
-          );
-          results.failed.push({
+          failedImports.push({
             fileId,
-            error: jobError.message,
+            error:
+              fileError instanceof Error ? fileError.message : 'Unknown error',
           });
-          continue;
         }
-
-        results.imported.push(fileId);
-        console.log(
-          `[Google Drive Import] Successfully imported ${fileContent.title}`,
-        );
-      } catch (fileError) {
-        console.error(
-          `[Google Drive Import] Error importing file ${fileId}:`,
-          fileError,
-        );
-        results.failed.push({
-          fileId,
-          error:
-            fileError instanceof Error ? fileError.message : 'Unknown error',
-        });
-      }
-    }
+      }),
+    );
 
     // Update connector last sync time
     await supabase

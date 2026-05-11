@@ -9,6 +9,7 @@
  */
 
 import type { ContentType, CompressionProfile } from '@/lib/types/database';
+
 import {
   classifyVideoContent,
   extractVideoFeatures,
@@ -287,7 +288,7 @@ function selectAudioCompressionConfig(
  * @param config - Compression configuration
  * @returns Array of FFmpeg command arguments
  */
-export function formatFFmpegArgs(config: CompressionConfig): string[] {
+function formatFFmpegArgs(config: CompressionConfig): string[] {
   if (!config.shouldCompress) {
     // Copy streams without re-encoding
     return ['-c:v', 'copy', '-c:a', 'copy'];
@@ -329,7 +330,7 @@ export function formatFFmpegArgs(config: CompressionConfig): string[] {
  * @param config - Compression configuration
  * @returns Estimated compression ratio (e.g., 0.3 = 70% reduction)
  */
-export function estimateCompressionRatio(config: CompressionConfig): number {
+function estimateCompressionRatio(config: CompressionConfig): number {
   if (!config.shouldCompress) {
     return 1.0; // No compression
   }

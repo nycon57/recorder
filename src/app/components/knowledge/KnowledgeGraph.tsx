@@ -2,7 +2,13 @@
 
 /* global KeyboardEvent, MouseEvent */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ReactFlow,
   Background,
@@ -19,7 +25,14 @@ import {
   Handle,
   Position,
 } from '@xyflow/react';
-import { ChevronDown, ChevronUp, Network, Info, X, HelpCircle } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  Network,
+  Info,
+  X,
+  HelpCircle,
+} from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import {
@@ -58,6 +71,9 @@ export interface KnowledgeGraphProps {
   isLoading?: boolean;
   height?: string | number;
 }
+
+const EMPTY_GRAPH_NODES: BaseGraphNode[] = [];
+const EMPTY_GRAPH_EDGES: BaseGraphEdge[] = [];
 
 interface ConceptNodeData extends BaseGraphNode, Record<string, unknown> {
   selected?: boolean;
@@ -104,22 +120,25 @@ function ConceptNode({ data, selected }: NodeProps<ConceptFlowNode>) {
 
   const isDark = getLuminance(color) < 0.5;
 
-  const handleClick = useCallback(() => {
+  const handleGraphNodeSelect = useCallback(() => {
     if (nodeData.onNodeClick) {
       nodeData.onNodeClick(nodeData.id);
     }
   }, [nodeData]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handleClick();
-    }
-  }, [handleClick]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleGraphNodeSelect();
+      }
+    },
+    [handleGraphNodeSelect],
+  );
 
   return (
     <div
-      onClick={handleClick}
+      onClick={handleGraphNodeSelect}
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
@@ -129,13 +148,20 @@ function ConceptNode({ data, selected }: NodeProps<ConceptFlowNode>) {
         'relative rounded-lg border-2 bg-background px-4 py-3 shadow-md transition-all',
         'cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
         isSelected && 'ring-2 ring-offset-2 shadow-xl scale-105',
-        isHighlighted && 'ring-2 ring-accent ring-offset-2 shadow-lg shadow-accent/20 scale-102',
-        'min-w-[120px] max-w-[200px]'
+        isHighlighted &&
+          'ring-2 ring-accent ring-offset-2 shadow-lg shadow-accent/20 scale-102',
+        'min-w-[120px] max-w-[200px]',
       )}
-      style={{
-        borderColor: color,
-        backgroundColor: isSelected ? `${color}15` : isHighlighted ? `${color}10` : undefined,
-      } as React.CSSProperties}
+      style={
+        {
+          borderColor: color,
+          backgroundColor: isSelected
+            ? `${color}15`
+            : isHighlighted
+              ? `${color}10`
+              : undefined,
+        } as React.CSSProperties
+      }
     >
       {/* Connection handles for edges */}
       <Handle
@@ -163,10 +189,7 @@ function ConceptNode({ data, selected }: NodeProps<ConceptFlowNode>) {
 
       {/* Concept Name */}
       <div
-        className={cn(
-          'font-semibold text-sm mb-1 truncate',
-          'text-foreground'
-        )}
+        className={cn('font-semibold text-sm mb-1 truncate', 'text-foreground')}
         title={nodeData.name}
       >
         {nodeData.name}
@@ -181,13 +204,15 @@ function ConceptNode({ data, selected }: NodeProps<ConceptFlowNode>) {
             color: isDark ? '#ffffff' : '#000000',
           }}
         >
-          {nodeData.mentionCount} {nodeData.metricLabel || (nodeData.mentionCount === 1 ? 'mention' : 'mentions')}
+          {nodeData.mentionCount}{' '}
+          {nodeData.metricLabel ||
+            (nodeData.mentionCount === 1 ? 'mention' : 'mentions')}
         </span>
       </div>
 
       {/* Type indicator dot */}
       <div
-        className="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-background"
+        className="absolute -top-1 -right-1 size-3 rounded-full border-2 border-background"
         style={{ backgroundColor: color }}
         title={nodeData.typeLabel || nodeData.type}
         aria-hidden="true"
@@ -264,7 +289,7 @@ function EdgeLegend() {
         handleToggle();
       }
     },
-    [handleToggle]
+    [handleToggle],
   );
 
   return (
@@ -277,21 +302,28 @@ function EdgeLegend() {
         aria-label={isExpanded ? 'Collapse edge legend' : 'Expand edge legend'}
         type="button"
       >
-        <Info className="h-3 w-3" />
+        <Info className="size-3" />
         <span>Edge Legend</span>
         {isExpanded ? (
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="size-3" />
         ) : (
-          <ChevronUp className="h-3 w-3" />
+          <ChevronUp className="size-3" />
         )}
       </button>
 
       {isExpanded && (
-        <div className="edge-legend-content" role="region" aria-label="Edge relationship types">
+        <div
+          className="edge-legend-content"
+          role="region"
+          aria-label="Edge relationship types"
+        >
           {EDGE_TYPES.map((edgeType, index) => (
-            <div key={index} className="edge-legend-item">
+            <div key={JSON.stringify(edgeType)} className="edge-legend-item">
               <div
-                className={cn('edge-legend-line', edgeType.animated && 'animated')}
+                className={cn(
+                  'edge-legend-line',
+                  edgeType.animated && 'animated',
+                )}
                 style={{ backgroundColor: edgeType.color }}
                 aria-hidden="true"
               />
@@ -357,7 +389,10 @@ function EdgePopover({ selectedEdge, onClose, onNodeClick }: EdgePopoverProps) {
   // Close on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as globalThis.Node)) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as globalThis.Node)
+      ) {
         onClose();
       }
     };
@@ -391,7 +426,7 @@ function EdgePopover({ selectedEdge, onClose, onNodeClick }: EdgePopoverProps) {
           aria-label="Close"
           type="button"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="size-3.5" />
         </button>
       </div>
 
@@ -412,7 +447,9 @@ function EdgePopover({ selectedEdge, onClose, onNodeClick }: EdgePopoverProps) {
           </div>
           <div className="edge-popover-content">
             <span className="edge-popover-name">{sourceNode.name}</span>
-            <span className="edge-popover-type">{sourceNode.typeLabel || sourceNode.type.replace(/_/g, ' ')}</span>
+            <span className="edge-popover-type">
+              {sourceNode.typeLabel || sourceNode.type.replace(/_/g, ' ')}
+            </span>
           </div>
         </button>
 
@@ -453,7 +490,9 @@ function EdgePopover({ selectedEdge, onClose, onNodeClick }: EdgePopoverProps) {
           </div>
           <div className="edge-popover-content">
             <span className="edge-popover-name">{targetNode.name}</span>
-            <span className="edge-popover-type">{targetNode.typeLabel || targetNode.type.replace(/_/g, ' ')}</span>
+            <span className="edge-popover-type">
+              {targetNode.typeLabel || targetNode.type.replace(/_/g, ' ')}
+            </span>
           </div>
         </button>
       </div>
@@ -461,7 +500,9 @@ function EdgePopover({ selectedEdge, onClose, onNodeClick }: EdgePopoverProps) {
       {/* Strength indicator */}
       <div className="edge-popover-strength">
         <div className="edge-popover-strength-header">
-          <span className="edge-popover-strength-label">Connection Strength</span>
+          <span className="edge-popover-strength-label">
+            Connection Strength
+          </span>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -469,13 +510,14 @@ function EdgePopover({ selectedEdge, onClose, onNodeClick }: EdgePopoverProps) {
                 className="edge-popover-strength-info"
                 aria-label="Connection strength explanation"
               >
-                <HelpCircle className="h-3 w-3" />
+                <HelpCircle className="size-3" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-[240px] text-left">
               <p className="font-medium mb-1">Connection Strength</p>
               <p className="text-xs opacity-90 mb-2">
-                Measures how often these concepts appear together in your content.
+                Measures how often these concepts appear together in your
+                content.
               </p>
               <div className="text-xs space-y-0.5 opacity-80">
                 <div>80-100%: Very Strong</div>
@@ -498,7 +540,9 @@ function EdgePopover({ selectedEdge, onClose, onNodeClick }: EdgePopoverProps) {
               }}
             />
           </div>
-          <span className="edge-popover-strength-value">{strengthPercent}%</span>
+          <span className="edge-popover-strength-value">
+            {strengthPercent}%
+          </span>
         </div>
       </div>
     </div>
@@ -518,7 +562,7 @@ function convertToFlowData(
   selectedNodeId: string | null,
   highlightedNodeIds: Set<string>,
   selectedEdgeId: string | null,
-  onNodeClick?: (conceptId: string) => void
+  onNodeClick?: (conceptId: string) => void,
 ): { nodes: ConceptFlowNode[]; edges: Edge[] } {
   const nodes: ConceptFlowNode[] = graphNodes.map((node) => ({
     id: node.id,
@@ -594,9 +638,7 @@ function convertToFlowData(
 /**
  * Apply automatic layout to nodes using a simple force-directed algorithm
  */
-function applyAutoLayout(
-  nodes: BaseGraphNode[]
-): BaseGraphNode[] {
+function applyAutoLayout(nodes: BaseGraphNode[]): BaseGraphNode[] {
   // If nodes already have positions, use them
   if (nodes.every((n) => n.x !== undefined && n.y !== undefined)) {
     return nodes;
@@ -626,21 +668,21 @@ export function KnowledgeGraphSkeleton({ className }: { className?: string }) {
     <div
       className={cn(
         'relative w-full rounded-lg border bg-background',
-        className
+        className,
       )}
       style={{ height: '600px' }}
     >
       <div className="flex items-center justify-center h-full">
         <div className="flex flex-col items-center gap-4 max-w-sm">
-          <Skeleton className="h-12 w-12 rounded-full" />
+          <Skeleton className="size-12 rounded-full" />
           <Skeleton className="h-4 w-48" />
           <div className="grid grid-cols-3 gap-4 mt-4">
-            <Skeleton className="h-20 w-20 rounded-lg" />
-            <Skeleton className="h-20 w-20 rounded-lg" />
-            <Skeleton className="h-20 w-20 rounded-lg" />
-            <Skeleton className="h-20 w-20 rounded-lg" />
-            <Skeleton className="h-20 w-20 rounded-lg" />
-            <Skeleton className="h-20 w-20 rounded-lg" />
+            <Skeleton className="size-20 rounded-lg" />
+            <Skeleton className="size-20 rounded-lg" />
+            <Skeleton className="size-20 rounded-lg" />
+            <Skeleton className="size-20 rounded-lg" />
+            <Skeleton className="size-20 rounded-lg" />
+            <Skeleton className="size-20 rounded-lg" />
           </div>
         </div>
       </div>
@@ -675,8 +717,8 @@ export function KnowledgeGraphSkeleton({ className }: { className?: string }) {
  * ```
  */
 export function KnowledgeGraph({
-  nodes: propNodes = [],
-  edges: propEdges = [],
+  nodes: propNodes = EMPTY_GRAPH_NODES,
+  edges: propEdges = EMPTY_GRAPH_EDGES,
   onNodeClick,
   selectedNodeId = null,
   className,
@@ -684,7 +726,9 @@ export function KnowledgeGraph({
   height = '600px',
 }: KnowledgeGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [selectedEdge, setSelectedEdge] = useState<SelectedEdgeInfo | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<SelectedEdgeInfo | null>(
+    null,
+  );
 
   // Compute highlighted nodes based on selected edge
   const highlightedNodeIds = useMemo(() => {
@@ -705,11 +749,19 @@ export function KnowledgeGraph({
       selectedNodeId,
       highlightedNodeIds,
       selectedEdge?.edge.id || null,
-      onNodeClick
+      onNodeClick,
     );
-  }, [layoutNodes, propEdges, selectedNodeId, highlightedNodeIds, selectedEdge, onNodeClick]);
+  }, [
+    layoutNodes,
+    propEdges,
+    selectedNodeId,
+    highlightedNodeIds,
+    selectedEdge,
+    onNodeClick,
+  ]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<ConceptFlowNode>(initialNodes);
+  const [nodes, setNodes, onNodesChange] =
+    useNodesState<ConceptFlowNode>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // Update nodes when props change
@@ -720,11 +772,20 @@ export function KnowledgeGraph({
       selectedNodeId,
       highlightedNodeIds,
       selectedEdge?.edge.id || null,
-      onNodeClick
+      onNodeClick,
     );
     setNodes(newNodes);
     setEdges(newEdges);
-  }, [layoutNodes, propEdges, selectedNodeId, highlightedNodeIds, selectedEdge, onNodeClick, setNodes, setEdges]);
+  }, [
+    layoutNodes,
+    propEdges,
+    selectedNodeId,
+    highlightedNodeIds,
+    selectedEdge,
+    onNodeClick,
+    setNodes,
+    setEdges,
+  ]);
 
   // Handle edge click
   const handleEdgeClick: EdgeMouseHandler = useCallback(
@@ -752,7 +813,7 @@ export function KnowledgeGraph({
         position: { x, y },
       });
     },
-    [propEdges, propNodes]
+    [propEdges, propNodes],
   );
 
   // Close edge popover
@@ -775,12 +836,13 @@ export function KnowledgeGraph({
         <Empty className="h-full border-0">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <Network className="h-6 w-6" />
+              <Network className="size-6" />
             </EmptyMedia>
             <EmptyTitle>No Knowledge Graph Available</EmptyTitle>
             <EmptyDescription>
               Start adding content to build your knowledge graph. Operational
-              wiki pages and relationships will appear here as they are compiled.
+              wiki pages and relationships will appear here as they are
+              compiled.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -797,7 +859,10 @@ export function KnowledgeGraph({
   return (
     <div
       ref={containerRef}
-      className={cn('relative w-full rounded-lg border bg-background', className)}
+      className={cn(
+        'relative w-full rounded-lg border bg-background',
+        className,
+      )}
       style={{ height }}
     >
       <ReactFlow<ConceptFlowNode, Edge>

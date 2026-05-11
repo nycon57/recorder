@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Share2, Loader2 } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
@@ -27,37 +28,30 @@ export default function ShareControls({
   className,
 }: ShareControlsProps) {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-  const [shares, setShares] = React.useState<Share[]>([]);
-  const [isLoading, setIsLoading] = React.useState(false);
-
-  const fetchShares = React.useCallback(async () => {
-    setIsLoading(true);
-    try {
+  const {
+    data: shares = [],
+    isFetching: isFetchingShares,
+    refetch: refetchShares,
+  } = useQuery<Share[]>({
+    queryKey: ['shares', recordingId],
+    enabled: isModalOpen,
+    queryFn: async () => {
       const response = await fetch(`/api/share?target_id=${recordingId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setShares(data.data || []);
+      if (!response.ok) {
+        throw new Error('Failed to fetch shares');
       }
-    } catch (error) {
-      console.error('Failed to fetch shares:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [recordingId]);
 
-  // Fetch existing shares when modal opens
-  React.useEffect(() => {
-    if (isModalOpen) {
-      fetchShares();
-    }
-  }, [isModalOpen, fetchShares]);
+      const data = await response.json();
+      return data.data || [];
+    },
+  });
 
   const handleShareCreated = () => {
-    fetchShares();
+    void refetchShares();
   };
 
   const handleShareRevoked = () => {
-    fetchShares();
+    void refetchShares();
   };
 
   return (
@@ -67,7 +61,7 @@ export default function ShareControls({
         className={className}
         onClick={() => setIsModalOpen(true)}
       >
-        {isLoading ? (
+        {isFetchingShares ? (
           <Loader2 className="size-4 animate-spin" />
         ) : (
           <Share2 className="size-4" />

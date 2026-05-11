@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useReducer } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   FolderOpen,
   FileUp,
@@ -115,6 +117,35 @@ const FORMAT_OPTIONS: Array<{
   },
 ];
 
+const EMPTY_CONNECTORS: ConnectorConfig[] = [];
+
+async function fetchPublishConnectors(): Promise<ConnectorConfig[]> {
+  const response = await fetch('/api/integrations');
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch integrations');
+  }
+
+  const data = await response.json();
+
+  const integrations = (data.integrations || []) as IntegrationSummary[];
+  return integrations.flatMap((__item, __index, __array) =>
+    __item.supportsPublish && __item.status === 'connected'
+      ? [
+          {
+            id: __item.id,
+            connector_type: __item.type as PublishDestination,
+            display_name: __item.externalUserName
+              ? `${__item.name} (${__item.externalUserName})`
+              : __item.name,
+            is_active: true,
+            supports_publish: true,
+          },
+        ]
+      : [],
+  );
+}
+
 // =====================================================
 // COMPONENT
 // =====================================================
@@ -135,7 +166,13 @@ const FORMAT_OPTIONS: Array<{
  *   onPublishComplete={(publication) => console.log('Published:', publication)}
  * />
  */
-export default function PublishModal({
+export default function PublishModal(
+  props: Parameters<typeof usePublishModalImplementation>[0],
+) {
+  return usePublishModalImplementation(props);
+}
+
+function usePublishModalImplementation({
   contentId,
   contentTitle,
   isOpen,
@@ -143,104 +180,102 @@ export default function PublishModal({
   onPublishComplete,
 }: PublishModalProps) {
   // State
-  const [connectors, setConnectors] = useState<ConnectorConfig[]>([]);
-  const [selectedConnector, setSelectedConnector] = useState<string>('');
-  const [selectedFolder, setSelectedFolder] = useState<FolderInfo | null>(null);
-  const [format, setFormat] = useState<PublishFormat>('native');
-  const [customTitle, setCustomTitle] = useState('');
-  const [branding, setBranding] = useState<BrandingConfig>({
-    includeVideoLink: true,
-    includePoweredByFooter: true,
-    includeEmbeddedPlayer: false,
-  });
-
-  const [status, setStatus] = useState<PublishStatus>('idle');
-  const [isLoadingConnectors, setIsLoadingConnectors] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
-
-  const isPublishing = status === 'publishing';
-
-  // Reset state when modal opens/closes
-  useEffect(() => {
-    if (isOpen) {
-      setStatus('idle');
-      setError(null);
-      setPublishedUrl(null);
-      setCustomTitle('');
-      setSelectedFolder(null);
-      setFormat('native');
-      setBranding({
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        selectedConnector: string;
+        selectedFolder: FolderInfo | null;
+        format: PublishFormat;
+        customTitle: string;
+        branding: BrandingConfig;
+        status: PublishStatus;
+        error: string | null;
+        publishedUrl: string | null;
+      },
+      patch: Partial<{
+        selectedConnector: string;
+        selectedFolder: FolderInfo | null;
+        format: PublishFormat;
+        customTitle: string;
+        branding: BrandingConfig;
+        status: PublishStatus;
+        error: string | null;
+        publishedUrl: string | null;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      selectedConnector: '',
+      selectedFolder: null,
+      format: 'native' as PublishFormat,
+      customTitle: '',
+      branding: {
         includeVideoLink: true,
         includePoweredByFooter: true,
         includeEmbeddedPlayer: false,
-      });
+      },
+      status: 'idle' as PublishStatus,
+      error: null,
+      publishedUrl: null,
+    },
+  );
+  const {
+    selectedConnector,
+    selectedFolder,
+    format,
+    customTitle,
+    branding,
+    status,
+    error,
+    publishedUrl,
+  } = state;
 
-      // Load available connectors
-      loadConnectors();
-    }
-  }, [isOpen]);
+  const {
+    data: connectors = EMPTY_CONNECTORS,
+    isLoading: isLoadingConnectors,
+  } = useQuery({
+    queryKey: ['library', 'publish', 'connectors'],
+    enabled: isOpen,
+    queryFn: fetchPublishConnectors,
+  });
 
-  // Load available connectors
-  const loadConnectors = async () => {
-    try {
-      setIsLoadingConnectors(true);
+  const isPublishing = status === 'publishing';
+  const effectiveSelectedConnector =
+    selectedConnector || connectors[0]?.id || '';
 
-      // Fetch connectors from the integrations API
-      const response = await fetch('/api/integrations');
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch integrations');
-      }
-
-      const data = await response.json();
-
-      // Filter to only show connectors that support publishing
-      const integrations = (data.integrations || []) as IntegrationSummary[];
-      const publishableConnectors: ConnectorConfig[] = integrations
-        .filter((integration) => integration.supportsPublish && integration.status === 'connected')
-        .map((integration) => ({
-          id: integration.id,
-          connector_type: integration.type as PublishDestination,
-          display_name: integration.externalUserName
-            ? `${integration.name} (${integration.externalUserName})`
-            : integration.name,
-          is_active: true,
-          supports_publish: true,
-        }));
-
-      setConnectors(publishableConnectors);
-
-      // Auto-select first connector if available
-      if (publishableConnectors.length > 0) {
-        setSelectedConnector(publishableConnectors[0].id);
-      }
-    } catch (err) {
-      console.error('Failed to load connectors:', err);
-      toast.error('Failed to load connected accounts');
-    } finally {
-      setIsLoadingConnectors(false);
-    }
+  const resetPublishState = () => {
+    dispatch({
+      status: 'idle',
+      error: null,
+      publishedUrl: null,
+      customTitle: '',
+      selectedFolder: null,
+      format: 'native',
+      branding: {
+        includeVideoLink: true,
+        includePoweredByFooter: true,
+        includeEmbeddedPlayer: false,
+      },
+    });
   };
 
   // Handle publish
   const handlePublish = async () => {
-    if (!selectedConnector) {
+    if (!effectiveSelectedConnector) {
       toast.error('Please select a destination');
       return;
     }
 
-    setStatus('publishing');
-    setError(null);
+    dispatch({ status: 'publishing', error: null });
 
     try {
       const response = await fetch(`/api/library/${contentId}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          destination: connectors.find((c) => c.id === selectedConnector)
-            ?.connector_type,
-          connectorId: selectedConnector,
+          destination: connectors.find(
+            (c) => c.id === effectiveSelectedConnector,
+          )?.connector_type,
+          connectorId: effectiveSelectedConnector,
           folderId: selectedFolder?.id,
           folderPath: selectedFolder?.path,
           format,
@@ -257,8 +292,7 @@ export default function PublishModal({
       const result = await response.json();
       const { publication, externalUrl } = result.data || result;
 
-      setStatus('success');
-      setPublishedUrl(externalUrl);
+      dispatch({ status: 'success', publishedUrl: externalUrl });
 
       toast.success('Document published successfully!', {
         description: 'Your document is now available in the selected location.',
@@ -271,13 +305,16 @@ export default function PublishModal({
 
       // Close modal after brief delay
       setTimeout(() => {
+        resetPublishState();
         onClose();
       }, 2000);
     } catch (err) {
       console.error('Publish error:', err);
       const error = err as Error;
-      setStatus('error');
-      setError(error.message || 'Failed to publish document');
+      dispatch({
+        status: 'error',
+        error: error.message || 'Failed to publish document',
+      });
 
       toast.error('Failed to publish document', {
         description: error.message || 'Please try again or contact support.',
@@ -287,12 +324,13 @@ export default function PublishModal({
 
   const handleClose = () => {
     if (!isPublishing) {
+      resetPublishState();
       onClose();
     }
   };
 
   const selectedConnectorConfig = connectors.find(
-    (c) => c.id === selectedConnector
+    (c) => c.id === effectiveSelectedConnector,
   );
 
   return (
@@ -300,12 +338,13 @@ export default function PublishModal({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5" />
+            <Upload className="size-5" />
             Publish Document
           </DialogTitle>
           <DialogDescription>
-            Publish &quot;{contentTitle}&quot; to your connected storage system. The
-            document will be enriched with AI-generated content and branding.
+            Publish &quot;{contentTitle}&quot; to your connected storage system.
+            The document will be enriched with AI-generated content and
+            branding.
           </DialogDescription>
         </DialogHeader>
 
@@ -315,22 +354,24 @@ export default function PublishModal({
             <Label>Destination</Label>
             {isLoadingConnectors ? (
               <div className="flex items-center justify-center h-[42px]">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
               </div>
             ) : connectors.length === 0 ? (
               <div className="rounded-md border border-dashed p-4 text-center">
-                <FolderOpen className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                <FolderOpen className="mx-auto size-8 text-muted-foreground mb-2" />
                 <p className="text-sm text-muted-foreground mb-2">
                   No connected accounts found
                 </p>
                 <Button variant="outline" size="sm" asChild>
-                  <a href="/settings/integrations">Connect Account</a>
+                  <Link href="/settings/integrations">Connect Account</Link>
                 </Button>
               </div>
             ) : (
               <Select
-                value={selectedConnector}
-                onValueChange={setSelectedConnector}
+                value={effectiveSelectedConnector}
+                onValueChange={(value) =>
+                  dispatch({ selectedConnector: value })
+                }
                 disabled={isPublishing}
               >
                 <SelectTrigger className="w-full">
@@ -340,7 +381,7 @@ export default function PublishModal({
                   {connectors.map((connector) => (
                     <SelectItem key={connector.id} value={connector.id}>
                       <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
+                        <FileText className="size-4" />
                         <span>
                           {connector.display_name} (
                           {DESTINATION_LABELS[connector.connector_type]})
@@ -368,7 +409,7 @@ export default function PublishModal({
                   });
                 }}
               >
-                <FolderOpen className="mr-2 h-4 w-4" />
+                <FolderOpen className="mr-2 size-4" />
                 {selectedFolder ? selectedFolder.path : 'Root folder'}
               </Button>
               <p className="text-xs text-muted-foreground">
@@ -384,7 +425,9 @@ export default function PublishModal({
             <Label>Format</Label>
             <Select
               value={format}
-              onValueChange={(value) => setFormat(value as PublishFormat)}
+              onValueChange={(value) =>
+                dispatch({ format: value as PublishFormat })
+              }
               disabled={isPublishing}
             >
               <SelectTrigger className="w-full">
@@ -408,12 +451,13 @@ export default function PublishModal({
           {/* Custom Title */}
           <div className="space-y-3">
             <Label htmlFor="customTitle">
-              Custom Title <span className="text-muted-foreground">(Optional)</span>
+              Custom Title{' '}
+              <span className="text-muted-foreground">(Optional)</span>
             </Label>
             <Input
               id="customTitle"
               value={customTitle}
-              onChange={(e) => setCustomTitle(e.target.value)}
+              onChange={(e) => dispatch({ customTitle: e.target.value })}
               placeholder={contentTitle}
               disabled={isPublishing}
             />
@@ -423,46 +467,58 @@ export default function PublishModal({
           <div className="space-y-3">
             <Label>Branding Options</Label>
             <div className="space-y-2">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="videoLink"
                   checked={branding.includeVideoLink}
                   onCheckedChange={(checked) =>
-                    setBranding({
-                      ...branding,
-                      includeVideoLink: checked as boolean,
+                    dispatch({
+                      branding: {
+                        ...branding,
+                        includeVideoLink: checked as boolean,
+                      },
                     })
                   }
                   disabled={isPublishing}
                 />
-                <Label htmlFor="videoLink" className="text-sm cursor-pointer font-normal">
+                <Label
+                  htmlFor="videoLink"
+                  className="text-sm cursor-pointer font-normal"
+                >
                   Include link to original recording
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="poweredBy"
                   checked={branding.includePoweredByFooter}
                   onCheckedChange={(checked) =>
-                    setBranding({
-                      ...branding,
-                      includePoweredByFooter: checked as boolean,
+                    dispatch({
+                      branding: {
+                        ...branding,
+                        includePoweredByFooter: checked as boolean,
+                      },
                     })
                   }
                   disabled={isPublishing}
                 />
-                <Label htmlFor="poweredBy" className="text-sm cursor-pointer font-normal">
+                <Label
+                  htmlFor="poweredBy"
+                  className="text-sm cursor-pointer font-normal"
+                >
                   Include &quot;Powered by Tribora&quot; footer
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="embeddedPlayer"
                   checked={branding.includeEmbeddedPlayer}
                   onCheckedChange={(checked) =>
-                    setBranding({
-                      ...branding,
-                      includeEmbeddedPlayer: checked as boolean,
+                    dispatch({
+                      branding: {
+                        ...branding,
+                        includeEmbeddedPlayer: checked as boolean,
+                      },
                     })
                   }
                   disabled={isPublishing}
@@ -481,7 +537,7 @@ export default function PublishModal({
           {status === 'success' && publishedUrl && (
             <div className="rounded-md bg-green-50 dark:bg-green-950/30 p-4">
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+                <CheckCircle2 className="size-5 text-green-600 dark:text-green-400 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-green-800 dark:text-green-200">
                     Document published successfully!
@@ -493,7 +549,7 @@ export default function PublishModal({
                     className="text-sm text-green-600 dark:text-green-400 hover:underline inline-flex items-center gap-1 mt-1"
                   >
                     View published document
-                    <ExternalLink className="h-3 w-3" />
+                    <ExternalLink className="size-3" />
                   </a>
                 </div>
               </div>
@@ -504,7 +560,7 @@ export default function PublishModal({
           {status === 'error' && error && (
             <div className="rounded-md bg-destructive/10 p-4">
               <div className="flex items-start gap-3">
-                <XCircle className="h-5 w-5 text-destructive mt-0.5" />
+                <XCircle className="size-5 text-destructive mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-destructive">
                     Failed to publish
@@ -529,7 +585,7 @@ export default function PublishModal({
             onClick={handlePublish}
             disabled={
               isPublishing ||
-              !selectedConnector ||
+              !effectiveSelectedConnector ||
               connectors.length === 0 ||
               status === 'success'
             }
@@ -537,12 +593,12 @@ export default function PublishModal({
           >
             {isPublishing ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Publishing...
+                <Loader2 className="mr-2 size-4 animate-spin" />
+                Publishing…
               </>
             ) : (
               <>
-                <FileUp className="mr-2 h-4 w-4" />
+                <FileUp className="mr-2 size-4" />
                 Publish
               </>
             )}

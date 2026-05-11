@@ -2,7 +2,13 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, AlertCircle, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Loader2,
+  AlertCircle,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent } from '@/app/components/ui/card';
@@ -23,7 +29,13 @@ import EditRecordingModal from '@/app/components/EditRecordingModal';
 import ProcessingPipeline from '@/app/components/ProcessingPipeline';
 import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import type { ContentType, FileType, Json, RecordingStatus, Tag } from '@/lib/types/database';
+import type {
+  ContentType,
+  FileType,
+  Json,
+  RecordingStatus,
+  Tag,
+} from '@/lib/types/database';
 import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 import ContentSidebar from '../viewers/ContentSidebar';
@@ -86,6 +98,44 @@ interface Recording {
   file_size: number | null;
 }
 
+type ReprocessStep = 'transcribe' | 'document' | 'embeddings' | 'all';
+
+interface VideoDetailViewState {
+  isEditModalOpen: boolean;
+  tags: Tag[];
+  isReprocessModalOpen: boolean;
+  reprocessStep: ReprocessStep;
+  videoDurationOverride: number | null;
+  showMoveToTrashDialog: boolean;
+  showPermanentDeleteDialog: boolean;
+  showKeyboardShortcuts: boolean;
+  isPublishModalOpen: boolean;
+}
+
+const createInitialVideoDetailViewState = (
+  initialTags: Array<InitialTag | null>,
+): VideoDetailViewState => ({
+  isEditModalOpen: false,
+  tags: initialTags.flatMap((tag): Tag[] =>
+    tag ? [{ ...tag, color: tag.color ?? '#64748b' }] : [],
+  ),
+  isReprocessModalOpen: false,
+  reprocessStep: 'all',
+  videoDurationOverride: null,
+  showMoveToTrashDialog: false,
+  showPermanentDeleteDialog: false,
+  showKeyboardShortcuts: false,
+  isPublishModalOpen: false,
+});
+
+const videoDetailViewReducer = (
+  state: VideoDetailViewState,
+  patch: Partial<VideoDetailViewState>,
+): VideoDetailViewState => ({
+  ...state,
+  ...patch,
+});
+
 export interface VideoDetailViewProps {
   recording: Recording;
   transcript: Transcript | null;
@@ -100,7 +150,13 @@ export interface VideoDetailViewProps {
   initialTimestamp?: number;
 }
 
-export default function VideoDetailView({
+export default function VideoDetailView(
+  props: Parameters<typeof useVideoDetailViewImplementation>[0],
+) {
+  return useVideoDetailViewImplementation(props);
+}
+
+function useVideoDetailViewImplementation({
   recording,
   transcript,
   document,
@@ -108,25 +164,27 @@ export default function VideoDetailView({
   initialTags,
   initialTimestamp,
 }: VideoDetailViewProps) {
-  const router = useRouter();
+  const { back, push, refresh } = useRouter();
 
-  const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
-  const [tags, setTags] = React.useState<Tag[]>(() =>
-    initialTags
-      .filter((tag): tag is InitialTag => Boolean(tag))
-      .map((tag) => ({ ...tag, color: tag.color ?? '#64748b' }))
+  const [
+    {
+      isEditModalOpen,
+      tags,
+      isReprocessModalOpen,
+      reprocessStep,
+      videoDurationOverride,
+      showMoveToTrashDialog,
+      showPermanentDeleteDialog,
+      showKeyboardShortcuts,
+      isPublishModalOpen,
+    },
+    updateViewState,
+  ] = React.useReducer(
+    videoDetailViewReducer,
+    initialTags,
+    createInitialVideoDetailViewState,
   );
-  const [isReprocessModalOpen, setIsReprocessModalOpen] = React.useState(false);
-  const [reprocessStep, setReprocessStep] = React.useState<
-    'transcribe' | 'document' | 'embeddings' | 'all'
-  >('all');
-  const [videoDuration, setVideoDuration] = React.useState<number | null>(
-    recording.duration_sec
-  );
-  const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
-  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
-  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
-  const [isPublishModalOpen, setIsPublishModalOpen] = React.useState(false);
+  const videoDuration = videoDurationOverride ?? recording.duration_sec;
   const videoPlayerRef = React.useRef<React.ElementRef<'video'> | null>(null);
 
   const isTrashed = !!recording.deleted_at;
@@ -158,14 +216,17 @@ export default function VideoDetailView({
   }, [initialTimestamp]);
 
   const handleVideoDurationChange = (duration: number) => {
-    setVideoDuration(duration);
+    updateViewState({ videoDurationOverride: duration });
   };
 
   const handleTimestampClick = (timestamp: number) => {
     if (videoPlayerRef.current) {
       videoPlayerRef.current.currentTime = timestamp;
       videoPlayerRef.current.play();
-      videoPlayerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      videoPlayerRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
     }
   };
 
@@ -209,25 +270,34 @@ export default function VideoDetailView({
     },
     onSeekBackward: () => {
       if (videoPlayerRef.current) {
-        videoPlayerRef.current.currentTime = Math.max(0, videoPlayerRef.current.currentTime - 5);
+        videoPlayerRef.current.currentTime = Math.max(
+          0,
+          videoPlayerRef.current.currentTime - 5,
+        );
       }
     },
     onSeekForward: () => {
       if (videoPlayerRef.current) {
         videoPlayerRef.current.currentTime = Math.min(
           videoPlayerRef.current.duration || 0,
-          videoPlayerRef.current.currentTime + 5
+          videoPlayerRef.current.currentTime + 5,
         );
       }
     },
     onVolumeUp: () => {
       if (videoPlayerRef.current) {
-        videoPlayerRef.current.volume = Math.min(1, videoPlayerRef.current.volume + 0.1);
+        videoPlayerRef.current.volume = Math.min(
+          1,
+          videoPlayerRef.current.volume + 0.1,
+        );
       }
     },
     onVolumeDown: () => {
       if (videoPlayerRef.current) {
-        videoPlayerRef.current.volume = Math.max(0, videoPlayerRef.current.volume - 0.1);
+        videoPlayerRef.current.volume = Math.max(
+          0,
+          videoPlayerRef.current.volume - 0.1,
+        );
       }
     },
     onMute: () => {
@@ -237,9 +307,15 @@ export default function VideoDetailView({
     },
     onFullscreen: () => {
       if (videoPlayerRef.current) {
-        if (document && 'fullscreenElement' in document && document.fullscreenElement) {
+        if (
+          document &&
+          'fullscreenElement' in document &&
+          document.fullscreenElement
+        ) {
           if ('exitFullscreen' in document) {
-            (document as Document & { exitFullscreen: () => Promise<void> }).exitFullscreen();
+            (
+              document as Document & { exitFullscreen: () => Promise<void> }
+            ).exitFullscreen();
           }
         } else {
           videoPlayerRef.current.requestFullscreen();
@@ -247,13 +323,14 @@ export default function VideoDetailView({
       }
     },
     onDownload: handleDownload,
-    onEdit: () => setIsEditModalOpen(true),
+    onEdit: () => updateViewState({ isEditModalOpen: true }),
     onReprocess: () => handleReprocess('all'),
-    onShowShortcuts: () => setShowKeyboardShortcuts((prev) => !prev),
+    onShowShortcuts: () =>
+      updateViewState({ showKeyboardShortcuts: !showKeyboardShortcuts }),
   });
 
   const handleReprocess = (step: string) => {
-    let apiStep: 'transcribe' | 'document' | 'embeddings' | 'all' = 'all';
+    let apiStep: ReprocessStep = 'all';
     if (step === 'transcribe') {
       apiStep = 'transcribe';
     } else if (step === 'document') {
@@ -262,14 +339,16 @@ export default function VideoDetailView({
       apiStep = 'embeddings';
     }
 
-    setReprocessStep(apiStep);
-    setIsReprocessModalOpen(true);
+    updateViewState({
+      reprocessStep: apiStep,
+      isReprocessModalOpen: true,
+    });
   };
 
   const handleReprocessModalClose = (wasSuccessful?: boolean) => {
-    setIsReprocessModalOpen(false);
+    updateViewState({ isReprocessModalOpen: false });
     if (wasSuccessful) {
-      router.refresh();
+      refresh();
     }
   };
 
@@ -281,7 +360,7 @@ export default function VideoDetailView({
 
       if (response.ok) {
         toast({ description: 'Item restored successfully' });
-        router.refresh();
+        refresh();
       } else {
         toast({
           variant: 'destructive',
@@ -305,7 +384,7 @@ export default function VideoDetailView({
 
       if (response.ok) {
         toast({ description: 'Item moved to trash' });
-        router.push('/library');
+        push('/library');
       } else {
         toast({
           variant: 'destructive',
@@ -323,13 +402,16 @@ export default function VideoDetailView({
 
   const handlePermanentDelete = async () => {
     try {
-      const response = await fetch(`/api/recordings/${recording.id}?permanent=true`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `/api/recordings/${recording.id}?permanent=true`,
+        {
+          method: 'DELETE',
+        },
+      );
 
       if (response.ok) {
         toast({ description: 'Item permanently deleted' });
-        router.push('/library?status=trash');
+        push('/library?status=trash');
       } else {
         toast({
           variant: 'destructive',
@@ -358,7 +440,7 @@ export default function VideoDetailView({
       }
 
       toast({ description: 'Title updated successfully' });
-      router.refresh();
+      refresh();
     } catch (error) {
       console.error('Update title failed:', error);
       throw error; // Re-throw to show error in component
@@ -378,7 +460,7 @@ export default function VideoDetailView({
       }
 
       toast({ description: 'Description updated successfully' });
-      router.refresh();
+      refresh();
     } catch (error) {
       console.error('Update description failed:', error);
       throw error; // Re-throw to show error in component
@@ -450,9 +532,9 @@ export default function VideoDetailView({
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto p-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <Button variant="ghost" size="icon" onClick={() => back()}>
               <ArrowLeft className="size-5" />
             </Button>
 
@@ -470,7 +552,7 @@ export default function VideoDetailView({
                   <InlineEditableField
                     value={recording.description || ''}
                     onSave={handleUpdateDescription}
-                    placeholder="Add a description..."
+                    placeholder="Add a description…"
                     type="textarea"
                     displayAs="description"
                     maxLength={500}
@@ -480,7 +562,9 @@ export default function VideoDetailView({
                   <div className="mt-3">
                     <InlineTagsEditor
                       tags={tags}
-                      onTagsChange={setTags}
+                      onTagsChange={(nextTags) =>
+                        updateViewState({ tags: nextTags })
+                      }
                       onAddTag={handleAddTag}
                       onRemoveTag={handleRemoveTag}
                     />
@@ -488,7 +572,7 @@ export default function VideoDetailView({
                 </>
               ) : (
                 <>
-                  <h1 className="text-2xl font-bold truncate">
+                  <h1 className="text-2xl font-semibold truncate">
                     {recording.title || 'Untitled Video'}
                   </h1>
                   {recording.description && (
@@ -504,11 +588,13 @@ export default function VideoDetailView({
               <div className="flex items-center gap-2">
                 <ShareControls recordingId={recording.id} />
                 <Button
-                  onClick={() => setShowMoveToTrashDialog(true)}
+                  onClick={() =>
+                    updateViewState({ showMoveToTrashDialog: true })
+                  }
                   variant="ghost"
                   size="icon"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="size-4" />
                 </Button>
               </div>
             )}
@@ -516,14 +602,16 @@ export default function VideoDetailView({
             {isTrashed && (
               <div className="flex items-center gap-2">
                 <Button onClick={handleRestore} variant="outline">
-                  <RotateCcw className="w-4 h-4 mr-2" />
+                  <RotateCcw className="size-4 mr-2" />
                   Restore Item
                 </Button>
                 <Button
-                  onClick={() => setShowPermanentDeleteDialog(true)}
+                  onClick={() =>
+                    updateViewState({ showPermanentDeleteDialog: true })
+                  }
                   variant="destructive"
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
+                  <Trash2 className="size-4 mr-2" />
                   Delete Forever
                 </Button>
               </div>
@@ -537,18 +625,22 @@ export default function VideoDetailView({
         {/* Trash Warning Banner */}
         {isTrashed && recording.deleted_at && (
           <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="size-4" />
             <AlertTitle>This item is in the trash</AlertTitle>
             <AlertDescription>
-              This content was moved to trash on {formatDate(recording.deleted_at)}.
-              You can restore it or permanently delete it.
+              This content was moved to trash on{' '}
+              {formatDate(recording.deleted_at)}. You can restore it or
+              permanently delete it.
             </AlertDescription>
           </Alert>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
-          <div className="lg:col-span-2 space-y-6" style={isTrashed ? { opacity: 0.7 } : undefined}>
+          <div
+            className="lg:col-span-2 space-y-6"
+            style={isTrashed ? { opacity: 0.7 } : undefined}
+          >
             {/* Video Player */}
             {recording.videoUrl ? (
               <RecordingPlayer
@@ -561,7 +653,7 @@ export default function VideoDetailView({
                 <CardContent className="py-24 flex flex-col items-center justify-center">
                   <Loader2 className="size-8 animate-spin text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">
-                    Video is being processed...
+                    Video is being processed…
                   </p>
                 </CardContent>
               </Card>
@@ -576,14 +668,15 @@ export default function VideoDetailView({
               />
             ) : (
               <Card>
-                <CardContent className="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                <CardContent className="py-12 flex flex-col items-center justify-center text-center gap-y-4">
                   <Loader2 className="size-8 animate-spin text-muted-foreground" />
                   <div>
                     <p className="font-medium text-foreground mb-1">
                       Transcription in progress
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      We&apos;re transcribing your video using AI. This usually takes 1-2 minutes.
+                      We&apos;re transcribing your video using AI. This usually
+                      takes 1-2 minutes.
                     </p>
                   </div>
                 </CardContent>
@@ -608,15 +701,23 @@ export default function VideoDetailView({
                 deletedAt={recording.deleted_at}
                 tags={tags}
                 document={document}
-                onEdit={() => setIsEditModalOpen(true)}
-                onDelete={() => isTrashed ? setShowPermanentDeleteDialog(true) : setShowMoveToTrashDialog(true)}
+                onEdit={() => updateViewState({ isEditModalOpen: true })}
+                onDelete={() =>
+                  isTrashed
+                    ? updateViewState({ showPermanentDeleteDialog: true })
+                    : updateViewState({ showMoveToTrashDialog: true })
+                }
                 onDownload={handleDownload}
-                onPublish={() => setIsPublishModalOpen(true)}
+                onPublish={() => updateViewState({ isPublishModalOpen: true })}
               />
 
               {/* Processing Pipeline */}
               <ProcessingPipeline
-                recording={recording as React.ComponentProps<typeof ProcessingPipeline>['recording']}
+                recording={
+                  recording as React.ComponentProps<
+                    typeof ProcessingPipeline
+                  >['recording']
+                }
                 hasTranscript={!!transcript}
                 hasDocument={!!document}
                 onReprocess={handleReprocess}
@@ -629,10 +730,10 @@ export default function VideoDetailView({
       {/* Modals */}
       <EditRecordingModal
         open={isEditModalOpen}
-        onOpenChange={setIsEditModalOpen}
+        onOpenChange={(isOpen) => updateViewState({ isEditModalOpen: isOpen })}
         recording={recording}
         initialTags={tags}
-        onTagsChange={setTags}
+        onTagsChange={(nextTags) => updateViewState({ tags: nextTags })}
       />
 
       <ReprocessStreamModal
@@ -644,13 +745,19 @@ export default function VideoDetailView({
       />
 
       {/* Move to Trash Confirmation Dialog */}
-      <AlertDialog open={showMoveToTrashDialog} onOpenChange={setShowMoveToTrashDialog}>
+      <AlertDialog
+        open={showMoveToTrashDialog}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showMoveToTrashDialog: isOpen })
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to move &quot;{recording.title || 'this item'}&quot; to trash?
-              You can restore it later from the trash page.
+              Are you sure you want to move &quot;
+              {recording.title || 'this item'}&quot; to trash? You can restore
+              it later from the trash page.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -666,17 +773,26 @@ export default function VideoDetailView({
       </AlertDialog>
 
       {/* Permanent Delete Confirmation Dialog */}
-      <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
+      <AlertDialog
+        open={showPermanentDeleteDialog}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showPermanentDeleteDialog: isOpen })
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Permanently Delete?</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">
+              Permanently Delete?
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>
-                  Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
+                  Are you sure you want to permanently delete &quot;
+                  {recording.title || 'this item'}&quot;?
                 </p>
                 <p className="font-semibold text-destructive">
-                  ⚠️ This action cannot be undone. All associated data will be permanently removed:
+                  ⚠️ This action cannot be undone. All associated data will be
+                  permanently removed:
                 </p>
                 <ul className="list-disc list-inside space-y-1">
                   <li>Original file</li>
@@ -702,7 +818,9 @@ export default function VideoDetailView({
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog
         open={showKeyboardShortcuts}
-        onOpenChange={setShowKeyboardShortcuts}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showKeyboardShortcuts: isOpen })
+        }
         contentType={recording.content_type as ContentType | null}
       />
 
@@ -712,10 +830,10 @@ export default function VideoDetailView({
         documentId={document?.id || ''}
         contentTitle={recording.title || 'Untitled'}
         isOpen={isPublishModalOpen}
-        onClose={() => setIsPublishModalOpen(false)}
+        onClose={() => updateViewState({ isPublishModalOpen: false })}
         onPublishComplete={() => {
           toast({ description: 'Document published successfully!' });
-          router.refresh();
+          refresh();
         }}
       />
     </div>

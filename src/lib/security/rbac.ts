@@ -102,7 +102,7 @@ export function hasPermission(role: OrganizationRole, permission: Permission): b
 /**
  * Check if user can perform action on resource
  */
-export function canPerformAction(
+function canPerformAction(
   userRole: OrganizationRole,
   permission: Permission,
   options?: {
@@ -134,7 +134,7 @@ export function canPerformAction(
 /**
  * Authorization error
  */
-export class AuthorizationError extends Error {
+class AuthorizationError extends Error {
   constructor(message: string = 'Insufficient permissions') {
     super(message);
     this.name = 'AuthorizationError';
@@ -144,7 +144,7 @@ export class AuthorizationError extends Error {
 /**
  * Require specific permission
  */
-export function requirePermission(role: OrganizationRole, permission: Permission): void {
+function requirePermission(role: OrganizationRole, permission: Permission): void {
   if (!hasPermission(role, permission)) {
     throw new AuthorizationError(
       `Permission denied: ${permission} requires higher privileges`
@@ -155,14 +155,14 @@ export function requirePermission(role: OrganizationRole, permission: Permission
 /**
  * Get all permissions for a role
  */
-export function getRolePermissions(role: OrganizationRole): Permission[] {
+function getRolePermissions(role: OrganizationRole): Permission[] {
   return ROLE_PERMISSIONS[role];
 }
 
 /**
  * Check if role can be assigned by another role
  */
-export function canAssignRole(assignerRole: OrganizationRole, targetRole: OrganizationRole): boolean {
+function canAssignRole(assignerRole: OrganizationRole, targetRole: OrganizationRole): boolean {
   // Only owners can assign owner role
   if (targetRole === 'owner') {
     return assignerRole === 'owner';

@@ -11,7 +11,11 @@ import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { isAgentEnabled } from '@/lib/services/agent-config';
 import { withAgentLogging, logAgentAction } from '@/lib/services/agent-logger';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
-import type { Database, KnowledgeGapSeverity, Json } from '@/lib/types/database';
+import type {
+  Database,
+  KnowledgeGapSeverity,
+  Json,
+} from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
 
@@ -33,6 +37,10 @@ const LOW_CONFIDENCE_PATTERNS = [
   'no results found',
   'no matching content',
 ];
+
+function containsText(text: string, searchText: string) {
+  return text.includes(searchText);
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,7 +80,7 @@ interface ScoredGap {
 
 export async function handleAnalyzeKnowledgeGaps(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as Record<string, unknown>;
   const orgId = (payload.orgId as string) || '';
@@ -83,7 +91,9 @@ export async function handleAnalyzeKnowledgeGaps(
   }
 
   if (!(await isAgentEnabled(orgId, AGENT_TYPE))) {
-    console.log(`[AnalyzeKnowledgeGaps] gap_intelligence disabled for ${orgId}, skipping`);
+    console.log(
+      `[AnalyzeKnowledgeGaps] gap_intelligence disabled for ${orgId}, skipping`,
+    );
     return;
   }
 
@@ -99,14 +109,22 @@ export async function handleAnalyzeKnowledgeGaps(
     async () => {
       const supabase = createAdminClient();
       const since = new Date(
-        Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+        Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
       ).toISOString();
 
       progressCallback?.(10, 'Mining search metrics...');
-      const searchSignals = await collectSearchMetricGaps(supabase, orgId, since);
+      const searchSignals = await collectSearchMetricGaps(
+        supabase,
+        orgId,
+        since,
+      );
 
       progressCallback?.(20, 'Mining agentic search logs...');
-      const agenticSignals = await collectAgenticSearchGaps(supabase, orgId, since);
+      const agenticSignals = await collectAgenticSearchGaps(
+        supabase,
+        orgId,
+        since,
+      );
 
       progressCallback?.(30, 'Mining chat conversations...');
       const chatSignals = await collectChatGaps(supabase, orgId, since);
@@ -128,7 +146,7 @@ export async function handleAnalyzeKnowledgeGaps(
 
       console.log(
         `[AnalyzeKnowledgeGaps] Collected ${allSignals.length} signals for ${orgId} ` +
-          `(search: ${searchSignals.length}, agentic: ${agenticSignals.length}, chat: ${chatSignals.length})`
+          `(search: ${searchSignals.length}, agentic: ${agenticSignals.length}, chat: ${chatSignals.length})`,
       );
 
       progressCallback?.(40, 'Generating embeddings for gap queries...');
@@ -147,18 +165,18 @@ export async function handleAnalyzeKnowledgeGaps(
       const scoredGaps = clusters.map(scoreCluster);
 
       progressCallback?.(80, 'Upserting knowledge gaps...');
-      const { created, updated, newHighSeverityGaps } = await upsertKnowledgeGaps(
-        supabase,
-        orgId,
-        scoredGaps
-      );
+      const { created, updated, newHighSeverityGaps } =
+        await upsertKnowledgeGaps(supabase, orgId, scoredGaps);
 
       progressCallback?.(90, 'Running bus factor analysis...');
       try {
         await busFactorAnalysis(supabase, orgId);
       } catch (busFactorError) {
         // Bus factor failure must not fail the main gap analysis job.
-        console.error('[AnalyzeKnowledgeGaps] Bus factor analysis failed:', busFactorError);
+        console.error(
+          '[AnalyzeKnowledgeGaps] Bus factor analysis failed:',
+          busFactorError,
+        );
       }
 
       // Notify when new critical or high severity gaps are detected.
@@ -177,18 +195,21 @@ export async function handleAnalyzeKnowledgeGaps(
           });
         } catch (alertError) {
           // Alert failure must not fail the main job.
-          console.error('[AnalyzeKnowledgeGaps] gap_alert logging failed:', alertError);
+          console.error(
+            '[AnalyzeKnowledgeGaps] gap_alert logging failed:',
+            alertError,
+          );
         }
       }
 
       progressCallback?.(
         100,
-        `Analysis complete: ${scoredGaps.length} gaps (${created} new, ${updated} updated)`
+        `Analysis complete: ${scoredGaps.length} gaps (${created} new, ${updated} updated)`,
       );
       console.log(
-        `[AnalyzeKnowledgeGaps] Complete for ${orgId}: ${scoredGaps.length} gaps (${created} new, ${updated} updated)`
+        `[AnalyzeKnowledgeGaps] Complete for ${orgId}: ${scoredGaps.length} gaps (${created} new, ${updated} updated)`,
       );
-    }
+    },
   );
 }
 
@@ -200,7 +221,7 @@ export async function handleAnalyzeKnowledgeGaps(
 async function collectSearchMetricGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  since: string
+  since: string,
 ): Promise<GapSignal[]> {
   try {
     const { data: zeroResults } = await supabase
@@ -229,7 +250,10 @@ async function collectSearchMetricGaps(
       source: 'search_metrics' as const,
     }));
   } catch (error) {
-    console.warn('[AnalyzeKnowledgeGaps] search_metrics_archive query failed:', error);
+    console.warn(
+      '[AnalyzeKnowledgeGaps] search_metrics_archive query failed:',
+      error,
+    );
     return [];
   }
 }
@@ -242,7 +266,7 @@ async function collectSearchMetricGaps(
 async function collectAgenticSearchGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  since: string
+  since: string,
 ): Promise<GapSignal[]> {
   try {
     const { data: logs } = await supabase
@@ -260,7 +284,7 @@ async function collectAgenticSearchGaps(
       if (!iterations) return [];
 
       const hasGaps = iterations.some(
-        (iter) => Array.isArray(iter.gaps) && iter.gaps.length > 0
+        (iter) => Array.isArray(iter.gaps) && iter.gaps.length > 0,
       );
       if (!hasGaps) return [];
 
@@ -274,20 +298,27 @@ async function collectAgenticSearchGaps(
 
       // Individual gap descriptions as additional signals
       const gapSignals: GapSignal[] = iterations.flatMap((iter) =>
-        (iter.gaps ?? [])
-          .filter((gap) => gap && gap.length > 3)
-          .map((gap) => ({
-            query: gap,
-            userId: log.user_id as string,
-            timestamp: log.created_at as string,
-            source: 'agentic_search' as const,
-          }))
+        (iter.gaps ?? []).flatMap((__item, __index, __array) =>
+          __item && __item.length > 3
+            ? [
+                {
+                  query: __item,
+                  userId: log.user_id as string,
+                  timestamp: log.created_at as string,
+                  source: 'agentic_search' as const,
+                },
+              ]
+            : [],
+        ),
       );
 
       return [primary, ...gapSignals];
     });
   } catch (error) {
-    console.warn('[AnalyzeKnowledgeGaps] agentic_search_logs query failed:', error);
+    console.warn(
+      '[AnalyzeKnowledgeGaps] agentic_search_logs query failed:',
+      error,
+    );
     return [];
   }
 }
@@ -300,7 +331,7 @@ async function collectAgenticSearchGaps(
 async function collectChatGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  since: string
+  since: string,
 ): Promise<GapSignal[]> {
   try {
     const { data: conversations } = await supabase
@@ -345,8 +376,9 @@ async function collectChatGaps(
         const text = extractTextFromContent(msg.content as Json);
         if (!text) continue;
 
+        const normalizedText = text.toLowerCase();
         const isLowConfidence = LOW_CONFIDENCE_PATTERNS.some((pattern) =>
-          text.toLowerCase().includes(pattern)
+          containsText(normalizedText, pattern),
         );
 
         if (!isLowConfidence) continue;
@@ -376,14 +408,14 @@ function extractTextFromContent(content: Json): string | null {
 
   if (Array.isArray(content)) {
     return content
-      .filter(
-        (block): block is { type: string; text: string } =>
-          typeof block === 'object' &&
-          block !== null &&
-          'text' in block &&
-          typeof (block as Record<string, unknown>).text === 'string'
+      .flatMap((__item, __index, __array) =>
+        typeof __item === 'object' &&
+        __item !== null &&
+        'text' in __item &&
+        typeof (__item as Record<string, unknown>).text === 'string'
+          ? [__item.text]
+          : [],
       )
-      .map((block) => block.text)
       .join(' ');
   }
 
@@ -397,7 +429,7 @@ function extractTextFromContent(content: Json): string | null {
 /** Find preceding user message. */
 function findPrecedingUserMessage(
   messages: Array<{ role: string; content: Json }>,
-  beforeIndex: number
+  beforeIndex: number,
 ): string | null {
   for (let i = beforeIndex - 1; i >= 0; i--) {
     if (messages[i].role === 'user') {
@@ -412,9 +444,12 @@ function findPrecedingUserMessage(
 // ---------------------------------------------------------------------------
 
 /** Deduplicate signals by query text, aggregate counts and users. */
-function aggregateSignals(
-  signals: GapSignal[]
-): Array<{ query: string; count: number; userIds: Set<string>; lastSeen: string }> {
+function aggregateSignals(signals: GapSignal[]): Array<{
+  query: string;
+  count: number;
+  userIds: Set<string>;
+  lastSeen: string;
+}> {
   const map = new Map<
     string,
     { query: string; count: number; userIds: Set<string>; lastSeen: string }
@@ -429,7 +464,8 @@ function aggregateSignals(
     if (existing) {
       existing.count++;
       if (signal.userId) existing.userIds.add(signal.userId);
-      if (signal.timestamp > existing.lastSeen) existing.lastSeen = signal.timestamp;
+      if (signal.timestamp > existing.lastSeen)
+        existing.lastSeen = signal.timestamp;
     } else {
       map.set(key, {
         query: signal.query.trim(),
@@ -440,31 +476,38 @@ function aggregateSignals(
     }
   }
 
-  return [...map.values()]
-    .sort((a, b) => b.count - a.count)
+  return Array.from(map.values())
+    .toSorted((a, b) => b.count - a.count)
     .slice(0, MAX_UNIQUE_QUERIES);
 }
 
 /** Generate embeddings for aggregated queries, skipping failures. */
 async function embedAggregates(
-  aggregates: Array<{ query: string; count: number; userIds: Set<string>; lastSeen: string }>
+  aggregates: Array<{
+    query: string;
+    count: number;
+    userIds: Set<string>;
+    lastSeen: string;
+  }>,
 ): Promise<EmbeddedAggregate[]> {
   const results: EmbeddedAggregate[] = [];
 
-  for (const agg of aggregates) {
-    try {
-      const { embedding } = await generateEmbeddingWithFallback(
-        agg.query,
-        'RETRIEVAL_QUERY'
-      );
-      results.push({ ...agg, embedding });
-    } catch (error) {
-      console.error(
-        `[AnalyzeKnowledgeGaps] Embedding failed for "${agg.query.slice(0, 50)}":`,
-        error
-      );
-    }
-  }
+  await Promise.all(
+    Array.from(aggregates).map(async (agg) => {
+      try {
+        const { embedding } = await generateEmbeddingWithFallback(
+          agg.query,
+          'RETRIEVAL_QUERY',
+        );
+        results.push({ ...agg, embedding });
+      } catch (error) {
+        console.error(
+          `[AnalyzeKnowledgeGaps] Embedding failed for "${agg.query.slice(0, 50)}":`,
+          error,
+        );
+      }
+    }),
+  );
 
   return results;
 }
@@ -490,7 +533,9 @@ function clusterByEmbeddingSimilarity(items: EmbeddedAggregate[]): Cluster[] {
     let merged = false;
 
     for (const cluster of clusters) {
-      if (cosineSimilarity(item.embedding, cluster.embedding) > CLUSTER_THRESHOLD) {
+      if (
+        cosineSimilarity(item.embedding, cluster.embedding) > CLUSTER_THRESHOLD
+      ) {
         cluster.searchCount += item.count;
         for (const uid of item.userIds) cluster.uniqueSearcherIds.add(uid);
         if (item.lastSeen > cluster.lastSearchedAt) {
@@ -575,8 +620,12 @@ interface NewGapSummary {
 async function upsertKnowledgeGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  gaps: ScoredGap[]
-): Promise<{ created: number; updated: number; newHighSeverityGaps: NewGapSummary[] }> {
+  gaps: ScoredGap[],
+): Promise<{
+  created: number;
+  updated: number;
+  newHighSeverityGaps: NewGapSummary[];
+}> {
   const { data: existingGaps } = await supabase
     .from('knowledge_gaps')
     .select('id, topic, metadata, search_count, impact_score')
@@ -604,7 +653,10 @@ async function upsertKnowledgeGaps(
   let updated = 0;
   const newHighSeverityGaps: NewGapSummary[] = [];
 
-  const toUpdate: Array<{ match: (typeof existingWithEmbeddings)[number]; gap: ScoredGap }> = [];
+  const toUpdate: Array<{
+    match: (typeof existingWithEmbeddings)[number];
+    gap: ScoredGap;
+  }> = [];
   const toInsert: ScoredGap[] = [];
 
   for (const gap of gaps) {
@@ -630,7 +682,7 @@ async function upsertKnowledgeGaps(
           last_searched_at: gap.lastSearchedAt,
           status: 'open' as const,
           metadata: { embedding: gap.embedding } as unknown as Json,
-        }))
+        })),
       )
       .select('id, topic, severity, search_count, impact_score, metadata');
 
@@ -659,41 +711,51 @@ async function upsertKnowledgeGaps(
     }
   }
 
-  for (const { match, gap } of toUpdate) {
-    const combinedSearchCount = match.searchCount + gap.searchCount;
-    const newImpactScore = Math.max(gap.impactScore, match.impactScore);
-    const combinedUniqueSearchers = Math.max(match.uniqueSearchers ?? 0, gap.uniqueSearchers ?? 0);
+  const updateResults = await Promise.all(
+    toUpdate.map(async ({ match, gap }) => {
+      const combinedSearchCount = match.searchCount + gap.searchCount;
+      const newImpactScore = Math.max(gap.impactScore, match.impactScore);
+      const combinedUniqueSearchers = Math.max(
+        match.uniqueSearchers ?? 0,
+        gap.uniqueSearchers ?? 0,
+      );
 
-    const { error: updateError } = await supabase
-      .from('knowledge_gaps')
-      .update({
-        search_count: combinedSearchCount,
-        unique_searchers: combinedUniqueSearchers,
-        impact_score: newImpactScore,
-        severity: calculateSeverity(newImpactScore),
-        last_searched_at: gap.lastSearchedAt,
-        metadata: { embedding: gap.embedding } as unknown as Json,
-      })
-      .eq('id', match.id);
+      const { error: updateError } = await supabase
+        .from('knowledge_gaps')
+        .update({
+          search_count: combinedSearchCount,
+          unique_searchers: combinedUniqueSearchers,
+          impact_score: newImpactScore,
+          severity: calculateSeverity(newImpactScore),
+          last_searched_at: gap.lastSearchedAt,
+          metadata: { embedding: gap.embedding } as unknown as Json,
+        })
+        .eq('id', match.id);
 
-    if (updateError) {
-      console.error(`[AnalyzeKnowledgeGaps] Failed to update gap ${match.id}:`, updateError);
-      continue;
-    }
+      if (updateError) {
+        console.error(
+          `[AnalyzeKnowledgeGaps] Failed to update gap ${match.id}:`,
+          updateError,
+        );
+        return 0;
+      }
 
-    match.searchCount = combinedSearchCount;
-    match.impactScore = newImpactScore;
-    match.uniqueSearchers = combinedUniqueSearchers;
-    match.embedding = gap.embedding;
-    updated++;
-  }
+      match.searchCount = combinedSearchCount;
+      match.impactScore = newImpactScore;
+      match.uniqueSearchers = combinedUniqueSearchers;
+      match.embedding = gap.embedding;
+      return 1;
+    }),
+  );
+  updated += updateResults.reduce<number>((total, count) => total + count, 0);
 
   return { created, updated, newHighSeverityGaps };
 }
 
 /** Extract embedding array from metadata, or null. */
 function extractEmbeddingFromMetadata(metadata: Json | null): number[] | null {
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+    return null;
   const embedding = (metadata as Record<string, unknown>).embedding;
   return Array.isArray(embedding) ? (embedding as number[]) : null;
 }
@@ -708,7 +770,7 @@ function findBestMatch(
     impactScore: number;
     uniqueSearchers: number;
     embedding: number[] | null;
-  }>
+  }>,
 ): (typeof existing)[number] | null {
   let bestMatch: (typeof existing)[number] | null = null;
   let bestSimilarity = MERGE_THRESHOLD;
@@ -739,7 +801,7 @@ function findBestMatch(
  */
 async function busFactorAnalysis(
   supabase: ReturnType<typeof createAdminClient>,
-  orgId: string
+  orgId: string,
 ): Promise<void> {
   const { count: activeUserCount } = await supabase
     .from('users')
@@ -757,7 +819,7 @@ async function busFactorAnalysis(
       outputSummary: 'org has fewer than 3 active users',
     });
     console.log(
-      `[AnalyzeKnowledgeGaps] Bus factor skipped for ${orgId}: fewer than 3 active users`
+      `[AnalyzeKnowledgeGaps] Bus factor skipped for ${orgId}: fewer than 3 active users`,
     );
     return;
   }
@@ -778,31 +840,47 @@ async function busFactorAnalysis(
         .limit(5000);
 
       if (mentionsError) {
-        console.warn('[AnalyzeKnowledgeGaps] concept_mentions query failed:', mentionsError);
+        console.warn(
+          '[AnalyzeKnowledgeGaps] concept_mentions query failed:',
+          mentionsError,
+        );
         return;
       }
 
       if (!rawMentions?.length) return;
 
-      const mentions = rawMentions as { concept_id: string; content_id: string }[];
+      const mentions = rawMentions as {
+        concept_id: string;
+        content_id: string;
+      }[];
       const uniqueContentIds = [...new Set(mentions.map((m) => m.content_id))];
       const contentUserMap = new Map<string, string>();
       const BATCH = 100;
 
-      for (let i = 0; i < uniqueContentIds.length; i += BATCH) {
-        const batch = uniqueContentIds.slice(i, i + BATCH);
-        const { data: rows } = await supabase
-          .from('content')
-          .select('id, created_by')
-          .in('id', batch)
-          .eq('org_id', orgId)
-          .is('deleted_at', null)
-          .in('status', ['completed', 'transcribed']);
+      await Promise.all(
+        Array.from(
+          {
+            length: Math.max(
+              0,
+              Math.ceil((uniqueContentIds.length - 0) / BATCH),
+            ),
+          },
+          (_, __loopIndex) => 0 + __loopIndex * BATCH,
+        ).map(async (i) => {
+          const batch = uniqueContentIds.slice(i, i + BATCH);
+          const { data: rows } = await supabase
+            .from('content')
+            .select('id, created_by')
+            .in('id', batch)
+            .eq('org_id', orgId)
+            .is('deleted_at', null)
+            .in('status', ['completed', 'transcribed']);
 
-        for (const row of rows ?? []) {
-          contentUserMap.set(row.id, row.created_by);
-        }
-      }
+          for (const row of rows ?? []) {
+            contentUserMap.set(row.id, row.created_by);
+          }
+        }),
+      );
 
       // Group mentions by concept_id, tracking unique contributors and count.
       const conceptUsers = new Map<string, Set<string>>();
@@ -812,7 +890,8 @@ async function busFactorAnalysis(
         const userId = contentUserMap.get(contentId);
         if (!userId) continue;
 
-        if (!conceptUsers.has(conceptId)) conceptUsers.set(conceptId, new Set());
+        if (!conceptUsers.has(conceptId))
+          conceptUsers.set(conceptId, new Set());
         conceptUsers.get(conceptId)!.add(userId);
         conceptCounts.set(conceptId, (conceptCounts.get(conceptId) ?? 0) + 1);
       }
@@ -834,7 +913,9 @@ async function busFactorAnalysis(
       }
 
       if (!singleExpert.length) {
-        console.log(`[AnalyzeKnowledgeGaps] No bus factor risks found for ${orgId}`);
+        console.log(
+          `[AnalyzeKnowledgeGaps] No bus factor risks found for ${orgId}`,
+        );
         return;
       }
 
@@ -845,8 +926,13 @@ async function busFactorAnalysis(
         .select('id, name')
         .eq('org_id', orgId)
         .in('id', conceptIds);
-      const conceptRows = (rawConceptRows ?? []) as { id: string; name: string }[];
-      const conceptNameMap = new Map<string, string>(conceptRows.map((c) => [c.id, c.name]));
+      const conceptRows = (rawConceptRows ?? []) as {
+        id: string;
+        name: string;
+      }[];
+      const conceptNameMap = new Map<string, string>(
+        conceptRows.map((c) => [c.id, c.name]),
+      );
 
       const expertIds = [...new Set(singleExpert.map((s) => s.expertUserId))];
       const { data: userRows } = await supabase
@@ -855,7 +941,7 @@ async function busFactorAnalysis(
         .eq('org_id', orgId)
         .in('id', expertIds);
       const userDisplayName = new Map<string, string>(
-        (userRows ?? []).map((u) => [u.id, u.name ?? u.email])
+        (userRows ?? []).map((u) => [u.id, u.name ?? u.email]),
       );
 
       const { data: existingGaps } = await supabase
@@ -867,64 +953,79 @@ async function busFactorAnalysis(
       const existingByConceptId = new Map<string, string>(); // conceptId → gap id
       for (const gap of existingGaps ?? []) {
         const meta = gap.metadata as Record<string, unknown> | null;
-        if (meta?.gapType === 'bus_factor' && typeof meta.conceptId === 'string') {
+        if (
+          meta?.gapType === 'bus_factor' &&
+          typeof meta.conceptId === 'string'
+        ) {
           existingByConceptId.set(meta.conceptId, gap.id);
         }
       }
 
-      let updated = 0;
-      const toInsert: Array<{
-        org_id: string;
-        topic: string;
-        description: string;
-        severity: KnowledgeGapSeverity;
-        status: string;
-        metadata: Json;
-      }> = [];
+      const gapResults = await Promise.all(
+        singleExpert.map(async ({ conceptId, expertUserId, mentionCount }) => {
+          const conceptName = conceptNameMap.get(conceptId);
+          if (!conceptName) return { updated: 0, insert: null };
 
-      for (const { conceptId, expertUserId, mentionCount } of singleExpert) {
-        const conceptName = conceptNameMap.get(conceptId);
-        if (!conceptName) continue;
+          const userName = userDisplayName.get(expertUserId) ?? expertUserId;
+          // 5+ mentions = well-documented by one person, therefore high-risk.
+          const severity: KnowledgeGapSeverity =
+            mentionCount >= 5 ? 'high' : 'medium';
+          const topic = `${conceptName} (single expert)`;
+          const description =
+            `Only ${userName} has recorded content about ${conceptName}. ` +
+            `Consider having another team member document this topic.`;
+          const metadata: Json = {
+            gapType: 'bus_factor',
+            expertUserId,
+            conceptId,
+            mentionCount,
+          };
 
-        const userName = userDisplayName.get(expertUserId) ?? expertUserId;
-        // 5+ mentions = well-documented by one person, therefore high-risk.
-        const severity: KnowledgeGapSeverity = mentionCount >= 5 ? 'high' : 'medium';
-        const topic = `${conceptName} (single expert)`;
-        const description =
-          `Only ${userName} has recorded content about ${conceptName}. ` +
-          `Consider having another team member document this topic.`;
-        const metadata: Json = {
-          gapType: 'bus_factor',
-          expertUserId,
-          conceptId,
-          mentionCount,
-        };
+          const existingId = existingByConceptId.get(conceptId);
+          if (existingId) {
+            // Updates must be per-row: each gap has unique topic/description/severity.
+            const { error } = await supabase
+              .from('knowledge_gaps')
+              .update({ topic, description, severity, metadata })
+              .eq('id', existingId);
+            return { updated: error ? 0 : 1, insert: null };
+          }
 
-        const existingId = existingByConceptId.get(conceptId);
-        if (existingId) {
-          // Updates must be per-row: each gap has unique topic/description/severity.
-          const { error } = await supabase
-            .from('knowledge_gaps')
-            .update({ topic, description, severity, metadata })
-            .eq('id', existingId);
-          if (!error) updated++;
-        } else {
-          toInsert.push({ org_id: orgId, topic, description, severity, status: 'open', metadata });
-        }
-      }
+          return {
+            updated: 0,
+            insert: {
+              org_id: orgId,
+              topic,
+              description,
+              severity,
+              status: 'open',
+              metadata,
+            },
+          };
+        }),
+      );
+      const updated = gapResults.reduce(
+        (total, result) => total + result.updated,
+        0,
+      );
+      const toInsert = gapResults.flatMap((result) =>
+        result.insert ? [result.insert] : [],
+      );
 
       // Batch-insert new gaps in a single round trip.
       let created = 0;
       if (toInsert.length) {
-        const { error } = await supabase.from('knowledge_gaps').insert(toInsert);
+        const { error } = await supabase
+          .from('knowledge_gaps')
+          .insert(toInsert);
         created = error ? 0 : toInsert.length;
       }
 
       console.log(
         `[AnalyzeKnowledgeGaps] Bus factor: ${singleExpert.length} at-risk concepts, ` +
-          `${created} new gaps, ${updated} updated`
+          `${created} new gaps, ${updated} updated`,
       );
-    }
+    },
   );
 }
 
@@ -936,7 +1037,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length === 0 || b.length === 0) return 0;
   if (a.length !== b.length) {
     console.warn(
-      `[AnalyzeKnowledgeGaps] Embedding dimension mismatch: ${a.length} vs ${b.length}`
+      `[AnalyzeKnowledgeGaps] Embedding dimension mismatch: ${a.length} vs ${b.length}`,
     );
     return 0;
   }

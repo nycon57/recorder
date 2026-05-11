@@ -14,7 +14,7 @@ const logger = createLogger({ service: 'generate-recommendations' });
 
 // Recommendation Thresholds Configuration
 // These business rules can be adjusted without code changes
-export const RECOMMENDATION_THRESHOLDS = {
+const RECOMMENDATION_THRESHOLDS = {
   // Time periods
   OLD_RECORDING_DAYS: 90, // Days before recording is considered old for tier migration
   UNUSED_RECORDING_MONTHS: 6, // Months before checking if recording is unused
@@ -30,7 +30,7 @@ export const RECOMMENDATION_THRESHOLDS = {
   TIER_PRICING: {
     HOT: 0.021, // Supabase Storage hot tier
     WARM: 0.015, // Cloudflare R2 warm tier
-    COLD: 0.010, // Cloudflare R2 cold tier
+    COLD: 0.01, // Cloudflare R2 cold tier
     GLACIER: 0.004, // Glacier tier (not yet implemented)
   },
 
@@ -73,20 +73,28 @@ export async function handleGenerateRecommendations(job: Job): Promise<void> {
       return;
     }
 
-    logger.info(`Processing recommendations for ${organizations.length} organization(s)`);
+    logger.info(
+      `Processing recommendations for ${organizations.length} organization(s)`,
+    );
 
     // Process each organization
-    for (const org of organizations) {
-      try {
-        await generateRecommendationsForOrganization(supabase, org.id, org.name);
-      } catch (error) {
-        logger.error('Failed to generate recommendations for organization', {
-          context: { organizationId: org.id, organizationName: org.name },
-          error: error as Error,
-        });
-        // Continue processing other organizations
-      }
-    }
+    await Promise.all(
+      Array.from(organizations).map(async (org) => {
+        try {
+          await generateRecommendationsForOrganization(
+            supabase,
+            org.id,
+            org.name,
+          );
+        } catch (error) {
+          logger.error('Failed to generate recommendations for organization', {
+            context: { organizationId: org.id, organizationName: org.name },
+            error: error as Error,
+          });
+          // Continue processing other organizations
+        }
+      }),
+    );
 
     logger.info('Recommendation generation completed successfully');
   } catch (error) {
@@ -98,7 +106,7 @@ export async function handleGenerateRecommendations(job: Job): Promise<void> {
 async function generateRecommendationsForOrganization(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  orgName: string
+  orgName: string,
 ): Promise<void> {
   logger.debug('Generating recommendations for organization', {
     context: { organizationId: orgId, organizationName: orgName },
@@ -108,7 +116,10 @@ async function generateRecommendationsForOrganization(
 
   // Recommendation 1: Migrate old recordings to cold storage
   const oldRecordingDaysAgo = new Date();
-  oldRecordingDaysAgo.setDate(oldRecordingDaysAgo.getDate() - RECOMMENDATION_THRESHOLDS.OLD_RECORDING_DAYS);
+  oldRecordingDaysAgo.setDate(
+    oldRecordingDaysAgo.getDate() -
+      RECOMMENDATION_THRESHOLDS.OLD_RECORDING_DAYS,
+  );
 
   const { data: oldHotFiles } = await supabase
     .from('content')
@@ -119,10 +130,17 @@ async function generateRecommendationsForOrganization(
     .is('deleted_at', null);
 
   if (oldHotFiles && oldHotFiles.length > 0) {
-    const totalSize = oldHotFiles.reduce((sum, f) => sum + (f.file_size || 0), 0);
+    const totalSize = oldHotFiles.reduce(
+      (sum, f) => sum + (f.file_size || 0),
+      0,
+    );
     const sizeGB = totalSize / 1e9;
-    const monthlySavings = sizeGB * (RECOMMENDATION_THRESHOLDS.TIER_PRICING.HOT - RECOMMENDATION_THRESHOLDS.TIER_PRICING.COLD);
-    const annualSavings = monthlySavings * RECOMMENDATION_THRESHOLDS.ANNUAL_MONTHS;
+    const monthlySavings =
+      sizeGB *
+      (RECOMMENDATION_THRESHOLDS.TIER_PRICING.HOT -
+        RECOMMENDATION_THRESHOLDS.TIER_PRICING.COLD);
+    const annualSavings =
+      monthlySavings * RECOMMENDATION_THRESHOLDS.ANNUAL_MONTHS;
 
     const created = await createRecommendation(supabase, {
       organization_id: orgId,
@@ -143,7 +161,10 @@ async function generateRecommendationsForOrganization(
       recommendationsCreated++;
       logger.info('Created tier migration recommendation', {
         context: { organizationId: orgId },
-        data: { fileCount: oldHotFiles.length, annualSavings: annualSavings.toFixed(2) },
+        data: {
+          fileCount: oldHotFiles.length,
+          annualSavings: annualSavings.toFixed(2),
+        },
       });
     }
   }
@@ -156,12 +177,20 @@ async function generateRecommendationsForOrganization(
     .is('compression_stats', null)
     .is('deleted_at', null);
 
-  if (uncompressed && uncompressed.length > RECOMMENDATION_THRESHOLDS.MIN_UNCOMPRESSED_FILES) {
-    const totalSize = uncompressed.reduce((sum, f) => sum + (f.file_size || 0), 0);
-    const estimatedSavings = totalSize * RECOMMENDATION_THRESHOLDS.COMPRESSION_ESTIMATE_RATIO;
+  if (
+    uncompressed &&
+    uncompressed.length > RECOMMENDATION_THRESHOLDS.MIN_UNCOMPRESSED_FILES
+  ) {
+    const totalSize = uncompressed.reduce(
+      (sum, f) => sum + (f.file_size || 0),
+      0,
+    );
+    const estimatedSavings =
+      totalSize * RECOMMENDATION_THRESHOLDS.COMPRESSION_ESTIMATE_RATIO;
     const sizeGB = estimatedSavings / 1e9;
     const monthlySavings = sizeGB * RECOMMENDATION_THRESHOLDS.TIER_PRICING.HOT;
-    const annualSavings = monthlySavings * RECOMMENDATION_THRESHOLDS.ANNUAL_MONTHS;
+    const annualSavings =
+      monthlySavings * RECOMMENDATION_THRESHOLDS.ANNUAL_MONTHS;
 
     const created = await createRecommendation(supabase, {
       organization_id: orgId,
@@ -182,7 +211,10 @@ async function generateRecommendationsForOrganization(
       recommendationsCreated++;
       logger.info('Created compression recommendation', {
         context: { organizationId: orgId },
-        data: { fileCount: uncompressed.length, annualSavings: annualSavings.toFixed(2) },
+        data: {
+          fileCount: uncompressed.length,
+          annualSavings: annualSavings.toFixed(2),
+        },
       });
     }
   }
@@ -191,22 +223,37 @@ async function generateRecommendationsForOrganization(
   try {
     const { data: duplicates, error: duplicatesError } = await supabase
       .from('similarity_matches')
-      .select('duplicate_file_size')
-      .eq('org_id', orgId)
-      .gte('similarity_score', RECOMMENDATION_THRESHOLDS.HIGH_SIMILARITY_SCORE);
+      .select('similar_content_id')
+      .gte('overall_similarity', RECOMMENDATION_THRESHOLDS.HIGH_SIMILARITY_SCORE);
 
     if (duplicatesError) {
-      logger.debug('similarity_matches table not available, skipping duplicate recommendations', {
-        error: new Error(duplicatesError.message),
-      });
-    } else if (duplicates && duplicates.length > RECOMMENDATION_THRESHOLDS.MIN_DUPLICATE_FILES) {
-      const totalDuplicateSize = duplicates.reduce(
-        (sum, d) => sum + (d.duplicate_file_size || 0),
-        0
+      logger.debug(
+        'similarity_matches table not available, skipping duplicate recommendations',
+        {
+          error: new Error(duplicatesError.message),
+        },
+      );
+    } else if (
+      duplicates &&
+      duplicates.length > RECOMMENDATION_THRESHOLDS.MIN_DUPLICATE_FILES
+    ) {
+      const duplicateIds = [
+        ...new Set(duplicates.map((duplicate) => duplicate.similar_content_id)),
+      ];
+      const { data: duplicateContent } = await supabase
+        .from('content')
+        .select('file_size')
+        .eq('org_id', orgId)
+        .in('id', duplicateIds);
+      const totalDuplicateSize = (duplicateContent ?? []).reduce(
+        (sum, content) => sum + (content.file_size ?? 0),
+        0,
       );
       const sizeGB = totalDuplicateSize / 1e9;
-      const monthlySavings = sizeGB * RECOMMENDATION_THRESHOLDS.TIER_PRICING.HOT;
-      const annualSavings = monthlySavings * RECOMMENDATION_THRESHOLDS.ANNUAL_MONTHS;
+      const monthlySavings =
+        sizeGB * RECOMMENDATION_THRESHOLDS.TIER_PRICING.HOT;
+      const annualSavings =
+        monthlySavings * RECOMMENDATION_THRESHOLDS.ANNUAL_MONTHS;
 
       const created = await createRecommendation(supabase, {
         organization_id: orgId,
@@ -227,18 +274,26 @@ async function generateRecommendationsForOrganization(
         recommendationsCreated++;
         logger.info('Created deduplication recommendation', {
           context: { organizationId: orgId },
-          data: { duplicateCount: duplicates.length, annualSavings: annualSavings.toFixed(2) },
+          data: {
+            duplicateCount: duplicates.length,
+            annualSavings: annualSavings.toFixed(2),
+          },
         });
       }
     }
   } catch (error) {
     // similarity_matches table doesn't exist yet
-    logger.debug('similarity_matches table not found, skipping duplicate recommendations');
+    logger.debug(
+      'similarity_matches table not found, skipping duplicate recommendations',
+    );
   }
 
   // Recommendation 4: Archive unused recordings
   const unusedMonthsAgo = new Date();
-  unusedMonthsAgo.setMonth(unusedMonthsAgo.getMonth() - RECOMMENDATION_THRESHOLDS.UNUSED_RECORDING_MONTHS);
+  unusedMonthsAgo.setMonth(
+    unusedMonthsAgo.getMonth() -
+      RECOMMENDATION_THRESHOLDS.UNUSED_RECORDING_MONTHS,
+  );
 
   const { data: oldRecordings } = await supabase
     .from('content')
@@ -247,9 +302,12 @@ async function generateRecommendationsForOrganization(
     .lt('created_at', unusedMonthsAgo.toISOString())
     .is('deleted_at', null);
 
-  if (oldRecordings && oldRecordings.length > RECOMMENDATION_THRESHOLDS.MIN_OLD_RECORDINGS) {
+  if (
+    oldRecordings &&
+    oldRecordings.length > RECOMMENDATION_THRESHOLDS.MIN_OLD_RECORDINGS
+  ) {
     // Check if they have been accessed recently (via search analytics or shares)
-    const recordingIds = oldRecordings.map(r => r.id);
+    const recordingIds = oldRecordings.map((r) => r.id);
 
     const { data: recentAccess } = await supabase
       .from('shares')
@@ -257,14 +315,23 @@ async function generateRecommendationsForOrganization(
       .in('target_id', recordingIds)
       .gte('last_accessed_at', unusedMonthsAgo.toISOString());
 
-    const accessedIds = new Set(recentAccess?.map(s => s.target_id) || []);
-    const unusedRecordings = oldRecordings.filter(r => !accessedIds.has(r.id));
+    const accessedIds = new Set(recentAccess?.map((s) => s.target_id) || []);
+    const unusedRecordings = oldRecordings.filter(
+      (r) => !accessedIds.has(r.id),
+    );
 
-    if (unusedRecordings.length > RECOMMENDATION_THRESHOLDS.MIN_UNUSED_RECORDINGS) {
-      const totalSize = unusedRecordings.reduce((sum, r) => sum + (r.file_size || 0), 0);
+    if (
+      unusedRecordings.length > RECOMMENDATION_THRESHOLDS.MIN_UNUSED_RECORDINGS
+    ) {
+      const totalSize = unusedRecordings.reduce(
+        (sum, r) => sum + (r.file_size || 0),
+        0,
+      );
       const sizeGB = totalSize / 1e9;
-      const monthlySavings = sizeGB * RECOMMENDATION_THRESHOLDS.TIER_PRICING.HOT; // Assume hot tier
-      const annualSavings = monthlySavings * RECOMMENDATION_THRESHOLDS.ANNUAL_MONTHS;
+      const monthlySavings =
+        sizeGB * RECOMMENDATION_THRESHOLDS.TIER_PRICING.HOT; // Assume hot tier
+      const annualSavings =
+        monthlySavings * RECOMMENDATION_THRESHOLDS.ANNUAL_MONTHS;
 
       const created = await createRecommendation(supabase, {
         organization_id: orgId,
@@ -285,7 +352,10 @@ async function generateRecommendationsForOrganization(
         recommendationsCreated++;
         logger.info('Created archival recommendation', {
           context: { organizationId: orgId },
-          data: { unusedCount: unusedRecordings.length, annualSavings: annualSavings.toFixed(2) },
+          data: {
+            unusedCount: unusedRecordings.length,
+            annualSavings: annualSavings.toFixed(2),
+          },
         });
       }
     }
@@ -310,7 +380,7 @@ interface RecommendationData {
 
 async function createRecommendation(
   supabase: ReturnType<typeof createAdminClient>,
-  data: RecommendationData
+  data: RecommendationData,
 ): Promise<boolean> {
   try {
     // Check if recommendation already exists and is not dismissed/completed
@@ -326,10 +396,12 @@ async function createRecommendation(
       if (existingError.code === '42P01') {
         // Table doesn't exist
         throw new Error(
-          'recommendations table does not exist. Please run ANALYTICS_TABLES_MIGRATION.sql to create it.'
+          'recommendations table does not exist. Please run ANALYTICS_TABLES_MIGRATION.sql to create it.',
         );
       }
-      throw new Error(`Failed to check existing recommendations: ${existingError.message}`);
+      throw new Error(
+        `Failed to check existing recommendations: ${existingError.message}`,
+      );
     }
 
     if (existing) {
@@ -341,27 +413,31 @@ async function createRecommendation(
     }
 
     // Create new recommendation
-    const { error: insertError } = await supabase.from('recommendations').insert({
-      organization_id: data.organization_id,
-      title: data.title,
-      description: data.description,
-      implementation: data.implementation,
-      impact: data.impact,
-      effort: data.effort,
-      savings: data.savings,
-      timeframe: data.timeframe,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-    });
+    const { error: insertError } = await supabase
+      .from('recommendations')
+      .insert({
+        organization_id: data.organization_id,
+        title: data.title,
+        description: data.description,
+        implementation: data.implementation,
+        impact: data.impact,
+        effort: data.effort,
+        savings: data.savings,
+        timeframe: data.timeframe,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      });
 
     if (insertError) {
       if (insertError.code === '42P01') {
         // Table doesn't exist
         throw new Error(
-          'recommendations table does not exist. Please run ANALYTICS_TABLES_MIGRATION.sql to create it.'
+          'recommendations table does not exist. Please run ANALYTICS_TABLES_MIGRATION.sql to create it.',
         );
       }
-      throw new Error(`Failed to create recommendation: ${insertError.message}`);
+      throw new Error(
+        `Failed to create recommendation: ${insertError.message}`,
+      );
     }
 
     return true;

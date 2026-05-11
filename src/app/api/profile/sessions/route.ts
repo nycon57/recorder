@@ -34,14 +34,18 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .single();
 
   if (userError || !user) {
-    console.error('[GET /api/profile/sessions] Error fetching user:', userError);
+    console.error(
+      '[GET /api/profile/sessions] Error fetching user:',
+      userError,
+    );
     return errors.notFound('User');
   }
 
   // Fetch active sessions for the user
   const { data: sessions, error } = await supabase
     .from('user_sessions')
-    .select(`
+    .select(
+      `
       id,
       session_token,
       clerk_session_id,
@@ -54,14 +58,18 @@ export const GET = apiHandler(async (request: NextRequest) => {
       created_at,
       last_active_at,
       expires_at
-    `)
+    `,
+    )
     .eq('user_id', user.id)
     .is('revoked_at', null)
     .gt('expires_at', new Date().toISOString())
     .order('last_active_at', { ascending: false });
 
   if (error) {
-    console.error('[GET /api/profile/sessions] Error fetching sessions:', error);
+    console.error(
+      '[GET /api/profile/sessions] Error fetching sessions:',
+      error,
+    );
     return errors.internalError();
   }
 
@@ -99,10 +107,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * @returns { success: boolean, sessionId: string }
  */
 export const DELETE = apiHandler(async (request: NextRequest) => {
-  const { userId } = await requireAuth();
-
-  // Validate request body
-  const body = await parseBody(request, revokeSessionSchema);
+  const [{ userId }, body] = await Promise.all([
+    requireAuth(),
+    parseBody(request, revokeSessionSchema),
+  ]);
   // Type assertion for parsed body
   const { sessionId } = body as { sessionId: string };
 
@@ -117,7 +125,10 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     .single();
 
   if (userError || !user) {
-    console.error('[DELETE /api/profile/sessions] Error fetching user:', userError);
+    console.error(
+      '[DELETE /api/profile/sessions] Error fetching user:',
+      userError,
+    );
     return errors.notFound('User');
   }
 
@@ -145,7 +156,10 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     .eq('id', sessionId);
 
   if (revokeError) {
-    console.error('[DELETE /api/profile/sessions] Error revoking session:', revokeError);
+    console.error(
+      '[DELETE /api/profile/sessions] Error revoking session:',
+      revokeError,
+    );
     return errors.internalError();
   }
 

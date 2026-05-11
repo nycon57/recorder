@@ -1,6 +1,11 @@
 import { NextRequest } from 'next/server';
 
-import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  parseBody,
+} from '@/lib/utils/api';
 import { alertConfigSchema } from '@/lib/validations/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
@@ -27,13 +32,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
         enable_slack_notifications: false,
         check_interval: 15,
       },
-      { onConflict: 'organization_id', ignoreDuplicates: true }
+      { onConflict: 'organization_id', ignoreDuplicates: true },
     )
     .select()
     .single();
 
   if (error) {
-    console.error('[GET /api/analytics/alerts/config] Error fetching/creating config:', error);
+    console.error(
+      '[GET /api/analytics/alerts/config] Error fetching/creating config:',
+      error,
+    );
 
     // Fallback: try to select existing config if upsert failed due to race condition
     const { data: existingConfig, error: selectError } = await supabaseAdmin
@@ -43,7 +51,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
       .single();
 
     if (selectError || !existingConfig) {
-      console.error('[GET /api/analytics/alerts/config] Error in fallback select:', selectError);
+      console.error(
+        '[GET /api/analytics/alerts/config] Error in fallback select:',
+        selectError,
+      );
       throw new Error('Failed to fetch or create alert configuration');
     }
 
@@ -96,8 +107,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * - config: Updated alert configuration object
  */
 export const PUT = apiHandler(async (request: NextRequest) => {
-  const { orgId } = await requireOrg();
-  const body = await parseBody(request, alertConfigSchema);
+  const [{ orgId }, body] = await Promise.all([
+    requireOrg(),
+    parseBody(request, alertConfigSchema),
+  ]);
 
   if (!body || typeof body !== 'object') {
     throw new Error('Invalid request body');
@@ -126,11 +139,13 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   }
 
   if (validatedBody.enableEmailNotifications !== undefined) {
-    updateData.enable_email_notifications = validatedBody.enableEmailNotifications;
+    updateData.enable_email_notifications =
+      validatedBody.enableEmailNotifications;
   }
 
   if (validatedBody.enableSlackNotifications !== undefined) {
-    updateData.enable_slack_notifications = validatedBody.enableSlackNotifications;
+    updateData.enable_slack_notifications =
+      validatedBody.enableSlackNotifications;
   }
 
   if (validatedBody.slackWebhookUrl !== undefined) {
@@ -149,13 +164,16 @@ export const PUT = apiHandler(async (request: NextRequest) => {
         ...updateData,
         organization_id: orgId,
       },
-      { onConflict: 'organization_id' }
+      { onConflict: 'organization_id' },
     )
     .select()
     .single();
 
   if (error) {
-    console.error('[PUT /api/analytics/alerts/config] Error updating config:', error);
+    console.error(
+      '[PUT /api/analytics/alerts/config] Error updating config:',
+      error,
+    );
     throw new Error('Failed to update alert configuration');
   }
 

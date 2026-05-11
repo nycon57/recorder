@@ -11,7 +11,7 @@ export type { ContentType, FileType };
 /**
  * Content type constants for use throughout the application
  */
-export const CONTENT_TYPES = {
+const CONTENT_TYPES = {
   RECORDING: 'recording' as const,
   VIDEO: 'video' as const,
   AUDIO: 'audio' as const,
@@ -22,7 +22,7 @@ export const CONTENT_TYPES = {
 /**
  * File extension to content type mapping
  */
-export const FILE_EXTENSION_TO_CONTENT_TYPE: Record<FileType, ContentType> = {
+const FILE_EXTENSION_TO_CONTENT_TYPE: Record<FileType, ContentType> = {
   // Video formats
   mp4: 'video',
   mov: 'video',
@@ -47,7 +47,7 @@ export type UploadContext = 'recording' | 'library';
 /**
  * MIME type to file extension mapping
  */
-export const MIME_TYPE_TO_FILE_TYPE: Record<string, FileType> = {
+const MIME_TYPE_TO_FILE_TYPE: Record<string, FileType> = {
   // Video
   'video/mp4': 'mp4',
   'video/quicktime': 'mov',
@@ -96,7 +96,7 @@ export const FILE_TYPE_TO_MIME_TYPE: Record<FileType, string> = {
 /**
  * Content type to icon mapping (using emoji or icon names)
  */
-export const CONTENT_TYPE_ICONS: Record<ContentType, string> = {
+const CONTENT_TYPE_ICONS: Record<ContentType, string> = {
   recording: 'VideoIcon',
   video: 'FileVideoIcon',
   audio: 'AudioLinesIcon',
@@ -330,13 +330,16 @@ export function estimateProcessingTime(totalDurationSeconds: number): {
 /**
  * Accepted file extensions per content type for file input
  */
-export const ACCEPTED_FILE_EXTENSIONS: Record<ContentType, string[]> = {
+const ACCEPTED_FILE_EXTENSIONS: Record<ContentType, string[]> = {
   recording: ['.webm'], // Internal use only
   video: ['.mp4', '.mov', '.webm', '.avi'],
   audio: ['.mp3', '.wav', '.m4a', '.ogg'],
   document: ['.pdf', '.docx', '.doc'],
   text: ['.txt', '.md'],
 };
+const ACCEPTED_FILE_EXTENSION_SETS = Object.values(ACCEPTED_FILE_EXTENSIONS).map(
+  (extensions) => new Set(extensions)
+);
 
 function resolveContentTypeForFile(
   fileType: FileType,
@@ -370,13 +373,13 @@ export function getFileTypeFromMimeType(mimeType: string): FileType | null {
 /**
  * Helper function to get file type from file extension
  */
-export function getFileTypeFromExtension(filename: string): FileType | null {
+function getFileTypeFromExtension(filename: string): FileType | null {
   const ext = filename.toLowerCase().split('.').pop();
   if (!ext) return null;
 
   // Find matching file type
-  for (const extensions of Object.values(ACCEPTED_FILE_EXTENSIONS)) {
-    if (extensions.includes(`.${ext}`)) {
+  for (const extensionSet of ACCEPTED_FILE_EXTENSION_SETS) {
+    if (extensionSet.has(`.${ext}`)) {
       return ext as FileType;
     }
   }
@@ -387,7 +390,7 @@ export function getFileTypeFromExtension(filename: string): FileType | null {
 /**
  * Helper function to validate file type
  */
-export function isValidFileType(
+function isValidFileType(
   mimeType: string,
   contentType?: ContentType,
   options: { uploadContext?: UploadContext } = {},
@@ -437,7 +440,7 @@ export function isValidDuration(
 /**
  * Get duration limit for content type
  */
-export function getDurationLimit(contentType: ContentType): number | null {
+function getDurationLimit(contentType: ContentType): number | null {
   return DURATION_LIMITS[contentType];
 }
 
@@ -473,7 +476,7 @@ export function formatFileSize(bytes: number): string {
 /**
  * Helper function to get file extension from filename
  */
-export function getFileExtension(filename: string): string {
+function getFileExtension(filename: string): string {
   const ext = filename.toLowerCase().split('.').pop();
   return ext ? `.${ext}` : '';
 }
@@ -481,14 +484,14 @@ export function getFileExtension(filename: string): string {
 /**
  * Helper function to determine if content type requires transcription
  */
-export function requiresTranscription(contentType: ContentType): boolean {
+function requiresTranscription(contentType: ContentType): boolean {
   return ['recording', 'video', 'audio'].includes(contentType);
 }
 
 /**
  * Helper function to determine if content type requires text extraction
  */
-export function requiresTextExtraction(contentType: ContentType): boolean {
+function requiresTextExtraction(contentType: ContentType): boolean {
   return contentType === 'document';
 }
 
@@ -531,7 +534,7 @@ export function getProcessingJobs(
 /**
  * Content type categories for grouping
  */
-export const CONTENT_TYPE_CATEGORIES = {
+const CONTENT_TYPE_CATEGORIES = {
   MEDIA: ['recording', 'video', 'audio'] as ContentType[],
   DOCUMENTS: ['document', 'text'] as ContentType[],
   ALL: ['recording', 'video', 'audio', 'document', 'text'] as ContentType[],

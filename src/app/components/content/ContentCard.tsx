@@ -1,6 +1,7 @@
 "use client"
 
 import React from 'react';
+
 import { BaseContentCard, ContentItem } from './BaseContentCard';
 
 interface ContentCardProps {

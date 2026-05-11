@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useRef, useEffect, useState } from 'react';
+import { Suspense, useRef, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import {
@@ -22,13 +22,28 @@ interface RecordingPlayerProps {
   videoUrl: string;
   initialTime?: number;
   onDurationChange?: (duration: number) => void;
+  ref?: React.Ref<HTMLVideoElement>;
 }
 
-const RecordingPlayer = React.forwardRef<HTMLVideoElement, RecordingPlayerProps>(({ videoUrl, initialTime, onDurationChange }, ref) => {
+function RecordingPlayerContent({
+  videoUrl,
+  initialTime,
+  onDurationChange,
+  ref,
+}: RecordingPlayerProps) {
   const internalRef = useRef<HTMLVideoElement>(null);
   const searchParams = useSearchParams();
+  const getSearchParam = React.useMemo(
+    () => searchParams.get.bind(searchParams),
+    [searchParams]
+  );
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const onDurationChangeEvent = React.useEffectEvent(
+    (nextDuration: number) => {
+      onDurationChange?.(nextDuration);
+    }
+  );
 
   // Combine refs
   useEffect(() => {
@@ -79,13 +94,13 @@ const RecordingPlayer = React.forwardRef<HTMLVideoElement, RecordingPlayerProps>
     const handleLoadedMetadata = () => {
       // Extract and communicate duration to parent
       if (video.duration && !isNaN(video.duration) && isFinite(video.duration)) {
-        onDurationChange?.(video.duration);
+        onDurationChangeEvent(video.duration);
       }
     };
 
     const handleLoadedData = () => {
       // Check for 't' query parameter (e.g., ?t=120 for 2 minutes)
-      const timeParam = searchParams?.get('t');
+      const timeParam = getSearchParam('t');
       const startTime = timeParam ? parseInt(timeParam, 10) : initialTime;
 
       if (startTime && !isNaN(startTime) && startTime > 0) {
@@ -105,7 +120,7 @@ const RecordingPlayer = React.forwardRef<HTMLVideoElement, RecordingPlayerProps>
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('loadeddata', handleLoadedData);
     };
-  }, [searchParams, initialTime, onDurationChange]);
+  }, [getSearchParam, initialTime]);
 
   const handleSeek = (time: number) => {
     const video = internalRef.current;
@@ -153,7 +168,15 @@ const RecordingPlayer = React.forwardRef<HTMLVideoElement, RecordingPlayerProps>
       )}
     </div>
   );
-});
+}
+
+function RecordingPlayer(props: RecordingPlayerProps) {
+  return (
+    <Suspense fallback={null}>
+      <RecordingPlayerContent {...props} />
+    </Suspense>
+  );
+}
 
 RecordingPlayer.displayName = 'RecordingPlayer';
 

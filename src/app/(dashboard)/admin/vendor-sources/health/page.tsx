@@ -15,16 +15,16 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Activity } from 'lucide-react';
 
-import { requireSystemAdmin } from '@/lib/utils/api';
+import { canAccessSystemAdminPage } from '@/lib/auth/system-admin-page-guard';
 import { SourceHealthTable } from '@/app/components/admin/vendor-sources/source-health-table';
 import { FailureLogTable } from '@/app/components/admin/vendor-sources/failure-log-table';
 
 export const dynamic = 'force-dynamic';
 
 export default async function VendorSourcesHealthPage() {
-  try {
-    await requireSystemAdmin();
-  } catch {
+  const hasAccess = await canAccessSystemAdminPage();
+
+  if (!hasAccess) {
     redirect('/dashboard');
   }
 
@@ -36,7 +36,7 @@ export default async function VendorSourcesHealthPage() {
           href="/admin/vendor-sources"
           className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
+          <ArrowLeft className="size-3.5" />
           Vendor Sources
         </Link>
         <span>/</span>
@@ -46,7 +46,7 @@ export default async function VendorSourcesHealthPage() {
       {/* Header */}
       <div className="space-y-1">
         <h1 className="trbd-page-title flex items-center gap-2">
-          <Activity className="h-6 w-6" />
+          <Activity className="size-6" />
           Source Health
         </h1>
         <p className="text-muted-foreground text-sm">

@@ -46,11 +46,15 @@ interface FeatureRelatedProps {
   relatedIds: FeatureId[];
 }
 
-export function FeatureRelated({ currentFeatureId, relatedIds }: FeatureRelatedProps) {
-  const relatedFeatures = relatedIds
-    .filter((id) => id !== currentFeatureId)
-    .map((id) => FEATURES[id])
-    .filter(Boolean);
+export function FeatureRelated({
+  currentFeatureId,
+  relatedIds,
+}: FeatureRelatedProps) {
+  const relatedFeatures = relatedIds.flatMap((id) => {
+    if (id === currentFeatureId) return [];
+    const feature = FEATURES[id];
+    return feature ? [feature] : [];
+  });
 
   if (!relatedFeatures.length) return null;
 
@@ -79,8 +83,10 @@ export function FeatureRelated({ currentFeatureId, relatedIds }: FeatureRelatedP
               className="mb-6 px-4 py-2 rounded-full
                 bg-accent/5 backdrop-blur-sm border-accent/30"
             >
-              <Grid className="h-4 w-4 mr-2 text-accent" />
-              <span className="text-sm font-medium text-accent">Related Features</span>
+              <Grid className="size-4 mr-2 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                Related Features
+              </span>
             </Badge>
 
             <h2
@@ -88,12 +94,7 @@ export function FeatureRelated({ currentFeatureId, relatedIds }: FeatureRelatedP
                 leading-tight tracking-tight"
             >
               <span className="text-foreground">Explore </span>
-              <span
-                className="bg-gradient-to-r from-accent via-secondary to-primary
-                  bg-clip-text text-transparent"
-              >
-                more
-              </span>
+              <span className=" text-primary">more</span>
             </h2>
           </motion.div>
 
@@ -111,21 +112,24 @@ export function FeatureRelated({ currentFeatureId, relatedIds }: FeatureRelatedP
                         'transition-all duration-500',
                         'hover:border-accent/30',
                         'hover:shadow-[0_0_40px_rgba(0,223,130,0.15)]',
-                        'group cursor-pointer'
+                        'group cursor-pointer',
                       )}
                     >
                       <CardContent className="p-6 sm:p-8">
                         {/* Icon */}
                         <div
                           className={cn(
-                            'w-12 h-12 rounded-xl mb-4',
+                            'size-12 rounded-xl mb-4',
                             'bg-accent/10',
                             'flex items-center justify-center',
                             'transition-all duration-300',
-                            'group-hover:bg-accent/20 group-hover:scale-110'
+                            'group-hover:bg-accent/20 group-hover:scale-110',
                           )}
                         >
-                          <FeatureIcon name={feature.icon} className="h-6 w-6 text-accent" />
+                          <FeatureIcon
+                            name={feature.icon}
+                            className="size-6 text-accent"
+                          />
                         </div>
 
                         {/* Title */}
@@ -133,7 +137,7 @@ export function FeatureRelated({ currentFeatureId, relatedIds }: FeatureRelatedP
                           className={cn(
                             'font-outfit text-xl font-medium mb-2',
                             'text-foreground',
-                            'group-hover:text-accent transition-colors'
+                            'group-hover:text-accent transition-colors',
                           )}
                         >
                           {feature.hero.headline} {feature.hero.highlightedText}
@@ -149,9 +153,9 @@ export function FeatureRelated({ currentFeatureId, relatedIds }: FeatureRelatedP
                           Learn more
                           <ArrowRight
                             className={cn(
-                              'h-4 w-4 ml-1',
+                              'size-4 ml-1',
                               'transition-transform duration-300',
-                              'group-hover:translate-x-1'
+                              'group-hover:translate-x-1',
                             )}
                           />
                         </div>
@@ -177,7 +181,7 @@ export function FeatureRelated({ currentFeatureId, relatedIds }: FeatureRelatedP
                   className="rounded-full border-accent/30 hover:border-accent/50 hover:bg-accent/5 hover:text-accent"
                 >
                   View All Features
-                  <ArrowRight className="h-4 w-4 ml-2" />
+                  <ArrowRight className="size-4 ml-2" />
                 </Button>
               </motion.div>
             </Link>

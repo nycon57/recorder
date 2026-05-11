@@ -6,7 +6,14 @@
  */
 
 import { NextRequest } from 'next/server';
-import { apiHandler, requireAuth, successResponse, parseBody, errors } from '@/lib/utils/api';
+
+import {
+  apiHandler,
+  requireAuth,
+  successResponse,
+  parseBody,
+  errors,
+} from '@/lib/utils/api';
 import { recommendationImplementSchema } from '@/lib/validations/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { transformRecommendation } from '@/lib/utils/recommendations';
@@ -29,49 +36,59 @@ interface RouteContext {
  * POST /api/analytics/recommendations/abc-123/implement
  * { "estimatedCompletionDays": 14 }
  */
-export const POST = apiHandler(async (request: NextRequest, context: RouteContext) => {
-  await requireAuth();
+export const POST = apiHandler(
+  async (request: NextRequest, context: RouteContext) => {
+    await requireAuth();
 
-  const { id: recommendationId } = await context.params;
-  const body = await parseBody(request, recommendationImplementSchema);
-  // Type assertion for parsed body
-  const { estimatedCompletionDays = 30 } = body as { estimatedCompletionDays?: number };
+    const [{ id: recommendationId }, body] = await Promise.all([
+      context.params,
+      parseBody(request, recommendationImplementSchema),
+    ]);
+    // Type assertion for parsed body
+    const { estimatedCompletionDays = 30 } = body as {
+      estimatedCompletionDays?: number;
+    };
 
-  // Calculate estimated completion date
-  const estimatedCompletion = new Date();
-  estimatedCompletion.setDate(estimatedCompletion.getDate() + estimatedCompletionDays);
+    // Calculate estimated completion date
+    const estimatedCompletion = new Date();
+    estimatedCompletion.setDate(
+      estimatedCompletion.getDate() + estimatedCompletionDays,
+    );
 
-  // Update recommendation status to in-progress
-  const { data: recommendation, error } = await supabaseAdmin
-    .from('recommendations')
-    .update({
-      status: 'in-progress',
-      started_at: new Date().toISOString(),
-      estimated_completion: estimatedCompletion.toISOString(),
-      progress: 0,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', recommendationId)
-    .eq('status', 'pending') // Only allow if currently pending
-    .select()
-    .single();
+    // Update recommendation status to in-progress
+    const { data: recommendation, error } = await supabaseAdmin
+      .from('recommendations')
+      .update({
+        status: 'in-progress',
+        started_at: new Date().toISOString(),
+        estimated_completion: estimatedCompletion.toISOString(),
+        progress: 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', recommendationId)
+      .eq('status', 'pending') // Only allow if currently pending
+      .select()
+      .single();
 
-  if (error) {
-    console.error('[Implement Recommendation] Error:', error);
+    if (error) {
+      console.error('[Implement Recommendation] Error:', error);
 
-    if (error.code === 'PGRST116') {
+      if (error.code === 'PGRST116') {
+        throw errors.notFound('Recommendation', undefined);
+      }
+
+      throw new Error(
+        'Failed to implement recommendation. It may already be in progress or completed.',
+      );
+    }
+
+    if (!recommendation) {
       throw errors.notFound('Recommendation', undefined);
     }
 
-    throw new Error('Failed to implement recommendation. It may already be in progress or completed.');
-  }
-
-  if (!recommendation) {
-    throw errors.notFound('Recommendation', undefined);
-  }
-
-  return successResponse({
-    recommendation: transformRecommendation(recommendation),
-    message: 'Recommendation marked as in-progress',
-  });
-});
+    return successResponse({
+      recommendation: transformRecommendation(recommendation),
+      message: 'Recommendation marked as in-progress',
+    });
+  },
+);

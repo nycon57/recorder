@@ -23,6 +23,10 @@ import type { Database, Json } from '@/lib/types/database';
 
 export type OrgWikiPageRow = Database['public']['Tables']['org_wiki_pages']['Row'];
 
+function findTextIndex(text: string, searchText: string) {
+  return text.indexOf(searchText);
+}
+
 /**
  * Canonical shape of a single entry inside `org_wiki_pages.compilation_log`.
  *
@@ -253,7 +257,7 @@ export function applyContradictionsToContent(
     if (typeof old !== 'string' || typeof replacement !== 'string' || old.length === 0) {
       continue;
     }
-    const idx = next.indexOf(old);
+    const idx = findTextIndex(next, old);
     if (idx === -1) continue;
     next = next.slice(0, idx) + replacement + next.slice(idx + old.length);
   }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import type { SessionState, RecordingState } from '@tribora/shared';
 
 /* global chrome */
@@ -20,6 +20,37 @@ type AssistantControlState = {
   isActiveTarget: boolean;
   activeTargetTabId: number | null;
 };
+
+type PopupState = {
+  session: SessionState | null;
+  loading: boolean;
+  isSigningIn: boolean;
+  authHint: string | null;
+  assistantState: AssistantControlState | null;
+  assistantBusy: boolean;
+  assistantError: string | null;
+  assistantHint: string | null;
+};
+
+type PopupAction = {
+  type: 'patch';
+  patch: Partial<PopupState>;
+};
+
+const initialPopupState: PopupState = {
+  session: null,
+  loading: true,
+  isSigningIn: false,
+  authHint: null,
+  assistantState: null,
+  assistantBusy: false,
+  assistantError: null,
+  assistantHint: null,
+};
+
+function popupReducer(state: PopupState, action: PopupAction): PopupState {
+  return { ...state, ...action.patch };
+}
 
 async function getActiveTabId(): Promise<number | null> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -168,16 +199,269 @@ function RecordingSection() {
   );
 }
 
+function PopupHeader() {
+  return (
+    <header className="popup-header">
+      <div className="popup-brand">
+        <span className="popup-mark">T</span>
+        <div>
+          <h1 className="popup-title">Tribora</h1>
+          <p className="popup-kicker">Extension Console</p>
+        </div>
+      </div>
+      <span className="popup-version">v{VERSION}</span>
+    </header>
+  );
+}
+
+function LoadingPopup() {
+  return (
+    <div className="popup-container">
+      <PopupHeader />
+      <main className="popup-main">
+        <div className="popup-panel">
+          <p className="popup-description">Loading session state…</p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+type UnauthenticatedPopupProps = {
+  session: SessionState | null;
+  authHint: string | null;
+  isSigningIn: boolean;
+  onSignIn: () => void;
+};
+
+function UnauthenticatedPopup({
+  session,
+  authHint,
+  isSigningIn,
+  onSignIn,
+}: UnauthenticatedPopupProps) {
+  return (
+    <div className="popup-container">
+      <PopupHeader />
+      <main className="popup-main">
+        <div className="popup-panel">
+          <div className="status-indicator status-disconnected">
+            <span className="status-dot" />
+            <span className="status-label">Disconnected</span>
+          </div>
+          <h2 className="popup-section-title">Authenticate this browser</h2>
+          <p className="popup-description">
+            Sign-in opens in a dedicated Tribora window so your current tab
+            position stays untouched.
+          </p>
+          {session?.lastError && (
+            <p className="popup-error">{session.lastError}</p>
+          )}
+          {authHint && (
+            <p className="popup-description popup-auth-hint">{authHint}</p>
+          )}
+        </div>
+      </main>
+      <footer className="popup-footer">
+        <button
+          className="popup-btn popup-btn-primary"
+          onClick={onSignIn}
+          disabled={isSigningIn}
+        >
+          {isSigningIn ? 'Waiting for sign-in…' : 'Sign in'}
+        </button>
+      </footer>
+    </div>
+  );
+}
+
+type AuthenticatedPopupProps = {
+  session: SessionState;
+  assistantState: AssistantControlState | null;
+  assistantBusy: boolean;
+  assistantError: string | null;
+  assistantHint: string | null;
+  onAssistantPrimary: () => void;
+  onAssistantVisibility: () => void;
+  onSignOut: () => void;
+};
+
+function AuthenticatedPopup({
+  session,
+  assistantState,
+  assistantBusy,
+  assistantError,
+  assistantHint,
+  onAssistantPrimary,
+  onAssistantVisibility,
+  onSignOut,
+}: AuthenticatedPopupProps) {
+  const displayName = session.user?.name ?? session.user?.email ?? 'Unknown';
+  const assistantActive = assistantState?.active === true;
+  const assistantPrimaryLabel = assistantActive
+    ? assistantBusy
+      ? 'Stopping assistant…'
+      : 'Stop voice session'
+    : assistantBusy
+      ? 'Starting assistant…'
+      : 'Start voice session';
+  const assistantVisibilityLabel =
+    assistantState?.enabled === true ? 'Hide assistant' : 'Show assistant';
+
+  return (
+    <div className="popup-container">
+      <PopupHeader />
+      <main className="popup-main">
+        <div className="popup-panel">
+          <div className="status-indicator status-connected">
+            <span className="status-dot" />
+            <span className="status-label">Connected</span>
+          </div>
+          <div className="user-info">
+            {session.user?.image && (
+              <span
+                aria-hidden="true"
+                className="user-avatar"
+                style={{ backgroundImage: `url(${session.user.image})` }}
+              />
+            )}
+            <div className="user-details">
+              <div className="user-name">{displayName}</div>
+              {session.activeOrg && (
+                <div className="user-org">{session.activeOrg.name}</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <AssistantPanel
+          assistantState={assistantState}
+          assistantBusy={assistantBusy}
+          assistantError={assistantError}
+          assistantHint={assistantHint}
+          assistantActive={assistantActive}
+          assistantPrimaryLabel={assistantPrimaryLabel}
+          assistantVisibilityLabel={assistantVisibilityLabel}
+          onAssistantPrimary={onAssistantPrimary}
+          onAssistantVisibility={onAssistantVisibility}
+        />
+
+        <div className="popup-panel">
+          <div className="popup-section-copy">
+            <div className="popup-section-title">Capture</div>
+            <p className="popup-description">
+              Record in place and upload directly into your workspace library.
+            </p>
+          </div>
+          <RecordingSection />
+        </div>
+
+        <div className="popup-panel popup-debug-section">
+          <div className="popup-section-copy">
+            <div className="popup-section-title">Session Diagnostics</div>
+            <p className="popup-description">
+              Product telemetry records safe session facts and outcomes. Raw
+              debug capture stays opt-in for diagnostics.
+            </p>
+          </div>
+          <div className="status-indicator status-connected">
+            <span className="status-dot" />
+            <span className="status-label">Safe telemetry</span>
+          </div>
+        </div>
+      </main>
+      <footer className="popup-footer">
+        <button className="popup-btn popup-btn-secondary" onClick={onSignOut}>
+          Sign out
+        </button>
+      </footer>
+    </div>
+  );
+}
+
+type AssistantPanelProps = {
+  assistantState: AssistantControlState | null;
+  assistantBusy: boolean;
+  assistantError: string | null;
+  assistantHint: string | null;
+  assistantActive: boolean;
+  assistantPrimaryLabel: string;
+  assistantVisibilityLabel: string;
+  onAssistantPrimary: () => void;
+  onAssistantVisibility: () => void;
+};
+
+function AssistantPanel({
+  assistantState,
+  assistantBusy,
+  assistantError,
+  assistantHint,
+  assistantActive,
+  assistantPrimaryLabel,
+  assistantVisibilityLabel,
+  onAssistantPrimary,
+  onAssistantVisibility,
+}: AssistantPanelProps) {
+  return (
+    <div className="popup-panel">
+      <div className="popup-section-copy">
+        <div className="popup-section-title">Assistant</div>
+        <p className="popup-description">
+          Start Tribora on the current tab or show the on-page control.
+        </p>
+      </div>
+      <div
+        className={`status-indicator ${
+          assistantActive ? 'status-connected' : 'status-disconnected'
+        }`}
+      >
+        <span className="status-dot" />
+        <span className="status-label">
+          {assistantActive ? 'Voice live' : 'Voice idle'}
+        </span>
+      </div>
+      {assistantHint && (
+        <p className="popup-description popup-auth-hint">{assistantHint}</p>
+      )}
+      {assistantError && <p className="popup-error">{assistantError}</p>}
+      <div className="assistant-controls">
+        <button
+          className={`popup-btn ${
+            assistantActive ? 'popup-btn-stop' : 'popup-btn-primary'
+          }`}
+          onClick={onAssistantPrimary}
+          disabled={assistantBusy}
+          aria-pressed={assistantActive}
+        >
+          {assistantPrimaryLabel}
+        </button>
+        {!assistantActive && (
+          <button
+            className="popup-btn popup-btn-secondary"
+            onClick={onAssistantVisibility}
+            disabled={assistantBusy}
+            aria-pressed={assistantState?.enabled === true}
+          >
+            {assistantVisibilityLabel}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
-  const [session, setSession] = useState<SessionState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  const [authHint, setAuthHint] = useState<string | null>(null);
-  const [assistantState, setAssistantState] =
-    useState<AssistantControlState | null>(null);
-  const [assistantBusy, setAssistantBusy] = useState(false);
-  const [assistantError, setAssistantError] = useState<string | null>(null);
-  const [assistantHint, setAssistantHint] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(popupReducer, initialPopupState);
+  const {
+    session,
+    loading,
+    isSigningIn,
+    authHint,
+    assistantState,
+    assistantBusy,
+    assistantError,
+    assistantHint,
+  } = state;
 
   const refreshAssistantState = async () => {
     const tabId = await getActiveTabId();
@@ -200,24 +484,30 @@ export default function App() {
       throw new Error(response.error ?? 'Unable to load assistant state.');
     }
 
-    setAssistantState({
-      enabled: response?.enabled === true,
-      active: response?.active === true,
-      isActiveTarget: response?.isActiveTarget === true,
-      activeTargetTabId:
-        typeof response?.activeTargetTabId === 'number'
-          ? response.activeTargetTabId
-          : null,
+    dispatch({
+      type: 'patch',
+      patch: {
+        assistantState: {
+          enabled: response?.enabled === true,
+          active: response?.active === true,
+          isActiveTarget: response?.isActiveTarget === true,
+          activeTargetTabId:
+            typeof response?.activeTargetTabId === 'number'
+              ? response.activeTargetTabId
+              : null,
+        },
+      },
     });
   };
 
   useEffect(() => {
     void (async () => {
       const stored = await getStoredSession();
-      setSession(stored);
       const refreshed = await refreshSession().catch(() => stored);
-      setSession(refreshed);
-      setLoading(false);
+      dispatch({
+        type: 'patch',
+        patch: { session: refreshed, loading: false },
+      });
     })();
   }, []);
 
@@ -225,46 +515,60 @@ export default function App() {
     if (session?.status !== 'authenticated') return;
 
     void refreshAssistantState().catch((err) => {
-      setAssistantError((err as Error).message);
+      dispatch({
+        type: 'patch',
+        patch: { assistantError: (err as Error).message },
+      });
     });
   }, [session?.status]);
 
   const handleSignIn = () => {
     if (isSigningIn) return;
 
-    setIsSigningIn(true);
-    setAuthHint(
-      'Secure sign-in window opened. Your current tab stays in place.',
-    );
+    dispatch({
+      type: 'patch',
+      patch: {
+        isSigningIn: true,
+        authHint:
+          'Secure sign-in window opened. Your current tab stays in place.',
+      },
+    });
 
     void initiateSignInAndWait({
       timeoutMs: 2 * 60 * 1000,
       pollIntervalMs: 1200,
     })
       .then((nextSession) => {
-        setSession(nextSession);
-        if (nextSession.status === 'authenticated') {
-          setAuthHint('Connected. You can start recording.');
-          return;
-        }
-
-        setAuthHint(nextSession.lastError ?? 'Sign-in was not completed.');
+        const nextHint =
+          nextSession.status === 'authenticated'
+            ? 'Connected. You can start recording.'
+            : (nextSession.lastError ?? 'Sign-in was not completed.');
+        dispatch({
+          type: 'patch',
+          patch: { session: nextSession, authHint: nextHint },
+        });
       })
       .finally(() => {
-        setIsSigningIn(false);
+        dispatch({ type: 'patch', patch: { isSigningIn: false } });
       });
   };
 
   const handleSignOut = () => {
-    void signOut().then(() => setSession({ status: 'unauthenticated' }));
+    void signOut().then(() =>
+      dispatch({
+        type: 'patch',
+        patch: { session: { status: 'unauthenticated' } },
+      }),
+    );
   };
 
   const handleAssistantPrimary = async () => {
     if (assistantBusy) return;
 
-    setAssistantBusy(true);
-    setAssistantError(null);
-    setAssistantHint(null);
+    dispatch({
+      type: 'patch',
+      patch: { assistantBusy: true, assistantError: null, assistantHint: null },
+    });
 
     try {
       const tabId = await getActiveTabId();
@@ -280,7 +584,9 @@ export default function App() {
           type: 'END_AGENT_SESSION',
         });
         if (!endResponse?.ok) {
-          throw new Error(endResponse?.error ?? 'Unable to stop voice session.');
+          throw new Error(
+            endResponse?.error ?? 'Unable to stop voice session.',
+          );
         }
         const hideResponse = await sendRuntimeMessage<{
           ok?: boolean;
@@ -293,7 +599,10 @@ export default function App() {
         if (!hideResponse?.ok) {
           throw new Error(hideResponse?.error ?? 'Unable to hide assistant.');
         }
-        setAssistantHint('Voice session stopped.');
+        dispatch({
+          type: 'patch',
+          patch: { assistantHint: 'Voice session stopped.' },
+        });
         await refreshAssistantState();
         return;
       }
@@ -322,26 +631,33 @@ export default function App() {
         throw new Error(response?.error ?? 'Unable to start voice session.');
       }
 
-      setAssistantHint(
-        response.pendingPermission
-          ? 'Microphone permission opened in a dedicated tab.'
-          : 'Voice session starting on this tab.',
-      );
+      dispatch({
+        type: 'patch',
+        patch: {
+          assistantHint: response.pendingPermission
+            ? 'Microphone permission opened in a dedicated tab.'
+            : 'Voice session starting on this tab.',
+        },
+      });
       await refreshAssistantState();
     } catch (err) {
-      setAssistantError((err as Error).message);
+      dispatch({
+        type: 'patch',
+        patch: { assistantError: (err as Error).message },
+      });
       await refreshAssistantState().catch(() => undefined);
     } finally {
-      setAssistantBusy(false);
+      dispatch({ type: 'patch', patch: { assistantBusy: false } });
     }
   };
 
   const handleAssistantVisibility = async () => {
     if (assistantBusy) return;
 
-    setAssistantBusy(true);
-    setAssistantError(null);
-    setAssistantHint(null);
+    dispatch({
+      type: 'patch',
+      patch: { assistantBusy: true, assistantError: null, assistantHint: null },
+    });
 
     try {
       const tabId = await getActiveTabId();
@@ -360,35 +676,25 @@ export default function App() {
       if (!response?.ok) {
         throw new Error(response?.error ?? 'Unable to update assistant.');
       }
-      setAssistantHint(nextEnabled ? 'Assistant shown.' : 'Assistant hidden.');
+      dispatch({
+        type: 'patch',
+        patch: {
+          assistantHint: nextEnabled ? 'Assistant shown.' : 'Assistant hidden.',
+        },
+      });
       await refreshAssistantState();
     } catch (err) {
-      setAssistantError((err as Error).message);
+      dispatch({
+        type: 'patch',
+        patch: { assistantError: (err as Error).message },
+      });
     } finally {
-      setAssistantBusy(false);
+      dispatch({ type: 'patch', patch: { assistantBusy: false } });
     }
   };
 
   if (loading) {
-    return (
-      <div className="popup-container">
-        <header className="popup-header">
-          <div className="popup-brand">
-            <span className="popup-mark">T</span>
-            <div>
-              <h1 className="popup-title">Tribora</h1>
-              <p className="popup-kicker">Extension Console</p>
-            </div>
-          </div>
-          <span className="popup-version">v{VERSION}</span>
-        </header>
-        <main className="popup-main">
-          <div className="popup-panel">
-            <p className="popup-description">Loading session state…</p>
-          </div>
-        </main>
-      </div>
-    );
+    return <LoadingPopup />;
   }
 
   if (
@@ -397,177 +703,25 @@ export default function App() {
     session.status === 'expired'
   ) {
     return (
-      <div className="popup-container">
-        <header className="popup-header">
-          <div className="popup-brand">
-            <span className="popup-mark">T</span>
-            <div>
-              <h1 className="popup-title">Tribora</h1>
-              <p className="popup-kicker">Extension Console</p>
-            </div>
-          </div>
-          <span className="popup-version">v{VERSION}</span>
-        </header>
-        <main className="popup-main">
-          <div className="popup-panel">
-            <div className="status-indicator status-disconnected">
-              <span className="status-dot" />
-              <span className="status-label">Disconnected</span>
-            </div>
-            <h2 className="popup-section-title">Authenticate this browser</h2>
-            <p className="popup-description">
-              Sign-in opens in a dedicated Tribora window so your current tab
-              position stays untouched.
-            </p>
-            {session?.lastError && (
-              <p className="popup-error">{session.lastError}</p>
-            )}
-            {authHint && (
-              <p className="popup-description popup-auth-hint">{authHint}</p>
-            )}
-          </div>
-        </main>
-        <footer className="popup-footer">
-          <button
-            className="popup-btn popup-btn-primary"
-            onClick={handleSignIn}
-            disabled={isSigningIn}
-          >
-            {isSigningIn ? 'Waiting for sign-in…' : 'Sign in'}
-          </button>
-        </footer>
-      </div>
+      <UnauthenticatedPopup
+        session={session}
+        authHint={authHint}
+        isSigningIn={isSigningIn}
+        onSignIn={handleSignIn}
+      />
     );
   }
 
-  const displayName = session.user?.name ?? session.user?.email ?? 'Unknown';
-  const assistantActive = assistantState?.active === true;
-  const assistantPrimaryLabel = assistantActive
-    ? assistantBusy
-      ? 'Stopping assistant…'
-      : 'Stop voice session'
-    : assistantBusy
-      ? 'Starting assistant…'
-      : 'Start voice session';
-  const assistantVisibilityLabel =
-    assistantState?.enabled === true ? 'Hide assistant' : 'Show assistant';
-
   return (
-    <div className="popup-container">
-      <header className="popup-header">
-        <div className="popup-brand">
-          <span className="popup-mark">T</span>
-          <div>
-            <h1 className="popup-title">Tribora</h1>
-            <p className="popup-kicker">Extension Console</p>
-          </div>
-        </div>
-        <span className="popup-version">v{VERSION}</span>
-      </header>
-      <main className="popup-main">
-        <div className="popup-panel">
-          <div className="status-indicator status-connected">
-            <span className="status-dot" />
-            <span className="status-label">Connected</span>
-          </div>
-          <div className="user-info">
-            {session.user?.image && (
-              <img
-                src={session.user.image}
-                alt=""
-                className="user-avatar"
-                width={32}
-                height={32}
-              />
-            )}
-            <div className="user-details">
-              <div className="user-name">{displayName}</div>
-              {session.activeOrg && (
-                <div className="user-org">{session.activeOrg.name}</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="popup-panel">
-          <div className="popup-section-copy">
-            <div className="popup-section-title">Assistant</div>
-            <p className="popup-description">
-              Start Tribora on the current tab or show the on-page control.
-            </p>
-          </div>
-          <div
-            className={`status-indicator ${
-              assistantActive ? 'status-connected' : 'status-disconnected'
-            }`}
-          >
-            <span className="status-dot" />
-            <span className="status-label">
-              {assistantActive ? 'Voice live' : 'Voice idle'}
-            </span>
-          </div>
-          {assistantHint && (
-            <p className="popup-description popup-auth-hint">
-              {assistantHint}
-            </p>
-          )}
-          {assistantError && <p className="popup-error">{assistantError}</p>}
-          <div className="assistant-controls">
-            <button
-              className={`popup-btn ${
-                assistantActive ? 'popup-btn-stop' : 'popup-btn-primary'
-              }`}
-              onClick={handleAssistantPrimary}
-              disabled={assistantBusy}
-              aria-pressed={assistantActive}
-            >
-              {assistantPrimaryLabel}
-            </button>
-            {!assistantActive && (
-              <button
-                className="popup-btn popup-btn-secondary"
-                onClick={handleAssistantVisibility}
-                disabled={assistantBusy}
-                aria-pressed={assistantState?.enabled === true}
-              >
-                {assistantVisibilityLabel}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="popup-panel">
-          <div className="popup-section-copy">
-            <div className="popup-section-title">Capture</div>
-            <p className="popup-description">
-              Record in place and upload directly into your workspace library.
-            </p>
-          </div>
-          <RecordingSection />
-        </div>
-
-        <div className="popup-panel popup-debug-section">
-          <div className="popup-section-copy">
-            <div className="popup-section-title">Session Diagnostics</div>
-            <p className="popup-description">
-              Product telemetry records safe session facts and outcomes. Raw
-              debug capture stays opt-in for diagnostics.
-            </p>
-          </div>
-          <div className="status-indicator status-connected">
-            <span className="status-dot" />
-            <span className="status-label">Safe telemetry</span>
-          </div>
-        </div>
-      </main>
-      <footer className="popup-footer">
-        <button
-          className="popup-btn popup-btn-secondary"
-          onClick={handleSignOut}
-        >
-          Sign out
-        </button>
-      </footer>
-    </div>
+    <AuthenticatedPopup
+      session={session}
+      assistantState={assistantState}
+      assistantBusy={assistantBusy}
+      assistantError={assistantError}
+      assistantHint={assistantHint}
+      onAssistantPrimary={handleAssistantPrimary}
+      onAssistantVisibility={handleAssistantVisibility}
+      onSignOut={handleSignOut}
+    />
   );
 }

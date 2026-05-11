@@ -42,7 +42,7 @@ export interface BatchDetectSimilarityJobPayload {
  * Handle single recording similarity detection
  */
 export async function handleDetectSimilarity(
-  payload: DetectSimilarityJobPayload
+  payload: DetectSimilarityJobPayload,
 ): Promise<{
   success: boolean;
   processed: boolean;
@@ -57,7 +57,11 @@ export async function handleDetectSimilarity(
 
   try {
     // 1. Calculate perceptual hash
-    const hash = await calculatePerceptualHash(recordingId, storagePath, storageProvider);
+    const hash = await calculatePerceptualHash(
+      recordingId,
+      storagePath,
+      storageProvider,
+    );
 
     if (!hash) {
       throw new Error('Failed to calculate perceptual hash');
@@ -76,24 +80,26 @@ export async function handleDetectSimilarity(
       hash.audioHash,
       orgId,
       config,
-      recordingId
+      recordingId,
     );
 
     // 4. Store similarity matches
     if (matches.length > 0) {
       const supabase = createClient();
 
-      for (const match of matches) {
-        await supabase.from('similarity_matches').insert({
-          content_id: recordingId,
-          similar_content_id: match.contentId,
-          video_similarity: match.videoSimilarity,
-          audio_similarity: match.audioSimilarity,
-          overall_similarity: match.overallSimilarity,
-          hamming_distance: match.hammingDistance,
-          detected_at: new Date().toISOString(),
-        });
-      }
+      await Promise.all(
+        Array.from(matches).map(async (match) => {
+          await supabase.from('similarity_matches').insert({
+            content_id: recordingId,
+            similar_content_id: match.contentId,
+            video_similarity: match.videoSimilarity,
+            audio_similarity: match.audioSimilarity,
+            overall_similarity: match.overallSimilarity,
+            hamming_distance: match.hammingDistance,
+            detected_at: new Date().toISOString(),
+          });
+        }),
+      );
     }
 
     logger.info('Similarity detection complete', {
@@ -115,7 +121,8 @@ export async function handleDetectSimilarity(
       success: false,
       processed: false,
       matchesFound: 0,
-      error: error instanceof Error ? error.message : 'Similarity detection failed',
+      error:
+        error instanceof Error ? error.message : 'Similarity detection failed',
     };
   }
 }
@@ -124,7 +131,7 @@ export async function handleDetectSimilarity(
  * Handle batch similarity detection for organization
  */
 export async function handleBatchDetectSimilarity(
-  payload: BatchDetectSimilarityJobPayload
+  payload: BatchDetectSimilarityJobPayload,
 ): Promise<{
   success: boolean;
   processed: number;
@@ -159,7 +166,11 @@ export async function handleBatchDetectSimilarity(
       success: false,
       processed: 0,
       matches: 0,
-      errors: [error instanceof Error ? error.message : 'Batch similarity detection failed'],
+      errors: [
+        error instanceof Error
+          ? error.message
+          : 'Batch similarity detection failed',
+      ],
     };
   }
 }
@@ -167,9 +178,7 @@ export async function handleBatchDetectSimilarity(
 /**
  * Schedule similarity detection for all organizations
  */
-export async function scheduleSimilarityForAll(
-  batchSizePerOrg: number = 50
-): Promise<{
+async function scheduleSimilarityForAll(batchSizePerOrg: number = 50): Promise<{
   success: boolean;
   organizations: number;
   totalProcessed: number;
@@ -208,30 +217,32 @@ export async function scheduleSimilarityForAll(
     const errors: string[] = [];
 
     // Process each organization
-    for (const org of organizations) {
-      try {
-        const result = await batchProcessSimilarity(org.id, batchSizePerOrg);
+    await Promise.all(
+      Array.from(organizations).map(async (org) => {
+        try {
+          const result = await batchProcessSimilarity(org.id, batchSizePerOrg);
 
-        totalProcessed += result.processed;
-        totalMatches += result.matches;
+          totalProcessed += result.processed;
+          totalMatches += result.matches;
 
-        if (result.errors.length > 0) {
-          errors.push(...result.errors.map((e) => `${org.name}: ${e}`));
+          if (result.errors.length > 0) {
+            errors.push(...result.errors.map((e) => `${org.name}: ${e}`));
+          }
+
+          logger.info('Organization processing complete', {
+            context: { orgId: org.id, orgName: org.name },
+            data: { processed: result.processed, matches: result.matches },
+          });
+        } catch (error) {
+          const errorMsg = `${org.name}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          errors.push(errorMsg);
+          logger.error('Organization processing failed', {
+            context: { orgId: org.id, orgName: org.name },
+            error: error as Error,
+          });
         }
-
-        logger.info('Organization processing complete', {
-          context: { orgId: org.id, orgName: org.name },
-          data: { processed: result.processed, matches: result.matches },
-        });
-      } catch (error) {
-        const errorMsg = `${org.name}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        errors.push(errorMsg);
-        logger.error('Organization processing failed', {
-          context: { orgId: org.id, orgName: org.name },
-          error: error as Error,
-        });
-      }
-    }
+      }),
+    );
 
     logger.info('Organization-wide similarity detection complete', {
       data: {
@@ -265,7 +276,7 @@ export async function scheduleSimilarityForAll(
 /**
  * Get similarity analytics for organization
  */
-export async function getSimilarityAnalytics(orgId: string): Promise<{
+async function getSimilarityAnalytics(orgId: string): Promise<{
   success: boolean;
   analytics?: {
     totalRecordings: number;
@@ -325,7 +336,8 @@ export async function getSimilarityAnalytics(orgId: string): Promise<{
     // Assume near-identical matches (95%+) could be deduplicated
     // Average file size: 100 MB (rough estimate)
     const avgFileSize = 100 * 1024 * 1024; // 100 MB in bytes
-    const potentialStorageSavings = analytics.near_identical_matches * avgFileSize;
+    const potentialStorageSavings =
+      analytics.near_identical_matches * avgFileSize;
 
     return {
       success: true,

@@ -16,7 +16,7 @@ import { Separator } from '@/app/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { ContentType, RecordingStatus } from '@/lib/types/database';
 
-export type StatusFilter = 'active' | 'trash' | 'all';
+type StatusFilter = 'active' | 'trash' | 'all';
 
 export interface FilterState {
   contentTypes: ContentType[];

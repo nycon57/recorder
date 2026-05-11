@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Keyboard } from 'lucide-react';
+
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,7 @@ const isMac = () => typeof window !== 'undefined' && navigator?.platform?.toUppe
  * Keyboard Shortcuts Help Dialog
  * Displays all available keyboard shortcuts organized by category
  */
-export function KeyboardShortcutsDialog() {
+function KeyboardShortcutsDialog() {
   const { shortcuts, isHelpOpen, toggleHelp } = useKeyboardShortcutsContext();
 
   // Group shortcuts by category
@@ -40,7 +41,7 @@ export function KeyboardShortcutsDialog() {
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <Keyboard className="h-5 w-5" />
+            <Keyboard className="size-5" />
             <DialogTitle>Keyboard Shortcuts</DialogTitle>
           </div>
           <DialogDescription>

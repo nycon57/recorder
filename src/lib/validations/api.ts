@@ -23,7 +23,7 @@ export const editRecordingFormSchema = z.object({
   description: z.string().max(2000, 'Description must be less than 2000 characters').optional(),
 });
 
-export const finalizeRecordingSchema = z.object({
+const finalizeRecordingSchema = z.object({
   recordingId: z.string().uuid(),
   storagePath: z.string(),
   sizeBytes: z.number().positive(),
@@ -32,7 +32,7 @@ export const finalizeRecordingSchema = z.object({
 });
 
 // Chat/Assistant validation schemas
-export const chatQuerySchema = z.object({
+const chatQuerySchema = z.object({
   query: z.string().min(1).max(2000),
   conversationId: z.string().uuid().optional(),
   scope: z
@@ -53,19 +53,19 @@ export const chatQuerySchema = z.object({
 });
 
 // Document generation schemas
-export const regenerateDocumentSchema = z.object({
+const regenerateDocumentSchema = z.object({
   recordingId: z.string().uuid(),
   template: z.enum(['default', 'tutorial', 'summary', 'qa']).optional(),
   model: z.enum(['gpt-4-turbo-preview', 'gpt-3.5-turbo']).optional(),
 });
 
-export const updateDocumentSchema = z.object({
+const updateDocumentSchema = z.object({
   markdown: z.string().min(1).optional(),
   isPublished: z.boolean().optional(),
 });
 
 // Share schemas
-export const createShareSchema = z.object({
+const createShareSchema = z.object({
   targetType: z.enum(['recording', 'document']),
   targetId: z.string().uuid(),
   password: z.string().min(6).max(100).optional(),
@@ -73,7 +73,7 @@ export const createShareSchema = z.object({
 });
 
 // Organization schemas
-export const createOrganizationSchema = z.object({
+const createOrganizationSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z
     .string()
@@ -83,12 +83,12 @@ export const createOrganizationSchema = z.object({
     .optional(),
 });
 
-export const inviteMemberSchema = z.object({
+const inviteMemberSchema = z.object({
   email: z.string().email(),
   role: z.enum(['admin', 'contributor', 'reader']),
 });
 
-export const updateMemberRoleSchema = z.object({
+const updateMemberRoleSchema = z.object({
   userId: z.string(),
   role: z.enum(['owner', 'admin', 'contributor', 'reader']),
 });
@@ -101,7 +101,7 @@ export const editRoleFormSchema = z.object({
 });
 
 // Webhook validation schemas
-export const transcriptionWebhookSchema = z.object({
+const transcriptionWebhookSchema = z.object({
   recordingId: z.string().uuid(),
   status: z.enum(['completed', 'failed']),
   text: z.string().optional(),
@@ -111,7 +111,7 @@ export const transcriptionWebhookSchema = z.object({
   error: z.string().optional(),
 });
 
-export const stripeWebhookSchema = z.object({
+const stripeWebhookSchema = z.object({
   type: z.string(),
   data: z.object({
     object: z.any(),
@@ -119,7 +119,7 @@ export const stripeWebhookSchema = z.object({
 });
 
 // Pagination schema
-export const paginationSchema = z.object({
+const paginationSchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
   offset: z.coerce.number().min(0).default(0),
 });
@@ -212,7 +212,7 @@ export const multimodalSearchSchema = z.object({
 /**
  * Connector CRUD schemas
  */
-export const createConnectorSchema = z.object({
+const createConnectorSchema = z.object({
   connectorType: z.enum([
     'google_drive',
     'notion',
@@ -230,7 +230,7 @@ export const createConnectorSchema = z.object({
     .default('manual'),
 });
 
-export const updateConnectorSchema = z.object({
+const updateConnectorSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   credentials: z.record(z.string(), z.unknown()).optional(),
   settings: z.record(z.string(), z.unknown()).optional(),
@@ -238,7 +238,7 @@ export const updateConnectorSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export const syncConnectorSchema = z.object({
+const syncConnectorSchema = z.object({
   fullSync: z.boolean().optional().default(false),
   since: z.string().datetime().optional(),
   limit: z.coerce.number().int().min(1).max(1000).optional(),
@@ -247,7 +247,7 @@ export const syncConnectorSchema = z.object({
   filters: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const listConnectorDocumentsSchema = z.object({
+const listConnectorDocumentsSchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
   status: z
@@ -259,7 +259,7 @@ export const listConnectorDocumentsSchema = z.object({
 /**
  * OAuth schemas
  */
-export const oauthCallbackSchema = z.object({
+const oauthCallbackSchema = z.object({
   code: z.string().min(1),
   state: z.string().min(1),
   error: z.string().optional(),
@@ -269,7 +269,7 @@ export const oauthCallbackSchema = z.object({
 /**
  * Webhook schemas
  */
-export const zoomWebhookSchema = z.object({
+const zoomWebhookSchema = z.object({
   event: z.string(),
   payload: z.object({
     account_id: z.string().optional(),
@@ -278,7 +278,7 @@ export const zoomWebhookSchema = z.object({
   event_ts: z.number().optional(),
 });
 
-export const teamsWebhookSchema = z.object({
+const teamsWebhookSchema = z.object({
   subscriptionId: z.string(),
   changeType: z.string(),
   resource: z.string(),
@@ -286,7 +286,7 @@ export const teamsWebhookSchema = z.object({
   clientState: z.string().optional(),
 });
 
-export const driveWebhookSchema = z.object({
+const driveWebhookSchema = z.object({
   kind: z.string(),
   id: z.string(),
   resourceId: z.string(),
@@ -298,14 +298,14 @@ export const driveWebhookSchema = z.object({
 /**
  * File upload schemas
  */
-export const singleFileUploadSchema = z.object({
+const singleFileUploadSchema = z.object({
   fileName: z.string().min(1).max(255),
   fileSize: z.number().positive(),
   mimeType: z.string(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const batchUploadSchema = z.object({
+const batchUploadSchema = z.object({
   batchName: z.string().min(1).max(255).optional(),
   files: z.array(
     z.object({
@@ -323,7 +323,7 @@ export const batchUploadSchema = z.object({
 /**
  * Admin metrics query schema
  */
-export const adminMetricsQuerySchema = z.object({
+const adminMetricsQuerySchema = z.object({
   timeRange: z.enum(['1h', '24h', '7d', '30d']).optional().default('24h'),
   includeJobs: z.boolean().optional().default(true),
   includeQuotas: z.boolean().optional().default(true),
@@ -333,7 +333,7 @@ export const adminMetricsQuerySchema = z.object({
 /**
  * Admin analytics query schema
  */
-export const adminAnalyticsQuerySchema = z.object({
+const adminAnalyticsQuerySchema = z.object({
   timeRange: z.enum(['24h', '7d', '30d', '90d']).optional().default('7d'),
   metric: z
     .enum(['searches', 'latency', 'cache', 'usage', 'all'])
@@ -346,7 +346,7 @@ export const adminAnalyticsQuerySchema = z.object({
 /**
  * Admin quota management schemas
  */
-export const adminQuotaQuerySchema = z.object({
+const adminQuotaQuerySchema = z.object({
   planTier: z.enum(['free', 'starter', 'professional', 'enterprise']).optional(),
   nearLimit: z.boolean().optional().default(false),
   limitThreshold: z.coerce.number().min(0).max(1).optional().default(0.9),
@@ -369,7 +369,7 @@ export const adminUpdateQuotaSchema = z.object({
 /**
  * Admin alert management schemas
  */
-export const adminAlertQuerySchema = z.object({
+const adminAlertQuerySchema = z.object({
   status: z.enum(['open', 'acknowledged', 'resolved']).optional(),
   severity: z.enum(['info', 'warning', 'critical']).optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
@@ -389,7 +389,7 @@ export const adminResolveAlertSchema = z.object({
 /**
  * Admin experiment management schemas
  */
-export const adminExperimentQuerySchema = z.object({
+const adminExperimentQuerySchema = z.object({
   status: z.enum(['draft', 'running', 'paused', 'completed']).optional(),
   feature: z
     .enum(['search_ranking', 'chunking', 'reranking', 'all'])
@@ -477,23 +477,23 @@ export const updateProfileSchema = z.object({
   status: z.enum(['active', 'suspended', 'deleted']).optional(),
 });
 
-export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 /**
  * Avatar upload schema
  */
-export const avatarUploadSchema = z.object({
+const avatarUploadSchema = z.object({
   fileName: z.string().min(1).max(255),
   fileSize: z.number().positive().max(5 * 1024 * 1024), // Max 5MB
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
 });
 
-export type UploadAvatarInput = z.infer<typeof avatarUploadSchema>;
+type UploadAvatarInput = z.infer<typeof avatarUploadSchema>;
 
 /**
  * Update notification preferences
  */
-export const updateNotificationPreferencesSchema = z.object({
+const updateNotificationPreferencesSchema = z.object({
   email: z
     .object({
       recordings_completed: z.boolean().optional(),
@@ -521,14 +521,14 @@ export const updateNotificationPreferencesSchema = z.object({
     .optional(),
 });
 
-export type UpdateNotificationPreferencesInput = z.infer<
+type UpdateNotificationPreferencesInput = z.infer<
   typeof updateNotificationPreferencesSchema
 >;
 
 /**
  * Update UI preferences
  */
-export const updateUIPreferencesSchema = z.object({
+const updateUIPreferencesSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']).optional(),
   sidebar_collapsed: z.boolean().optional(),
   recordings_view: z.enum(['grid', 'list', 'table']).optional(),
@@ -538,7 +538,7 @@ export const updateUIPreferencesSchema = z.object({
   compact_mode: z.boolean().optional(),
 });
 
-export type UpdateUIPreferencesInput = z.infer<typeof updateUIPreferencesSchema>;
+type UpdateUIPreferencesInput = z.infer<typeof updateUIPreferencesSchema>;
 
 // ----------------------------------------------------------------------------
 // Organization Management Schemas
@@ -550,7 +550,7 @@ export type UpdateUIPreferencesInput = z.infer<typeof updateUIPreferencesSchema>
 /**
  * Update organization details
  */
-export const updateOrgSchema = z.object({
+const updateOrgSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   billing_email: z.string().email().optional(),
   logo_url: z.string().url().optional(),
@@ -577,12 +577,12 @@ export const updateOrgSchema = z.object({
     .optional(),
 });
 
-export type UpdateOrgInput = z.infer<typeof updateOrgSchema>;
+type UpdateOrgInput = z.infer<typeof updateOrgSchema>;
 
 /**
  * Update organization branding
  */
-export const updateOrgBrandingSchema = z.object({
+const updateOrgBrandingSchema = z.object({
   logo_url: z.string().url().optional(),
   primary_color: z
     .string()
@@ -600,12 +600,12 @@ export const updateOrgBrandingSchema = z.object({
   custom_css: z.string().max(10000).optional(),
 });
 
-export type UpdateOrgBrandingInput = z.infer<typeof updateOrgBrandingSchema>;
+type UpdateOrgBrandingInput = z.infer<typeof updateOrgBrandingSchema>;
 
 /**
  * Update organization features
  */
-export const updateOrgFeaturesSchema = z.object({
+const updateOrgFeaturesSchema = z.object({
   features: z
     .object({
       advanced_search: z.boolean().optional(),
@@ -624,7 +624,7 @@ export const updateOrgFeaturesSchema = z.object({
   max_storage_gb: z.number().int().positive().optional(),
 });
 
-export type UpdateOrgFeaturesInput = z.infer<typeof updateOrgFeaturesSchema>;
+type UpdateOrgFeaturesInput = z.infer<typeof updateOrgFeaturesSchema>;
 
 // ----------------------------------------------------------------------------
 // Enhanced Member Management Schemas
@@ -633,7 +633,7 @@ export type UpdateOrgFeaturesInput = z.infer<typeof updateOrgFeaturesSchema>;
 /**
  * Invite a member to the organization (enhanced)
  */
-export const enhancedInviteMemberSchema = z.object({
+const enhancedInviteMemberSchema = z.object({
   email: z.string().email('Invalid email address'),
   role: z.enum(['owner', 'admin', 'contributor', 'reader'], {
     error: 'Role must be owner, admin, contributor, or reader',
@@ -642,12 +642,12 @@ export const enhancedInviteMemberSchema = z.object({
   custom_message: z.string().max(500).optional(),
 });
 
-export type EnhancedInviteMemberInput = z.infer<typeof enhancedInviteMemberSchema>;
+type EnhancedInviteMemberInput = z.infer<typeof enhancedInviteMemberSchema>;
 
 /**
  * Bulk invite members via CSV
  */
-export const bulkInviteMemberSchema = z.object({
+const bulkInviteMemberSchema = z.object({
   invitations: z
     .array(
       z.object({
@@ -661,13 +661,13 @@ export const bulkInviteMemberSchema = z.object({
     .max(100, 'Maximum 100 invitations at once'),
 });
 
-export type BulkInviteMemberInput = z.infer<typeof bulkInviteMemberSchema>;
+type BulkInviteMemberInput = z.infer<typeof bulkInviteMemberSchema>;
 
 /**
  * Update member role with permission validation (enhanced)
  * Note: Admins cannot promote users to owner or admin roles
  */
-export const enhancedUpdateMemberRoleSchema = z
+const enhancedUpdateMemberRoleSchema = z
   .object({
     userId: z.string().uuid(),
     role: roleEnum,
@@ -687,12 +687,12 @@ export const enhancedUpdateMemberRoleSchema = z
     }
   );
 
-export type EnhancedUpdateMemberRoleInput = z.infer<typeof enhancedUpdateMemberRoleSchema>;
+type EnhancedUpdateMemberRoleInput = z.infer<typeof enhancedUpdateMemberRoleSchema>;
 
 /**
  * Update member department assignments
  */
-export const updateMemberDepartmentsSchema = z.object({
+const updateMemberDepartmentsSchema = z.object({
   userId: z.string().uuid(),
   department_ids: z
     .array(z.string().uuid())
@@ -700,18 +700,18 @@ export const updateMemberDepartmentsSchema = z.object({
     .max(20, 'Maximum 20 departments per user'),
 });
 
-export type UpdateMemberDepartmentsInput = z.infer<typeof updateMemberDepartmentsSchema>;
+type UpdateMemberDepartmentsInput = z.infer<typeof updateMemberDepartmentsSchema>;
 
 /**
  * Remove member from organization
  */
-export const removeMemberSchema = z.object({
+const removeMemberSchema = z.object({
   userId: z.string().uuid(),
   transferContentTo: z.string().uuid().optional(),
   deleteContent: z.boolean().optional().default(false),
 });
 
-export type RemoveMemberInput = z.infer<typeof removeMemberSchema>;
+type RemoveMemberInput = z.infer<typeof removeMemberSchema>;
 
 // ----------------------------------------------------------------------------
 // Department Management Schemas
@@ -720,7 +720,7 @@ export type RemoveMemberInput = z.infer<typeof removeMemberSchema>;
 /**
  * Create a department
  */
-export const createDepartmentSchema = z.object({
+const createDepartmentSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
   slug: z
@@ -733,12 +733,12 @@ export const createDepartmentSchema = z.object({
   default_visibility: visibilityEnum.optional().default('department'),
 });
 
-export type CreateDepartmentInput = z.infer<typeof createDepartmentSchema>;
+type CreateDepartmentInput = z.infer<typeof createDepartmentSchema>;
 
 /**
  * Update a department
  */
-export const updateDepartmentSchema = z.object({
+const updateDepartmentSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
   slug: z
@@ -751,17 +751,17 @@ export const updateDepartmentSchema = z.object({
   default_visibility: visibilityEnum.optional(),
 });
 
-export type UpdateDepartmentInput = z.infer<typeof updateDepartmentSchema>;
+type UpdateDepartmentInput = z.infer<typeof updateDepartmentSchema>;
 
 /**
  * Delete a department with optional content reassignment
  */
-export const deleteDepartmentSchema = z.object({
+const deleteDepartmentSchema = z.object({
   reassign_to_department_id: z.string().uuid().optional(),
   delete_content: z.boolean().optional().default(false),
 });
 
-export type DeleteDepartmentInput = z.infer<typeof deleteDepartmentSchema>;
+type DeleteDepartmentInput = z.infer<typeof deleteDepartmentSchema>;
 
 // ----------------------------------------------------------------------------
 // Permission Management Schemas
@@ -775,7 +775,7 @@ const resourceTypeEnum = z.enum(['recording', 'document', 'tag', 'share']);
 /**
  * Create a permission rule for content
  */
-export const createPermissionRuleSchema = z.object({
+const createPermissionRuleSchema = z.object({
   resource_type: resourceTypeEnum,
   resource_id: z.string().uuid(),
   visibility: visibilityEnum.default('org'),
@@ -787,12 +787,12 @@ export const createPermissionRuleSchema = z.object({
   can_share: z.boolean().default(false),
 });
 
-export type CreatePermissionRuleInput = z.infer<typeof createPermissionRuleSchema>;
+type CreatePermissionRuleInput = z.infer<typeof createPermissionRuleSchema>;
 
 /**
  * Update a permission rule
  */
-export const updatePermissionRuleSchema = z.object({
+const updatePermissionRuleSchema = z.object({
   visibility: visibilityEnum.optional(),
   department_ids: z.array(z.string().uuid()).optional(),
   allowed_user_ids: z.array(z.string().uuid()).optional(),
@@ -802,7 +802,7 @@ export const updatePermissionRuleSchema = z.object({
   can_share: z.boolean().optional(),
 });
 
-export type UpdatePermissionRuleInput = z.infer<typeof updatePermissionRuleSchema>;
+type UpdatePermissionRuleInput = z.infer<typeof updatePermissionRuleSchema>;
 
 // ----------------------------------------------------------------------------
 // API Key Management Schemas
@@ -853,7 +853,7 @@ export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>;
 /**
  * Update API key (limited fields)
  */
-export const updateApiKeySchema = z.object({
+const updateApiKeySchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().max(500).optional(),
   scopes: z.array(apiKeyScopeEnum).min(1).max(20).optional(),
@@ -862,16 +862,16 @@ export const updateApiKeySchema = z.object({
   status: z.enum(['active', 'revoked']).optional(),
 });
 
-export type UpdateApiKeyInput = z.infer<typeof updateApiKeySchema>;
+type UpdateApiKeyInput = z.infer<typeof updateApiKeySchema>;
 
 /**
  * Revoke API key
  */
-export const revokeApiKeySchema = z.object({
+const revokeApiKeySchema = z.object({
   keyId: z.string().uuid(),
 });
 
-export type RevokeApiKeyInput = z.infer<typeof revokeApiKeySchema>;
+type RevokeApiKeyInput = z.infer<typeof revokeApiKeySchema>;
 
 // ----------------------------------------------------------------------------
 // Webhook Management Schemas
@@ -912,7 +912,7 @@ export const createWebhookSchema = z.object({
   timeout_ms: z.number().int().min(1000).max(30000).optional().default(5000),
 });
 
-export type CreateWebhookInput = z.infer<typeof createWebhookSchema>;
+type CreateWebhookInput = z.infer<typeof createWebhookSchema>;
 
 /**
  * Update a webhook
@@ -929,7 +929,7 @@ export const updateWebhookSchema = z.object({
   enabled: z.boolean().optional(),
 });
 
-export type UpdateWebhookInput = z.infer<typeof updateWebhookSchema>;
+type UpdateWebhookInput = z.infer<typeof updateWebhookSchema>;
 
 /**
  * Test a webhook
@@ -940,7 +940,7 @@ export const testWebhookSchema = z.object({
   test_payload: z.record(z.string(), z.unknown()).optional(),
 });
 
-export type TestWebhookInput = z.infer<typeof testWebhookSchema>;
+type TestWebhookInput = z.infer<typeof testWebhookSchema>;
 
 // ----------------------------------------------------------------------------
 // Audit Log Schemas
@@ -978,7 +978,7 @@ const auditActionEnum = z.enum([
 /**
  * Audit log filter schema
  */
-export const auditLogFilterSchema = z.object({
+const auditLogFilterSchema = z.object({
   date_from: z.string().datetime().optional(),
   date_to: z.string().datetime().optional(),
   user_id: z.string().uuid().optional(),
@@ -992,19 +992,19 @@ export const auditLogFilterSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
 });
 
-export type AuditLogFilterInput = z.infer<typeof auditLogFilterSchema>;
+type AuditLogFilterInput = z.infer<typeof auditLogFilterSchema>;
 
 /**
  * Export audit logs schema
  */
-export const exportAuditLogsSchema = z.object({
+const exportAuditLogsSchema = z.object({
   date_from: z.string().datetime(),
   date_to: z.string().datetime(),
   format: z.enum(['csv', 'json', 'xlsx']).optional().default('csv'),
   filters: auditLogFilterSchema.omit({ page: true, limit: true }).optional(),
 });
 
-export type ExportAuditLogsInput = z.infer<typeof exportAuditLogsSchema>;
+type ExportAuditLogsInput = z.infer<typeof exportAuditLogsSchema>;
 
 // ============================================================================
 // Phase 8: Library Organization & Content Management Validation Schemas
@@ -1220,7 +1220,7 @@ export type ProcessingStatsQueryInput = z.infer<typeof processingStatsQuerySchem
 /**
  * Bulk upload schema
  */
-export const bulkUploadSchema = z.object({
+const bulkUploadSchema = z.object({
   items: z.array(
     z.object({
       content_type: z.enum(['video', 'audio', 'document', 'text']),
@@ -1236,12 +1236,12 @@ export const bulkUploadSchema = z.object({
   tags: z.array(z.string().uuid()).max(20).optional(),
 });
 
-export type BulkUploadInput = z.infer<typeof bulkUploadSchema>;
+type BulkUploadInput = z.infer<typeof bulkUploadSchema>;
 
 /**
  * Export items schema
  */
-export const exportItemsSchema = z.object({
+const exportItemsSchema = z.object({
   item_ids: z.array(z.string().uuid()).min(1).max(100),
   format: z.enum(['json', 'csv', 'markdown', 'zip']).optional().default('json'),
   include_transcripts: z.boolean().optional().default(true),
@@ -1249,12 +1249,12 @@ export const exportItemsSchema = z.object({
   include_metadata: z.boolean().optional().default(true),
 });
 
-export type ExportItemsInput = z.infer<typeof exportItemsSchema>;
+type ExportItemsInput = z.infer<typeof exportItemsSchema>;
 
 /**
  * Enhanced library query schema
  */
-export const enhancedLibraryQuerySchema = z.object({
+const enhancedLibraryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
   offset: z.coerce.number().int().min(0).optional().default(0),
   content_type: z.enum(['recording', 'video', 'audio', 'document', 'text']).optional(),
@@ -1269,7 +1269,7 @@ export const enhancedLibraryQuerySchema = z.object({
   sort: z.enum(['created_asc', 'created_desc', 'title_asc', 'title_desc', 'duration_asc', 'duration_desc', 'size_asc', 'size_desc']).optional().default('created_desc'),
 });
 
-export type EnhancedLibraryQueryInput = z.infer<typeof enhancedLibraryQuerySchema>;
+type EnhancedLibraryQueryInput = z.infer<typeof enhancedLibraryQuerySchema>;
 
 // ----------------------------------------------------------------------------
 // Enhanced Search Schemas
@@ -1278,7 +1278,7 @@ export type EnhancedLibraryQueryInput = z.infer<typeof enhancedLibraryQuerySchem
 /**
  * Enhanced semantic search schema
  */
-export const enhancedSearchSchema = z.object({
+const enhancedSearchSchema = z.object({
   query: z.string().min(1).max(2000),
   limit: z.coerce.number().int().min(1).max(100).optional().default(10),
   threshold: z.coerce.number().min(0).max(1).optional().default(0.7),
@@ -1291,7 +1291,7 @@ export const enhancedSearchSchema = z.object({
   mode: z.enum(['vector', 'hybrid', 'agentic', 'multimodal']).optional().default('vector'),
 });
 
-export type EnhancedSearchInput = z.infer<typeof enhancedSearchSchema>;
+type EnhancedSearchInput = z.infer<typeof enhancedSearchSchema>;
 
 // ----------------------------------------------------------------------------
 // Session Management Schemas
@@ -1300,13 +1300,13 @@ export type EnhancedSearchInput = z.infer<typeof enhancedSearchSchema>;
 /**
  * List active sessions
  */
-export const listSessionsSchema = z.object({
+const listSessionsSchema = z.object({
   userId: z.string().uuid().optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
 });
 
-export type ListSessionsInput = z.infer<typeof listSessionsSchema>;
+type ListSessionsInput = z.infer<typeof listSessionsSchema>;
 
 /**
  * Revoke session schema
@@ -1315,7 +1315,7 @@ export const revokeSessionSchema = z.object({
   sessionId: z.string().uuid(),
 });
 
-export type RevokeSessionInput = z.infer<typeof revokeSessionSchema>;
+type RevokeSessionInput = z.infer<typeof revokeSessionSchema>;
 
 // ----------------------------------------------------------------------------
 // Alert Management Schemas
@@ -1333,7 +1333,7 @@ export const alertsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
-export type AlertsQueryInput = z.infer<typeof alertsQuerySchema>;
+type AlertsQueryInput = z.infer<typeof alertsQuerySchema>;
 
 /**
  * Alert configuration schema
@@ -1347,12 +1347,12 @@ export const alertConfigSchema = z.object({
   checkInterval: z.number().min(1).max(1440).optional(),
 });
 
-export type AlertConfigInput = z.infer<typeof alertConfigSchema>;
+type AlertConfigInput = z.infer<typeof alertConfigSchema>;
 
 /**
  * Health query schema
  */
-export const healthQuerySchema = z.object({
+const healthQuerySchema = z.object({
   detailed: z
     .string()
     .optional()
@@ -1360,7 +1360,7 @@ export const healthQuerySchema = z.object({
     .transform((val) => val === 'true'),
 });
 
-export type HealthQueryInput = z.infer<typeof healthQuerySchema>;
+type HealthQueryInput = z.infer<typeof healthQuerySchema>;
 
 // ----------------------------------------------------------------------------
 // Organization Deep Dive Schemas
@@ -1374,7 +1374,7 @@ export const organizationTopFilesQuerySchema = z.object({
   sortBy: z.enum(['size', 'created_at']).optional().default('size'),
 });
 
-export type OrganizationTopFilesQueryInput = z.infer<typeof organizationTopFilesQuerySchema>;
+type OrganizationTopFilesQueryInput = z.infer<typeof organizationTopFilesQuerySchema>;
 
 /**
  * Organization action schema
@@ -1383,7 +1383,7 @@ export const organizationActionSchema = z.object({
   action: z.enum(['compress', 'migrate', 'cleanup', 'report']),
 });
 
-export type OrganizationActionInput = z.infer<typeof organizationActionSchema>;
+type OrganizationActionInput = z.infer<typeof organizationActionSchema>;
 
 // ----------------------------------------------------------------------------
 // Optimization Recommendations Schemas
@@ -1399,7 +1399,7 @@ export const recommendationsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
 });
 
-export type RecommendationsQueryInput = z.infer<typeof recommendationsQuerySchema>;
+type RecommendationsQueryInput = z.infer<typeof recommendationsQuerySchema>;
 
 /**
  * Implement recommendation schema
@@ -1408,7 +1408,7 @@ export const recommendationImplementSchema = z.object({
   estimatedCompletionDays: z.number().int().min(1).max(365).optional(),
 });
 
-export type RecommendationImplementInput = z.infer<typeof recommendationImplementSchema>;
+type RecommendationImplementInput = z.infer<typeof recommendationImplementSchema>;
 
 /**
  * Complete recommendation schema
@@ -1417,7 +1417,7 @@ export const recommendationCompleteSchema = z.object({
   actualSavings: z.number().min(0).optional(),
 });
 
-export type RecommendationCompleteInput = z.infer<typeof recommendationCompleteSchema>;
+type RecommendationCompleteInput = z.infer<typeof recommendationCompleteSchema>;
 
 /**
  * Update recommendation progress schema
@@ -1426,7 +1426,7 @@ export const recommendationProgressSchema = z.object({
   progress: z.number().int().min(0).max(100),
 });
 
-export type RecommendationProgressInput = z.infer<typeof recommendationProgressSchema>;
+type RecommendationProgressInput = z.infer<typeof recommendationProgressSchema>;
 
 // Common response types
 export type ApiError = {
@@ -1441,7 +1441,7 @@ export type ApiSuccess<T = unknown> = {
   requestId?: string;
 };
 
-export type PaginatedResponse<T> = {
+type PaginatedResponse<T> = {
   data: T[];
   pagination: {
     total: number;

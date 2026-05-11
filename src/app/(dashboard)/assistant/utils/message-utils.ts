@@ -47,8 +47,9 @@ export function extractMessageText(message: ExtendedMessage): string {
   // 2. Try content field (array of parts) - structured content
   if (message.content && Array.isArray(message.content)) {
     const text = message.content
-      .filter((p) => p.type === 'text')
-      .map((p) => p.text)
+      .flatMap((__item, __index, __array) =>
+        __item.type === 'text' ? [__item.text] : [],
+      )
       .join('\n\n');
     if (text) return text;
   }
@@ -64,9 +65,13 @@ export function extractMessageText(message: ExtendedMessage): string {
   // This is used by useChat() when streaming responses
   if (Array.isArray(flexibleMessage.parts)) {
     const text = flexibleMessage.parts
-      .filter(isMessagePart)
-      .filter((p) => p.type === 'text')
-      .map((p) => p.text || '')
+      .flatMap((__item, __index, __array) =>
+        isMessagePart(__item)
+          ? __item.type === 'text'
+            ? [__item.text || '']
+            : []
+          : [],
+      )
       .join('\n\n');
     if (text) return text;
   }
@@ -78,7 +83,7 @@ export function extractMessageText(message: ExtendedMessage): string {
 /**
  * Extract reasoning parts from a message
  */
-export function extractReasoningParts(message: ExtendedMessage): MessagePart[] {
+function extractReasoningParts(message: ExtendedMessage): MessagePart[] {
   if (typeof message.content === 'string' || !Array.isArray(message.content)) {
     return [];
   }
@@ -89,7 +94,7 @@ export function extractReasoningParts(message: ExtendedMessage): MessagePart[] {
 /**
  * Extract source parts from a message
  */
-export function extractSourceParts(message: ExtendedMessage): MessagePart[] {
+function extractSourceParts(message: ExtendedMessage): MessagePart[] {
   if (typeof message.content === 'string' || !Array.isArray(message.content)) {
     return [];
   }
@@ -100,13 +105,13 @@ export function extractSourceParts(message: ExtendedMessage): MessagePart[] {
 /**
  * Extract tool call parts from a message
  */
-export function extractToolCallParts(message: ExtendedMessage): MessagePart[] {
+function extractToolCallParts(message: ExtendedMessage): MessagePart[] {
   if (typeof message.content === 'string' || !Array.isArray(message.content)) {
     return [];
   }
 
   return message.content.filter(
-    (p) => p.type === 'tool-call' || p.type === 'tool-result'
+    (p) => p.type === 'tool-call' || p.type === 'tool-result',
   );
 }
 
@@ -115,7 +120,7 @@ export function extractToolCallParts(message: ExtendedMessage): MessagePart[] {
  */
 export function formatMessageTimestamp(
   date: Date | undefined,
-  format: 'short' | 'long' | 'relative' = 'short'
+  format: 'short' | 'long' | 'relative' = 'short',
 ): string {
   if (!date) {
     return '';
@@ -157,7 +162,7 @@ export function formatMessageTimestamp(
  * Copy message content to clipboard
  */
 export async function copyMessageToClipboard(
-  message: ExtendedMessage
+  message: ExtendedMessage,
 ): Promise<void> {
   const text = extractMessageText(message);
 
@@ -172,7 +177,7 @@ export async function copyMessageToClipboard(
 /**
  * Calculate message word count
  */
-export function getMessageWordCount(message: ExtendedMessage): number {
+function getMessageWordCount(message: ExtendedMessage): number {
   const text = extractMessageText(message);
   return text.split(/\s+/).filter(Boolean).length;
 }
@@ -210,16 +215,14 @@ export function messageHasToolCalls(message: ExtendedMessage): boolean {
 /**
  * Check if message has attachments
  */
-export function messageHasAttachments(message: ExtendedMessage): boolean {
+function messageHasAttachments(message: ExtendedMessage): boolean {
   return message.attachments !== undefined && message.attachments.length > 0;
 }
 
 /**
  * Format sources for display
  */
-export function formatSources(
-  message: ExtendedMessage
-): SourceCitation[] {
+export function formatSources(message: ExtendedMessage): SourceCitation[] {
   // First, check if message has sources array
   if (message.sources && message.sources.length > 0) {
     return message.sources;
@@ -246,7 +249,7 @@ export function formatSources(
 /**
  * Group messages by date
  */
-export function groupMessagesByDate(messages: ExtendedMessage[]): {
+function groupMessagesByDate(messages: ExtendedMessage[]): {
   date: string;
   messages: ExtendedMessage[];
 }[] {
@@ -273,7 +276,7 @@ export function groupMessagesByDate(messages: ExtendedMessage[]): {
 /**
  * Sanitize message content (remove potentially unsafe HTML)
  */
-export function sanitizeMessageContent(content: string): string {
+function sanitizeMessageContent(content: string): string {
   // Basic sanitization - in production, use a library like DOMPurify
   return content
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
@@ -284,9 +287,9 @@ export function sanitizeMessageContent(content: string): string {
 /**
  * Truncate message content
  */
-export function truncateMessage(
+function truncateMessage(
   message: ExtendedMessage,
-  maxLength: number = 100
+  maxLength: number = 100,
 ): string {
   const text = extractMessageText(message);
 
@@ -300,35 +303,35 @@ export function truncateMessage(
 /**
  * Check if message is from user
  */
-export function isUserMessage(message: ExtendedMessage): boolean {
+function isUserMessage(message: ExtendedMessage): boolean {
   return message.role === 'user';
 }
 
 /**
  * Check if message is from assistant
  */
-export function isAssistantMessage(message: ExtendedMessage): boolean {
+function isAssistantMessage(message: ExtendedMessage): boolean {
   return message.role === 'assistant';
 }
 
 /**
  * Check if message was edited
  */
-export function isEditedMessage(message: ExtendedMessage): boolean {
+function isEditedMessage(message: ExtendedMessage): boolean {
   return message.metadata?.edited === true;
 }
 
 /**
  * Check if message was regenerated
  */
-export function isRegeneratedMessage(message: ExtendedMessage): boolean {
+function isRegeneratedMessage(message: ExtendedMessage): boolean {
   return message.metadata?.regenerated === true;
 }
 
 /**
  * Get message icon based on role
  */
-export function getMessageIcon(message: ExtendedMessage): string {
+function getMessageIcon(message: ExtendedMessage): string {
   switch (message.role) {
     case 'user':
       return '👤';
@@ -344,7 +347,7 @@ export function getMessageIcon(message: ExtendedMessage): string {
 /**
  * Estimate message reading time in seconds
  */
-export function estimateReadingTime(message: ExtendedMessage): number {
+function estimateReadingTime(message: ExtendedMessage): number {
   const wordCount = getMessageWordCount(message);
   const wordsPerMinute = 200; // Average reading speed
 
@@ -354,12 +357,13 @@ export function estimateReadingTime(message: ExtendedMessage): number {
 /**
  * Convert message to plain text for search
  */
-export function messageToSearchableText(message: ExtendedMessage): string {
+function messageToSearchableText(message: ExtendedMessage): string {
   const text = extractMessageText(message);
   const sources = formatSources(message)
     .map((s) => s.title)
     .join(' ');
-  const reasoning = message.reasoning?.steps.map((s) => s.content).join(' ') || '';
+  const reasoning =
+    message.reasoning?.steps.map((s) => s.content).join(' ') || '';
 
   return `${text} ${sources} ${reasoning}`.toLowerCase();
 }
@@ -367,9 +371,9 @@ export function messageToSearchableText(message: ExtendedMessage): string {
 /**
  * Search messages by query
  */
-export function searchMessages(
+function searchMessages(
   messages: ExtendedMessage[],
-  query: string
+  query: string,
 ): ExtendedMessage[] {
   if (!query.trim()) {
     return messages;
@@ -378,7 +382,7 @@ export function searchMessages(
   const lowerQuery = query.toLowerCase();
 
   return messages.filter((message) =>
-    messageToSearchableText(message).includes(lowerQuery)
+    messageToSearchableText(message).includes(lowerQuery),
   );
 }
 
@@ -421,7 +425,7 @@ export function getMessageColor(message: ExtendedMessage): {
 export function parseCitationsToMarkdown(
   text: string,
   sources: SourceCitation[],
-  sourceKey?: string
+  sourceKey?: string,
 ): string {
   if (!sources || sources.length === 0) return text;
 
@@ -434,9 +438,12 @@ export function parseCitationsToMarkdown(
     if (sourceKey && source.metadata?.chunkId) {
       const chunkId = source.metadata.chunkId;
       // Ensure chunkId is a valid type (string, number, or boolean)
-      const chunkIdValue = typeof chunkId === 'string' || typeof chunkId === 'number' || typeof chunkId === 'boolean'
-        ? String(chunkId)
-        : '';
+      const chunkIdValue =
+        typeof chunkId === 'string' ||
+        typeof chunkId === 'number' ||
+        typeof chunkId === 'boolean'
+          ? String(chunkId)
+          : '';
 
       if (chunkIdValue) {
         const separator = url.includes('?') ? '&' : '?';
@@ -452,7 +459,9 @@ export function parseCitationsToMarkdown(
   // - Multiple: [1, 2, 3] -> [1](url1), [2](url2), [3](url3)
   return text.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (match, nums) => {
     // Split by comma to handle multiple citations
-    const citationNums = nums.split(/\s*,\s*/).map((n: string) => parseInt(n, 10));
+    const citationNums = nums
+      .split(/\s*,\s*/)
+      .map((n: string) => parseInt(n, 10));
 
     // Convert each number to a markdown link
     const links = citationNums.map((num: number) => {

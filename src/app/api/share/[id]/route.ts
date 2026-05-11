@@ -6,7 +6,12 @@
 
 import { NextRequest } from 'next/server';
 
-import { apiHandler, requireOrg, successResponse, errors } from '@/lib/utils/api';
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  errors,
+} from '@/lib/utils/api';
 import { deleteShare, updateShare } from '@/lib/services/sharing';
 
 /**
@@ -14,14 +19,19 @@ import { deleteShare, updateShare } from '@/lib/services/sharing';
  * Delete a share link
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const { id: shareId } = await params;
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId }, { id: shareId }] = await Promise.all([
+      requireOrg(),
+      params,
+    ]);
 
     await deleteShare(shareId, orgId);
 
     return successResponse({ deleted: true });
-  }
+  },
 );
 
 /**
@@ -29,10 +39,15 @@ export const DELETE = apiHandler(
  * Update share settings (expiration, max views)
  */
 export const PATCH = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const { id: shareId } = await params;
-    const body = await request.json();
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId }, { id: shareId }, body] = await Promise.all([
+      requireOrg(),
+      params,
+      request.json(),
+    ]);
 
     const { expiresAt, maxViews } = body;
 
@@ -42,5 +57,5 @@ export const PATCH = apiHandler(
     });
 
     return successResponse({ updated: true });
-  }
+  },
 );

@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 export interface Collection {
   id: string;
   name: string;
+  description?: string | null;
   parent_id: string | null;
   children?: Collection[];
   item_count?: number;
@@ -59,7 +60,7 @@ interface CollectionTreeProps {
  *   onCreateChild={handleCreate}
  * />
  */
-export function CollectionTree({
+function CollectionTree({
   collections,
   selectedId,
   onSelect,

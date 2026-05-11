@@ -33,6 +33,28 @@ type ValidGatedAudience = 'org-admin' | 'system-admin';
 
 const VALID_GATED: Set<string> = new Set<ValidGatedAudience>(['org-admin', 'system-admin']);
 
+function loadSearchIndex(audience: ValidGatedAudience): unknown | null {
+  const indexPath = join(
+    process.cwd(),
+    'src',
+    'lib',
+    'docs',
+    'generated',
+    `search-index.${audience}.json`,
+  );
+
+  if (!existsSync(indexPath)) {
+    return null;
+  }
+
+  return JSON.parse(readFileSync(indexPath, 'utf8')) as unknown;
+}
+
+const SEARCH_INDEXES: Record<ValidGatedAudience, unknown | null> = {
+  'org-admin': loadSearchIndex('org-admin'),
+  'system-admin': loadSearchIndex('system-admin'),
+};
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ audience: string }> },
@@ -55,17 +77,9 @@ export async function GET(
     notFound(); // 404 — never acknowledge the endpoint to under-privileged callers
   }
 
-  // Load the pre-built index from generated/
-  const indexPath = join(
-    process.cwd(),
-    'src',
-    'lib',
-    'docs',
-    'generated',
-    `search-index.${requestedAudience}.json`,
-  );
+  const payload = SEARCH_INDEXES[requestedAudience];
 
-  if (!existsSync(indexPath)) {
+  if (!payload) {
     // Manifest not built yet — degrade gracefully
     return NextResponse.json(
       { index: null, entries: [], error: 'Search index not built. Run npm run prebuild.' },
@@ -75,8 +89,6 @@ export async function GET(
       },
     );
   }
-
-  const payload = JSON.parse(readFileSync(indexPath, 'utf8')) as unknown;
 
   return NextResponse.json(payload, {
     headers: {

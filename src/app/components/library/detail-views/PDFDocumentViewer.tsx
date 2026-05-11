@@ -11,7 +11,7 @@ import {
   ChevronRight,
   Loader2,
   AlertCircle,
-  FileText
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
@@ -29,56 +29,300 @@ interface PDFDocumentViewerProps {
   originalFilename?: string | null;
 }
 
+interface PdfViewerState {
+  pageNum: number;
+  pageCount: number;
+  error: string | null;
+  rendering: boolean;
+}
+
+type PdfViewerAction =
+  | { type: 'reset' }
+  | { type: 'loaded'; pageCount: number }
+  | { type: 'error'; message: string }
+  | { type: 'set-page'; pageNum: number }
+  | { type: 'set-rendering'; rendering: boolean };
+
+const INITIAL_PDF_VIEWER_STATE: PdfViewerState = {
+  pageNum: 1,
+  pageCount: 0,
+  error: null,
+  rendering: false,
+};
+
+function pdfViewerReducer(
+  state: PdfViewerState,
+  action: PdfViewerAction,
+): PdfViewerState {
+  switch (action.type) {
+    case 'reset':
+      return INITIAL_PDF_VIEWER_STATE;
+    case 'loaded':
+      return { ...state, pageCount: action.pageCount, error: null };
+    case 'error':
+      return { ...state, error: action.message, rendering: false };
+    case 'set-page':
+      return { ...state, pageNum: action.pageNum };
+    case 'set-rendering':
+      return { ...state, rendering: action.rendering };
+    default:
+      return state;
+  }
+}
+
+function formatFileSize(bytes: number | null) {
+  if (bytes == null) return 'N/A';
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1) {
+    return `${(bytes / 1024).toFixed(2)} KB`;
+  }
+  return `${mb.toFixed(2)} MB`;
+}
+
+function PdfLoadingState() {
+  return (
+    <Card>
+      <CardContent className="py-24 flex flex-col items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-muted-foreground mb-4" />
+        <p className="text-muted-foreground">Loading PDF document…</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PdfErrorState({
+  error,
+  onDownload,
+}: {
+  error: string;
+  onDownload: () => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="py-24 flex flex-col items-center justify-center">
+        <AlertCircle className="size-8 text-destructive mb-4" />
+        <p className="text-destructive font-semibold mb-2">
+          Failed to load PDF
+        </p>
+        <p className="text-sm text-muted-foreground mb-4">{error}</p>
+        <Button onClick={onDownload} variant="outline">
+          <Download className="size-4" />
+          Download to view locally
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PdfControls({
+  fileSize,
+  zoom,
+  pageNum,
+  pageCount,
+  onZoomIn,
+  onZoomOut,
+  onPrevPage,
+  onNextPage,
+  onPageInputChange,
+  onDownload,
+}: {
+  fileSize: number;
+  zoom: number;
+  pageNum: number;
+  pageCount: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onPrevPage: () => void;
+  onNextPage: () => void;
+  onPageInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onDownload: () => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300"
+            >
+              <FileText className="size-3 mr-1" />
+              PDF
+            </Badge>
+            {fileSize > 0 && (
+              <span className="text-sm text-muted-foreground">
+                {formatFileSize(fileSize)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onZoomOut}
+              disabled={zoom <= 0.5}
+              aria-label="Zoom out"
+            >
+              <ZoomOut className="size-4" />
+            </Button>
+            <span className="text-sm font-medium min-w-[60px] text-center">
+              {Math.round(zoom * 100)}%
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onZoomIn}
+              disabled={zoom >= 3.0}
+              aria-label="Zoom in"
+            >
+              <ZoomIn className="size-4" />
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onPrevPage}
+              disabled={pageNum <= 1}
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={pageCount}
+                value={pageNum}
+                onChange={onPageInputChange}
+                className="w-16 h-9 text-center"
+                aria-label="Page number"
+              />
+              <span className="text-sm text-muted-foreground">
+                / {pageCount}
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onNextPage}
+              disabled={pageNum >= pageCount}
+              aria-label="Next page"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+
+          <Button size="sm" variant="outline" onClick={onDownload}>
+            <Download className="size-4" />
+            Download
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PdfCanvas({
+  rendering,
+  canvasRef,
+  pageNum,
+  pageCount,
+}: {
+  rendering: boolean;
+  canvasRef: React.Ref<HTMLCanvasElement>;
+  pageNum: number;
+  pageCount: number;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <ScrollArea className="h-[800px]">
+        <CardContent className="p-8 flex justify-center bg-muted/30">
+          <div className="relative bg-white shadow-lg">
+            {rendering && (
+              <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10">
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            <canvas
+              ref={canvasRef}
+              className="max-w-full h-auto"
+              aria-label={`PDF page ${pageNum} of ${pageCount}`}
+            />
+          </div>
+        </CardContent>
+      </ScrollArea>
+    </Card>
+  );
+}
+
+function PdfKeyboardHint() {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-xs text-muted-foreground">
+          <strong>Keyboard shortcuts:</strong> Arrow keys to navigate pages, +/-
+          to zoom
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function PDFDocumentViewer({
   documentUrl,
   title,
   fileSize,
-  originalFilename
+  originalFilename,
 }: PDFDocumentViewerProps) {
-  const [pdfDoc, setPdfDoc] = React.useState<PDFDocumentProxy | null>(null);
-  const [pageNum, setPageNum] = React.useState(1);
-  const [pageCount, setPageCount] = React.useState(0);
+  const [state, dispatch] = React.useReducer(
+    pdfViewerReducer,
+    INITIAL_PDF_VIEWER_STATE,
+  );
   const [zoom, setZoom] = React.useState(1.0);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [rendering, setRendering] = React.useState(false);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const pdfDocRef = React.useRef<PDFDocumentProxy | null>(null);
   const renderTask = React.useRef<RenderTask | null>(null);
+  const normalizedFileSize = fileSize ?? 0;
+  const { pageNum, pageCount, error, rendering } = state;
 
-  // Load PDF.js dynamically
   React.useEffect(() => {
     const loadPdfJs = async () => {
       try {
-        const pdfjsLib = await import('pdfjs-dist');
+        pdfDocRef.current = null;
+        dispatch({ type: 'reset' });
 
-        // Set worker path
+        const pdfjsLib = await import('pdfjs-dist');
         pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
         const loadingTask = pdfjsLib.getDocument(documentUrl);
         const pdf = await loadingTask.promise;
 
-        setPdfDoc(pdf);
-        setPageCount(pdf.numPages);
-        setLoading(false);
+        pdfDocRef.current = pdf;
+        dispatch({ type: 'loaded', pageCount: pdf.numPages });
       } catch (err) {
         console.error('Failed to load PDF:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load PDF document');
-        setLoading(false);
+        dispatch({
+          type: 'error',
+          message:
+            err instanceof Error ? err.message : 'Failed to load PDF document',
+        });
       }
     };
 
     loadPdfJs();
   }, [documentUrl]);
 
-  // Render page whenever pageNum or zoom changes
   React.useEffect(() => {
+    const pdfDoc = pdfDocRef.current;
     if (!pdfDoc || !canvasRef.current) return;
 
     const renderPage = async () => {
-      setRendering(true);
+      dispatch({ type: 'set-rendering', rendering: true });
 
       try {
-        // Cancel any ongoing render task
         if (renderTask.current) {
           renderTask.current.cancel();
         }
@@ -86,7 +330,6 @@ export default function PDFDocumentViewer({
         const page = await pdfDoc.getPage(pageNum);
         const canvas = canvasRef.current!;
         const context = canvas.getContext('2d')!;
-
         const viewport = page.getViewport({ scale: zoom });
 
         canvas.height = viewport.height;
@@ -95,31 +338,34 @@ export default function PDFDocumentViewer({
         const renderContext: Parameters<PDFPageProxy['render']>[0] = {
           canvas,
           canvasContext: context,
-          viewport: viewport,
+          viewport,
         };
 
         renderTask.current = page.render(renderContext);
         await renderTask.current.promise;
         renderTask.current = null;
-        setRendering(false);
+        dispatch({ type: 'set-rendering', rendering: false });
       } catch (err) {
-        if (!(err instanceof Error) || err.name !== 'RenderingCancelledException') {
+        if (
+          !(err instanceof Error) ||
+          err.name !== 'RenderingCancelledException'
+        ) {
           console.error('Failed to render page:', err);
-          setRendering(false);
+          dispatch({ type: 'set-rendering', rendering: false });
         }
       }
     };
 
     renderPage();
-  }, [pdfDoc, pageNum, zoom]);
+  }, [pageCount, pageNum, zoom]);
 
   const handleDownload = async () => {
     try {
       const response = await fetch(documentUrl);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
-
       const link = window.document.createElement('a');
+
       link.href = blobUrl;
       link.download = originalFilename || `${title || 'document'}.pdf`;
       window.document.body.appendChild(link);
@@ -128,189 +374,55 @@ export default function PDFDocumentViewer({
       window.URL.revokeObjectURL(blobUrl);
 
       toast.success('Download started');
-    } catch (error) {
-      console.error('Download failed:', error);
+    } catch (downloadError) {
+      console.error('Download failed:', downloadError);
       toast.error('Download failed');
     }
   };
 
-  const handleZoomIn = () => {
-    setZoom((prev) => Math.min(prev + 0.25, 3.0));
-  };
-
-  const handleZoomOut = () => {
-    setZoom((prev) => Math.max(prev - 0.25, 0.5));
-  };
-
-  const handlePrevPage = () => {
-    setPageNum((prev) => Math.max(prev - 1, 1));
-  };
-
-  const handleNextPage = () => {
-    setPageNum((prev) => Math.min(prev + 1, pageCount));
-  };
-
-  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value, 10);
-    if (!isNaN(value) && value >= 1 && value <= pageCount) {
-      setPageNum(value);
-    }
-  };
-
-  const formatFileSize = (bytes: number | null) => {
-    if (bytes == null) return 'N/A';
-    const mb = bytes / (1024 * 1024);
-    if (mb < 1) {
-      const kb = bytes / 1024;
-      return `${kb.toFixed(2)} KB`;
-    }
-    return `${mb.toFixed(2)} MB`;
-  };
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="py-24 flex flex-col items-center justify-center">
-          <Loader2 className="size-8 animate-spin text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Loading PDF document...</p>
-        </CardContent>
-      </Card>
-    );
+  if (!error && pageCount === 0) {
+    return <PdfLoadingState />;
   }
 
   if (error) {
-    return (
-      <Card>
-        <CardContent className="py-24 flex flex-col items-center justify-center">
-          <AlertCircle className="size-8 text-destructive mb-4" />
-          <p className="text-destructive font-semibold mb-2">Failed to load PDF</p>
-          <p className="text-sm text-muted-foreground mb-4">{error}</p>
-          <Button onClick={handleDownload} variant="outline">
-            <Download className="size-4" />
-            Download to view locally
-          </Button>
-        </CardContent>
-      </Card>
-    );
+    return <PdfErrorState error={error} onDownload={handleDownload} />;
   }
 
   return (
     <div className="space-y-4">
-      {/* Controls */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            {/* Document Info */}
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300">
-                <FileText className="size-3 mr-1" />
-                PDF
-              </Badge>
-              {fileSize && (
-                <span className="text-sm text-muted-foreground">
-                  {formatFileSize(fileSize)}
-                </span>
-              )}
-            </div>
+      <PdfControls
+        fileSize={normalizedFileSize}
+        zoom={zoom}
+        pageNum={pageNum}
+        pageCount={pageCount}
+        onZoomIn={() => setZoom((prev) => Math.min(prev + 0.25, 3.0))}
+        onZoomOut={() => setZoom((prev) => Math.max(prev - 0.25, 0.5))}
+        onPrevPage={() =>
+          dispatch({ type: 'set-page', pageNum: Math.max(pageNum - 1, 1) })
+        }
+        onNextPage={() =>
+          dispatch({
+            type: 'set-page',
+            pageNum: Math.min(pageNum + 1, pageCount),
+          })
+        }
+        onPageInputChange={(event) => {
+          const value = parseInt(event.target.value, 10);
+          if (!isNaN(value) && value >= 1 && value <= pageCount) {
+            dispatch({ type: 'set-page', pageNum: value });
+          }
+        }}
+        onDownload={handleDownload}
+      />
 
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleZoomOut}
-                disabled={zoom <= 0.5}
-                aria-label="Zoom out"
-              >
-                <ZoomOut className="size-4" />
-              </Button>
-              <span className="text-sm font-medium min-w-[60px] text-center">
-                {Math.round(zoom * 100)}%
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleZoomIn}
-                disabled={zoom >= 3.0}
-                aria-label="Zoom in"
-              >
-                <ZoomIn className="size-4" />
-              </Button>
-            </div>
+      <PdfCanvas
+        rendering={rendering}
+        canvasRef={canvasRef}
+        pageNum={pageNum}
+        pageCount={pageCount}
+      />
 
-            {/* Page Navigation */}
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handlePrevPage}
-                disabled={pageNum <= 1}
-                aria-label="Previous page"
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={1}
-                  max={pageCount}
-                  value={pageNum}
-                  onChange={handlePageInputChange}
-                  className="w-16 h-9 text-center"
-                  aria-label="Page number"
-                />
-                <span className="text-sm text-muted-foreground">
-                  / {pageCount}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleNextPage}
-                disabled={pageNum >= pageCount}
-                aria-label="Next page"
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
-
-            {/* Download Button */}
-            <Button size="sm" variant="outline" onClick={handleDownload}>
-              <Download className="size-4" />
-              Download
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* PDF Canvas */}
-      <Card className="overflow-hidden">
-        <ScrollArea className="h-[800px]">
-          <CardContent className="p-8 flex justify-center bg-muted/30">
-            <div className="relative bg-white shadow-lg">
-              {rendering && (
-                <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10">
-                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                </div>
-              )}
-              <canvas
-                ref={canvasRef}
-                className="max-w-full h-auto"
-                aria-label={`PDF page ${pageNum} of ${pageCount}`}
-              />
-            </div>
-          </CardContent>
-        </ScrollArea>
-      </Card>
-
-      {/* Keyboard Shortcuts Info */}
-      <Card>
-        <CardContent className="p-4">
-          <p className="text-xs text-muted-foreground">
-            <strong>Keyboard shortcuts:</strong> Arrow keys to navigate pages, +/- to zoom
-          </p>
-        </CardContent>
-      </Card>
+      <PdfKeyboardHint />
     </div>
   );
 }

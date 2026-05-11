@@ -7,7 +7,12 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { apiHandler, requireOrg, successResponse, parseBody } from '@/lib/utils/api';
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  parseBody,
+} from '@/lib/utils/api';
 import {
   createRecordingShare,
   listResourceShares,
@@ -37,8 +42,10 @@ type CreateShareBody = z.infer<typeof createShareSchema>;
  */
 export const POST = withRateLimit(
   apiHandler(async (request: NextRequest) => {
-    const { orgId, userId } = await requireOrg();
-    const body = await parseBody(request, createShareSchema);
+    const [{ orgId, userId }, body] = await Promise.all([
+      requireOrg(),
+      parseBody(request, createShareSchema),
+    ]);
 
     const {
       target_type,
@@ -72,9 +79,12 @@ export const POST = withRateLimit(
     }
 
     if (normalizedShareType === 'password' && !password) {
-      return new Response('Password is required for password-protected shares', {
-        status: 400,
-      });
+      return new Response(
+        'Password is required for password-protected shares',
+        {
+          status: 400,
+        },
+      );
     }
 
     if (normalizedTargetType !== 'recording') {
@@ -89,8 +99,8 @@ export const POST = withRateLimit(
       expiresAt: expiresAt
         ? new Date(expiresAt)
         : expires_at
-        ? new Date(expires_at)
-        : undefined,
+          ? new Date(expires_at)
+          : undefined,
       maxViews: maxViews ?? max_views,
     };
 
@@ -98,7 +108,7 @@ export const POST = withRateLimit(
       normalizedTargetId,
       orgId,
       userId,
-      options
+      options,
     );
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -122,7 +132,7 @@ export const POST = withRateLimit(
       const { orgId } = await requireOrg();
       return orgId;
     },
-  }
+  },
 );
 
 /**

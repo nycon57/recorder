@@ -30,27 +30,83 @@ const shortcuts: KeyboardShortcut[] = [
   // Navigation
   { keys: ['Tab'], description: 'Switch between tabs', category: 'navigation' },
   { keys: ['Esc'], description: 'Close dialogs', category: 'navigation' },
-  { keys: ['?'], description: 'Show keyboard shortcuts', category: 'navigation' },
+  {
+    keys: ['?'],
+    description: 'Show keyboard shortcuts',
+    category: 'navigation',
+  },
 
   // Actions
   { keys: ['Cmd', 'D'], description: 'Download content', category: 'actions' },
-  { keys: ['Ctrl', 'D'], description: 'Download content (Windows)', category: 'actions' },
+  {
+    keys: ['Ctrl', 'D'],
+    description: 'Download content (Windows)',
+    category: 'actions',
+  },
   { keys: ['Cmd', 'E'], description: 'Edit details', category: 'actions' },
-  { keys: ['Ctrl', 'E'], description: 'Edit details (Windows)', category: 'actions' },
-  { keys: ['Cmd', 'F'], description: 'Search in transcript', category: 'actions' },
-  { keys: ['Ctrl', 'F'], description: 'Search in transcript (Windows)', category: 'actions' },
-  { keys: ['Cmd', 'Shift', 'R'], description: 'Reprocess content', category: 'actions' },
-  { keys: ['Ctrl', 'Shift', 'R'], description: 'Reprocess content (Windows)', category: 'actions' },
+  {
+    keys: ['Ctrl', 'E'],
+    description: 'Edit details (Windows)',
+    category: 'actions',
+  },
+  {
+    keys: ['Cmd', 'F'],
+    description: 'Search in transcript',
+    category: 'actions',
+  },
+  {
+    keys: ['Ctrl', 'F'],
+    description: 'Search in transcript (Windows)',
+    category: 'actions',
+  },
+  {
+    keys: ['Cmd', 'Shift', 'R'],
+    description: 'Reprocess content',
+    category: 'actions',
+  },
+  {
+    keys: ['Ctrl', 'Shift', 'R'],
+    description: 'Reprocess content (Windows)',
+    category: 'actions',
+  },
 
   // General
-  { keys: ['Cmd', 'K'], description: 'Open command palette', category: 'general' },
-  { keys: ['Ctrl', 'K'], description: 'Open command palette (Windows)', category: 'general' },
+  {
+    keys: ['Cmd', 'K'],
+    description: 'Open command palette',
+    category: 'general',
+  },
+  {
+    keys: ['Ctrl', 'K'],
+    description: 'Open command palette (Windows)',
+    category: 'general',
+  },
 ];
 
 interface KeyboardShortcutsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   contentType?: 'recording' | 'video' | 'audio' | 'document' | 'text' | null;
+}
+
+function formatShortcutKey(key: string) {
+  const keyMap: Record<string, string> = {
+    Cmd: '⌘',
+    Ctrl: 'Ctrl',
+    Shift: '⇧',
+    Alt: '⌥',
+    Space: 'Space',
+    '←': '←',
+    '→': '→',
+    '↑': '↑',
+    '↓': '↓',
+  };
+
+  return keyMap[key] || key;
+}
+
+function ShortcutKey({ value }: { value: string }) {
+  return <>{formatShortcutKey(value)}</>;
 }
 
 export default function KeyboardShortcutsDialog({
@@ -60,7 +116,10 @@ export default function KeyboardShortcutsDialog({
 }: KeyboardShortcutsDialogProps) {
   // Filter shortcuts based on content type
   const getRelevantShortcuts = () => {
-    const isMedia = contentType === 'recording' || contentType === 'video' || contentType === 'audio';
+    const isMedia =
+      contentType === 'recording' ||
+      contentType === 'video' ||
+      contentType === 'audio';
 
     return shortcuts.filter((shortcut) => {
       // Show playback controls only for media content
@@ -74,13 +133,16 @@ export default function KeyboardShortcutsDialog({
   const relevantShortcuts = getRelevantShortcuts();
 
   // Group shortcuts by category
-  const groupedShortcuts = relevantShortcuts.reduce((acc, shortcut) => {
-    if (!acc[shortcut.category]) {
-      acc[shortcut.category] = [];
-    }
-    acc[shortcut.category].push(shortcut);
-    return acc;
-  }, {} as Record<string, KeyboardShortcut[]>);
+  const groupedShortcuts = relevantShortcuts.reduce(
+    (acc, shortcut) => {
+      if (!acc[shortcut.category]) {
+        acc[shortcut.category] = [];
+      }
+      acc[shortcut.category].push(shortcut);
+      return acc;
+    },
+    {} as Record<string, KeyboardShortcut[]>,
+  );
 
   const categoryLabels: Record<string, string> = {
     playback: 'Playback Controls',
@@ -90,23 +152,6 @@ export default function KeyboardShortcutsDialog({
   };
 
   const categoryOrder = ['playback', 'navigation', 'actions', 'general'];
-
-  const renderKey = (key: string) => {
-    // Replace modifier key names with symbols
-    const keyMap: Record<string, string> = {
-      'Cmd': '⌘',
-      'Ctrl': 'Ctrl',
-      'Shift': '⇧',
-      'Alt': '⌥',
-      'Space': 'Space',
-      '←': '←',
-      '→': '→',
-      '↑': '↑',
-      '↓': '↓',
-    };
-
-    return keyMap[key] || key;
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -124,7 +169,8 @@ export default function KeyboardShortcutsDialog({
         <div className="space-y-6 mt-4">
           {categoryOrder.map((category) => {
             const categoryShortcuts = groupedShortcuts[category];
-            if (!categoryShortcuts || categoryShortcuts.length === 0) return null;
+            if (!categoryShortcuts || categoryShortcuts.length === 0)
+              return null;
 
             return (
               <div key={category}>
@@ -132,9 +178,9 @@ export default function KeyboardShortcutsDialog({
                   {categoryLabels[category]}
                 </h3>
                 <div className="space-y-2">
-                  {categoryShortcuts.map((shortcut, index) => (
+                  {categoryShortcuts.map((shortcut) => (
                     <div
-                      key={`${category}-${index}`}
+                      key={`${category}-${shortcut.description}`}
                       className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50 transition-colors"
                     >
                       <span className="text-sm text-foreground">
@@ -144,10 +190,12 @@ export default function KeyboardShortcutsDialog({
                         {shortcut.keys.map((key, keyIndex) => (
                           <React.Fragment key={keyIndex}>
                             {keyIndex > 0 && (
-                              <span className="text-xs text-muted-foreground mx-0.5">+</span>
+                              <span className="text-xs text-muted-foreground mx-0.5">
+                                +
+                              </span>
                             )}
                             <kbd className="px-2 py-1 text-xs font-semibold text-foreground bg-muted border border-border rounded">
-                              {renderKey(key)}
+                              <ShortcutKey value={key} />
                             </kbd>
                           </React.Fragment>
                         ))}
@@ -162,7 +210,11 @@ export default function KeyboardShortcutsDialog({
 
         <div className="mt-6 pt-4 border-t">
           <p className="text-xs text-muted-foreground text-center">
-            Press <kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted border border-border rounded">?</kbd> to show/hide this dialog
+            Press{' '}
+            <kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted border border-border rounded">
+              ?
+            </kbd>{' '}
+            to show/hide this dialog
           </p>
         </div>
       </DialogContent>

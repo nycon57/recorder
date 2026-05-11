@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, test } from '@jest/globals';
+
 import { getDriftLevel } from '../drift-indicator';
 
 describe('getDriftLevel', () => {

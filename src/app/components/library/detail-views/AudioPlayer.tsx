@@ -41,6 +41,7 @@ interface AudioPlayerProps {
   transcript?: Transcript | null;
   title?: string | null;
   duration?: number | null;
+  ref?: React.Ref<HTMLAudioElement | null>;
 }
 
 // Component that loads audio and uses player context
@@ -52,7 +53,8 @@ function AudioPlayerContent({
   transcript?: Transcript | null;
 }) {
   const player = useAudioPlayer();
-  const [highlightedWordIndex, setHighlightedWordIndex] = React.useState<number>(-1);
+  const [highlightedWordIndex, setHighlightedWordIndex] =
+    React.useState<number>(-1);
 
   // Load audio on mount
   React.useEffect(() => {
@@ -67,11 +69,15 @@ function AudioPlayerContent({
     if (!player.ref.current) return;
 
     const interval = setInterval(() => {
-      if (player.ref.current && transcript?.words_json && Array.isArray(transcript.words_json)) {
+      if (
+        player.ref.current &&
+        transcript?.words_json &&
+        Array.isArray(transcript.words_json)
+      ) {
         const currentTime = player.ref.current.currentTime;
         const words = transcript.words_json;
         const currentWordIndex = words.findIndex(
-          (word) => currentTime >= word.start && currentTime <= word.end
+          (word) => currentTime >= word.start && currentTime <= word.end,
         );
         setHighlightedWordIndex(currentWordIndex);
       }
@@ -114,16 +120,28 @@ function AudioPlayerContent({
       </div>
 
       {/* Interactive Transcript */}
-      {transcript?.words_json && Array.isArray(transcript.words_json) && transcript.words_json.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-border">
-          <h3 className="text-sm font-semibold mb-3">Interactive Transcript</h3>
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <p className="leading-relaxed whitespace-pre-wrap">
-              {transcript.words_json.map((word, index) => (
-                <React.Fragment key={index}>
-                  <span
-                    onClick={() => handleWordClick(word)}
-                    className={`
+      {transcript?.words_json &&
+        Array.isArray(transcript.words_json) &&
+        transcript.words_json.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-border">
+            <h3 className="text-sm font-semibold mb-3">
+              Interactive Transcript
+            </h3>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <p className="leading-relaxed whitespace-pre-wrap">
+                {transcript.words_json.map((word, index) => (
+                  <React.Fragment key={JSON.stringify(word)}>
+                    <span
+                      onClick={() => handleWordClick(word)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleWordClick(word);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      className={`
                       cursor-pointer transition-colors duration-150
                       ${
                         index === highlightedWordIndex
@@ -131,20 +149,19 @@ function AudioPlayerContent({
                           : 'hover:bg-muted rounded px-1'
                       }
                     `}
-                    title={`${word.start.toFixed(1)}s - ${word.end.toFixed(1)}s`}
-                  >
-                    {word.word}
-                  </span>
-                  {' '}
-                </React.Fragment>
-              ))}
+                      title={`${word.start.toFixed(1)}s - ${word.end.toFixed(1)}s`}
+                    >
+                      {word.word}
+                    </span>{' '}
+                  </React.Fragment>
+                ))}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Click on any word to jump to that point in the audio
             </p>
           </div>
-          <p className="text-xs text-muted-foreground mt-3">
-            Click on any word to jump to that point in the audio
-          </p>
-        </div>
-      )}
+        )}
     </>
   );
 }
@@ -156,8 +173,8 @@ function AudioPlayerWithRef({
   transcript,
   title,
   duration,
-  forwardedRef
-}: AudioPlayerProps & { forwardedRef: React.ForwardedRef<HTMLAudioElement | null> }) {
+  forwardedRef,
+}: AudioPlayerProps & { forwardedRef?: React.Ref<HTMLAudioElement | null> }) {
   const player = useAudioPlayer();
 
   // Expose the audio element via the forwarded ref
@@ -207,47 +224,50 @@ function AudioPlayerWithRef({
 
   return (
     <div className="space-y-4">
-        {/* Audio Player Card */}
-        <Card className="overflow-hidden">
-          <CardContent className="p-6 space-y-4">
-            {/* Header Info */}
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300">
-                  Audio
-                </Badge>
-                {duration && (
-                  <span className="text-sm text-muted-foreground">
-                    {formatDuration(duration)}
-                  </span>
-                )}
-              </div>
-              <Button
-                size="sm"
+      {/* Audio Player Card */}
+      <Card className="overflow-hidden">
+        <CardContent className="p-6 space-y-4">
+          {/* Header Info */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Badge
                 variant="outline"
-                onClick={handleDownload}
-                disabled={!audioUrl}
+                className="bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300"
               >
-                <Download className="size-4" />
-                Download
-              </Button>
+                Audio
+              </Badge>
+              {duration && (
+                <span className="text-sm text-muted-foreground">
+                  {formatDuration(duration)}
+                </span>
+              )}
             </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleDownload}
+              disabled={!audioUrl}
+            >
+              <Download className="size-4" />
+              Download
+            </Button>
+          </div>
 
-            {/* Audio Player with Waveform and Transcript */}
-            <AudioPlayerContent audioUrl={audioUrl} transcript={transcript} />
-          </CardContent>
-        </Card>
-      </div>
+          {/* Audio Player with Waveform and Transcript */}
+          <AudioPlayerContent audioUrl={audioUrl} transcript={transcript} />
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
-const AudioPlayer = React.forwardRef<HTMLAudioElement | null, AudioPlayerProps>((props, ref) => {
+function AudioPlayer({ ref, ...props }: AudioPlayerProps) {
   return (
     <AudioPlayerProvider>
       <AudioPlayerWithRef {...props} forwardedRef={ref} />
     </AudioPlayerProvider>
   );
-});
+}
 
 AudioPlayer.displayName = 'AudioPlayer';
 

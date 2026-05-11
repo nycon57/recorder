@@ -29,8 +29,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * Create new conversation
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireOrg();
-  const body = await request.json();
+  const [{ orgId, userId }, body] = await Promise.all([
+    requireOrg(),
+    request.json(),
+  ]);
   const { title } = body;
 
   const conversationId = await createConversation(orgId, userId, title);

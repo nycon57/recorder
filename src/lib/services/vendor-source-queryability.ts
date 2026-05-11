@@ -21,9 +21,12 @@ export async function filterQueryableVendorSourceRows<
 >(rows: T[], supabase: SupabaseLike = supabaseAdmin): Promise<T[]> {
   const sourceIds = Array.from(
     new Set(
-      rows
-        .map((row) => row.vendor_source_id)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      rows.flatMap((__item, __index, __array) => {
+        const __mapped = __item.vendor_source_id;
+        return typeof __mapped === 'string' && __mapped.length > 0
+          ? [__mapped]
+          : [];
+      }),
     ),
   );
 
@@ -31,9 +34,11 @@ export async function filterQueryableVendorSourceRows<
     return rows;
   }
 
-  const { data, error } = await (supabase
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .from('vendor_doc_sources') as any)
+  const { data, error } = await (
+    supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .from('vendor_doc_sources') as any
+  )
     .select('id, lifecycle, retired_at, terms_review_status, official_source')
     .in('id', sourceIds);
 
@@ -44,9 +49,10 @@ export async function filterQueryableVendorSourceRows<
   }
 
   const queryableSourceIds = new Set(
-    ((data ?? []) as QueryabilitySourceRow[])
-      .filter(isVendorSourceQueryable)
-      .map((source) => source.id),
+    ((data ?? []) as QueryabilitySourceRow[]).flatMap(
+      (__item, __index, __array) =>
+        isVendorSourceQueryable(__item) ? [__item.id] : [],
+    ),
   );
 
   return rows.filter((row) => {

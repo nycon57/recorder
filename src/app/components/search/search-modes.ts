@@ -1,6 +1,6 @@
 export const SEARCH_UI_DEFAULT_MODE = 'answer' as const;
 
-export const SEARCH_UI_MODES = [
+const SEARCH_UI_MODES = [
   {
     mode: 'answer',
     label: 'Answer',

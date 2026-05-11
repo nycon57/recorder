@@ -1,13 +1,29 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { CheckCircle2, Clock, TrendingUp, Calendar, PlayCircle } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  CheckCircle2,
+  Clock,
+  TrendingUp,
+  Calendar,
+  PlayCircle,
+} from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
 import { Skeleton } from '@/app/components/ui/skeleton';
-import { formatCurrency, formatDate, getRelativeTime } from '@/lib/utils/formatting';
+import {
+  formatCurrency,
+  formatDate,
+  getRelativeTime,
+} from '@/lib/utils/formatting';
 
 interface ImplementationStats {
   total: number;
@@ -42,51 +58,23 @@ interface TrackerData {
 }
 
 export default function ImplementationTracker() {
-  const [data, setData] = useState<TrackerData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { data, isLoading, error } = useQuery<TrackerData, Error>({
+    queryKey: ['analytics', 'recommendations', 'tracker'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch('/api/analytics/recommendations/tracker', {
+        signal,
+      });
 
-  useEffect(() => {
-    const fetchTrackerData = async () => {
-      // Create new AbortController for this fetch
-      abortControllerRef.current = new AbortController();
-
-      try {
-        const response = await fetch('/api/analytics/recommendations/tracker', {
-          signal: abortControllerRef.current.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch implementation tracker data');
-        }
-
-        const { data: trackerData } = await response.json();
-        setData(trackerData);
-        setError(null);
-      } catch (err) {
-        // Ignore abort errors
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-
-        console.error('Error fetching tracker data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load tracker data');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch implementation tracker data');
       }
-    };
 
-    fetchTrackerData();
+      const { data: trackerData } = await response.json();
+      return trackerData;
+    },
+  });
 
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <Card>
@@ -96,8 +84,12 @@ export default function ImplementationTracker() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-24 w-full" />
+              {[
+                'implementation-skeleton-1',
+                'implementation-skeleton-2',
+                'implementation-skeleton-3',
+              ].map((skeletonId) => (
+                <Skeleton key={skeletonId} className="h-24 w-full" />
               ))}
             </div>
           </CardContent>
@@ -110,7 +102,9 @@ export default function ImplementationTracker() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading tracker data: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading tracker data: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -126,7 +120,7 @@ export default function ImplementationTracker() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
+            <TrendingUp className="size-5" />
             Implementation Progress
           </CardTitle>
           <CardDescription>
@@ -138,17 +132,20 @@ export default function ImplementationTracker() {
             {/* Overall Progress Bar */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Overall Completion</span>
-                <span className="font-medium">{data.stats.completionRate.toFixed(1)}%</span>
+                <span className="text-muted-foreground">
+                  Overall Completion
+                </span>
+                <span className="font-medium">
+                  {data.stats.completionRate.toFixed(1)}%
+                </span>
               </div>
               <Progress value={data.stats.completionRate} className="h-3" />
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>
-                  {data.stats.completed} of {data.stats.total} recommendations completed
+                  {data.stats.completed} of {data.stats.total} recommendations
+                  completed
                 </span>
-                <span>
-                  {data.stats.inProgress} in progress
-                </span>
+                <span>{data.stats.inProgress} in progress</span>
               </div>
             </div>
 
@@ -157,26 +154,28 @@ export default function ImplementationTracker() {
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Completed</p>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <CheckCircle2 className="size-4 text-green-600" />
                   <p className="text-2xl font-bold">{data.stats.completed}</p>
                 </div>
               </div>
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">In Progress</p>
                 <div className="flex items-center gap-2">
-                  <PlayCircle className="h-4 w-4 text-blue-600" />
+                  <PlayCircle className="size-4 text-blue-600" />
                   <p className="text-2xl font-bold">{data.stats.inProgress}</p>
                 </div>
               </div>
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Pending</p>
                 <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-yellow-600" />
+                  <Clock className="size-4 text-yellow-600" />
                   <p className="text-2xl font-bold">{data.stats.pending}</p>
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Savings Realized</p>
+                <p className="text-xs text-muted-foreground">
+                  Savings Realized
+                </p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatCurrency(data.stats.totalSavingsRealized)}
                 </p>
@@ -191,12 +190,10 @@ export default function ImplementationTracker() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <PlayCircle className="h-5 w-5" />
+              <PlayCircle className="size-5" />
               Currently Implementing
             </CardTitle>
-            <CardDescription>
-              Active optimization initiatives
-            </CardDescription>
+            <CardDescription>Active optimization initiatives</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -208,7 +205,10 @@ export default function ImplementationTracker() {
                       <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                         <span>Started {formatDate(item.startedAt)}</span>
                         <span>•</span>
-                        <span>Est. completion: {formatDate(item.estimatedCompletion)}</span>
+                        <span>
+                          Est. completion:{' '}
+                          {formatDate(item.estimatedCompletion)}
+                        </span>
                       </div>
                     </div>
                     <Badge variant="secondary" className="shrink-0">
@@ -235,7 +235,7 @@ export default function ImplementationTracker() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
+              <Calendar className="size-5" />
               Recent Completions
             </CardTitle>
             <CardDescription>
@@ -252,7 +252,7 @@ export default function ImplementationTracker() {
                   }`}
                 >
                   <div className="flex items-start gap-3 flex-1">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                    <CheckCircle2 className="size-5 text-green-600 mt-0.5 shrink-0" />
                     <div className="space-y-1">
                       <p className="text-sm font-medium">{item.title}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -266,7 +266,9 @@ export default function ImplementationTracker() {
                     <p className="text-sm font-semibold text-green-600">
                       {formatCurrency(item.actualSavings)}
                     </p>
-                    <p className="text-xs text-muted-foreground">annual savings</p>
+                    <p className="text-xs text-muted-foreground">
+                      annual savings
+                    </p>
                   </div>
                 </div>
               ))}
@@ -280,9 +282,11 @@ export default function ImplementationTracker() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-12 text-muted-foreground">
-              <Clock className="h-12 w-12 mx-auto mb-4" />
+              <Clock className="size-12 mx-auto mb-4" />
               <p className="text-sm">No implementation activity yet</p>
-              <p className="text-xs mt-1">Start implementing recommendations to track your progress here</p>
+              <p className="text-xs mt-1">
+                Start implementing recommendations to track your progress here
+              </p>
             </div>
           </CardContent>
         </Card>

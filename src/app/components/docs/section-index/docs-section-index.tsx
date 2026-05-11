@@ -18,7 +18,7 @@ export function DocsSectionIndex({ section, pages }: DocsSectionIndexProps) {
         <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.1em] text-[color:var(--docs-text-muted)]">
           {section.id}
         </p>
-        <h1 className="mb-3 font-[family-name:var(--font-space-grotesk)] text-3xl font-bold text-[color:var(--docs-text-primary)]">
+        <h1 className="mb-3 font-[family-name:var(--font-space-grotesk)] text-3xl font-semibold text-[color:var(--docs-text-primary)]">
           {section.title}
         </h1>
         {section.description && (

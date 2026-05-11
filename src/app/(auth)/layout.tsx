@@ -1,6 +1,6 @@
 'use client';
 
-import { motion, useReducedMotion } from 'motion/react';
+import { m, useReducedMotion } from 'motion/react';
 
 /**
  * Auth Layout - "Aurora Gateway"
@@ -23,15 +23,20 @@ export default function AuthLayout({
       {/* Aurora Background Layer */}
       <div className="absolute inset-0 overflow-hidden">
         {/* Primary glow orb - top right */}
-        <motion.div
-          className="absolute -top-32 -right-32 w-[600px] h-[600px] rounded-full"
+        <m.div
+          className="absolute -top-32 -right-32 size-[600px] rounded-full"
           style={{
-            background: 'radial-gradient(circle, rgba(0,223,130,0.15) 0%, rgba(0,223,130,0.05) 40%, transparent 70%)',
+            background:
+              'radial-gradient(circle, rgba(0,223,130,0.15) 0%, rgba(0,223,130,0.05) 40%, transparent 70%)',
           }}
-          animate={shouldReduceMotion ? {} : {
-            scale: [1, 1.1, 1],
-            opacity: [0.6, 0.8, 0.6],
-          }}
+          animate={
+            shouldReduceMotion
+              ? {}
+              : {
+                  scale: [1, 1.1, 1],
+                  opacity: [0.6, 0.8, 0.6],
+                }
+          }
           transition={{
             duration: 8,
             repeat: Infinity,
@@ -40,15 +45,20 @@ export default function AuthLayout({
         />
 
         {/* Secondary glow orb - bottom left */}
-        <motion.div
-          className="absolute -bottom-48 -left-48 w-[700px] h-[700px] rounded-full"
+        <m.div
+          className="absolute -bottom-48 -left-48 size-[700px] rounded-full"
           style={{
-            background: 'radial-gradient(circle, rgba(44,194,149,0.12) 0%, rgba(44,194,149,0.04) 40%, transparent 70%)',
+            background:
+              'radial-gradient(circle, rgba(44,194,149,0.12) 0%, rgba(44,194,149,0.04) 40%, transparent 70%)',
           }}
-          animate={shouldReduceMotion ? {} : {
-            scale: [1, 1.15, 1],
-            opacity: [0.5, 0.7, 0.5],
-          }}
+          animate={
+            shouldReduceMotion
+              ? {}
+              : {
+                  scale: [1, 1.15, 1],
+                  opacity: [0.5, 0.7, 0.5],
+                }
+          }
           transition={{
             duration: 10,
             repeat: Infinity,
@@ -58,17 +68,22 @@ export default function AuthLayout({
         />
 
         {/* Accent glow orb - center floating */}
-        <motion.div
-          className="absolute top-1/2 left-1/3 w-[400px] h-[400px] rounded-full"
+        <m.div
+          className="absolute top-1/2 left-1/3 size-[400px] rounded-full"
           style={{
-            background: 'radial-gradient(circle, rgba(3,98,76,0.2) 0%, rgba(3,98,76,0.05) 50%, transparent 70%)',
+            background:
+              'radial-gradient(circle, rgba(3,98,76,0.2) 0%, rgba(3,98,76,0.05) 50%, transparent 70%)',
           }}
-          animate={shouldReduceMotion ? {} : {
-            x: [0, 100, 0],
-            y: [0, -50, 0],
-            scale: [1, 1.2, 1],
-            opacity: [0.4, 0.6, 0.4],
-          }}
+          animate={
+            shouldReduceMotion
+              ? {}
+              : {
+                  x: [0, 100, 0],
+                  y: [0, -50, 0],
+                  scale: [1, 1.2, 1],
+                  opacity: [0.4, 0.6, 0.4],
+                }
+          }
           transition={{
             duration: 15,
             repeat: Infinity,
@@ -80,29 +95,39 @@ export default function AuthLayout({
         {/* Small floating particles */}
         {!shouldReduceMotion && (
           <>
-            <motion.div
-              className="absolute top-1/4 right-1/4 w-2 h-2 rounded-full bg-accent/40"
+            <m.div
+              className="absolute top-1/4 right-1/4 size-2 rounded-full bg-accent/40"
               animate={{
                 y: [0, -20, 0],
                 opacity: [0.4, 0.8, 0.4],
               }}
               transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
             />
-            <motion.div
-              className="absolute top-2/3 right-1/3 w-1.5 h-1.5 rounded-full bg-secondary/30"
+            <m.div
+              className="absolute top-2/3 right-1/3 size-1.5 rounded-full bg-secondary/30"
               animate={{
                 y: [0, -15, 0],
                 opacity: [0.3, 0.6, 0.3],
               }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+              transition={{
+                duration: 5,
+                repeat: Infinity,
+                ease: 'easeInOut',
+                delay: 1,
+              }}
             />
-            <motion.div
-              className="absolute top-1/3 left-1/4 w-1 h-1 rounded-full bg-accent/50"
+            <m.div
+              className="absolute top-1/3 left-1/4 size-1 rounded-full bg-accent/50"
               animate={{
                 y: [0, -10, 0],
                 opacity: [0.5, 0.9, 0.5],
               }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+              transition={{
+                duration: 3,
+                repeat: Infinity,
+                ease: 'easeInOut',
+                delay: 2,
+              }}
             />
           </>
         )}
@@ -123,15 +148,14 @@ export default function AuthLayout({
         <div
           className="absolute inset-0"
           style={{
-            background: 'radial-gradient(ellipse at center, transparent 0%, rgba(3,14,16,0.4) 100%)',
+            background:
+              'radial-gradient(ellipse at center, transparent 0%, rgba(3,14,16,0.4) 100%)',
           }}
         />
       </div>
 
       {/* Content Layer */}
-      <div className="relative z-10">
-        {children}
-      </div>
+      <div className="relative z-10">{children}</div>
     </div>
   );
 }

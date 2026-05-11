@@ -1,4 +1,5 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
 import {
   asLightweightSupabaseClient,
   type LightweightSupabaseClient,

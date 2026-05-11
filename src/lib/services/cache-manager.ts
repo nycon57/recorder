@@ -11,8 +11,9 @@
  * - Performance monitoring
  */
 
-import { Redis } from '@upstash/redis';
 import crypto from 'crypto';
+
+import { Redis } from '@upstash/redis';
 
 // Initialize Upstash Redis client
 const redis = new Redis({
@@ -23,7 +24,7 @@ const redis = new Redis({
 /**
  * Cache key generators
  */
-export const CacheKeys = {
+const CacheKeys = {
   // Library cache keys
   // SECURITY: Use SHA-256 instead of MD5 for cache key generation
   libraryListing: (orgId: string, filters: any) =>
@@ -45,15 +46,12 @@ export const CacheKeys = {
     `search:${orgId}:${type}:${crypto.createHash('sha256').update(query).digest('hex')}`,
 
   // User/Org cache keys
-  orgSettings: (orgId: string) =>
-    `org:settings:${orgId}`,
+  orgSettings: (orgId: string) => `org:settings:${orgId}`,
 
-  userProfile: (userId: string) =>
-    `user:profile:${userId}`,
+  userProfile: (userId: string) => `user:profile:${userId}`,
 
   // Tags cache
-  tagsList: (orgId: string) =>
-    `tags:list:${orgId}`,
+  tagsList: (orgId: string) => `tags:list:${orgId}`,
 };
 
 /**
@@ -61,21 +59,21 @@ export const CacheKeys = {
  */
 export const CacheTTL = {
   // Short-lived caches
-  searchResults: 300,        // 5 minutes
-  dashboardRecent: 300,      // 5 minutes
+  searchResults: 300, // 5 minutes
+  dashboardRecent: 300, // 5 minutes
 
   // Medium-lived caches
-  libraryListing: 600,       // 10 minutes
-  dashboardStats: 600,       // 10 minutes
-  tagsList: 600,             // 10 minutes
+  libraryListing: 600, // 10 minutes
+  dashboardStats: 600, // 10 minutes
+  tagsList: 600, // 10 minutes
 
   // Long-lived caches
-  libraryItem: 900,          // 15 minutes
-  orgSettings: 1800,         // 30 minutes
-  userProfile: 3600,         // 1 hour
+  libraryItem: 900, // 15 minutes
+  orgSettings: 1800, // 30 minutes
+  userProfile: 3600, // 1 hour
 
   // Performance metrics
-  metrics: 3600,             // 1 hour
+  metrics: 3600, // 1 hour
 };
 
 /**
@@ -115,7 +113,8 @@ class CacheStatTracker {
   }
 
   getStats() {
-    const hitRate = this.stats.hits / (this.stats.hits + this.stats.misses) || 0;
+    const hitRate =
+      this.stats.hits / (this.stats.hits + this.stats.misses) || 0;
     const avgLatency = this.stats.totalLatency / this.stats.operationCount || 0;
 
     return {
@@ -149,7 +148,7 @@ export async function getCached<T>(
     forceRefresh?: boolean;
     skipCache?: boolean;
     compress?: boolean;
-  }
+  },
 ): Promise<T> {
   const startTime = Date.now();
 
@@ -187,12 +186,11 @@ export async function getCached<T>(
     const data = await fetcher();
 
     // Set in cache (fire and forget for performance)
-    setCached(key, data, ttl).catch(error => {
+    setCached(key, data, ttl).catch((error) => {
       console.error('[Cache] Error setting cache:', error);
     });
 
     return data;
-
   } catch (error) {
     cacheStats.recordError();
     console.error('[Cache] Error accessing cache:', error);
@@ -208,7 +206,7 @@ export async function getCached<T>(
 export async function setCached<T>(
   key: string,
   value: T,
-  ttl: number = 300
+  ttl: number = 300,
 ): Promise<void> {
   try {
     await redis.setex(key, ttl, value as any);
@@ -221,32 +219,36 @@ export async function setCached<T>(
 /**
  * Invalidate cache by pattern
  */
-export async function invalidateCache(pattern: string): Promise<number> {
+async function invalidateCache(pattern: string): Promise<number> {
   try {
     // For Upstash, we need to use scan to find matching keys
-    const keys: string[] = [];
-    let cursor = 0;
-
-    do {
+    const scanKeys = async (
+      cursor = 0,
+      keys: string[] = [],
+    ): Promise<string[]> => {
       const result = await redis.scan(cursor, {
         match: pattern,
         count: 100,
       });
 
-      cursor = typeof result[0] === 'string' ? parseInt(result[0], 10) : result[0];
-      keys.push(...(result[1] || []));
-    } while (cursor !== 0);
+      const nextCursor =
+        typeof result[0] === 'string' ? parseInt(result[0], 10) : result[0];
+      const nextKeys = keys.concat(result[1] || []);
+
+      return nextCursor === 0 ? nextKeys : scanKeys(nextCursor, nextKeys);
+    };
+
+    const keys = await scanKeys();
 
     if (keys.length === 0) {
       return 0;
     }
 
     // Delete all matching keys
-    await Promise.all(keys.map(key => redis.del(key)));
+    await Promise.all(keys.map((key) => redis.del(key)));
 
     console.log(`[Cache] Invalidated ${keys.length} keys matching ${pattern}`);
     return keys.length;
-
   } catch (error) {
     console.error('[Cache] Error invalidating cache:', error);
     return 0;
@@ -256,7 +258,7 @@ export async function invalidateCache(pattern: string): Promise<number> {
 /**
  * Invalidate all caches for an organization
  */
-export async function invalidateOrgCache(orgId: string): Promise<void> {
+async function invalidateOrgCache(orgId: string): Promise<void> {
   const patterns = [
     `library:${orgId}:*`,
     `dashboard:*:${orgId}:*`,
@@ -265,42 +267,50 @@ export async function invalidateOrgCache(orgId: string): Promise<void> {
     `tags:list:${orgId}`,
   ];
 
-  await Promise.all(patterns.map(pattern => invalidateCache(pattern)));
+  await Promise.all(patterns.map((pattern) => invalidateCache(pattern)));
 }
 
 /**
  * Cache warming strategies
  */
-export class CacheWarmer {
+class CacheWarmer {
   /**
    * Warm dashboard stats cache
    */
   static async warmDashboardStats(orgId: string): Promise<void> {
     const periods = ['week', 'month', 'year', 'all'];
 
-    await Promise.all(periods.map(async (period) => {
-      const key = CacheKeys.dashboardStats(orgId, period);
+    await Promise.all(
+      periods.map(async (period) => {
+        const key = CacheKeys.dashboardStats(orgId, period);
 
-      try {
-        // Check if already cached
-        const exists = await redis.exists(key);
-        if (exists) return;
+        try {
+          // Check if already cached
+          const exists = await redis.exists(key);
+          if (exists) return;
 
-        // Fetch and cache stats
-        const response = await fetch(`/api/dashboard/stats?period=${period}`, {
-          headers: {
-            'x-org-id': orgId,
-          },
-        });
+          // Fetch and cache stats
+          const response = await fetch(
+            `/api/dashboard/stats?period=${period}`,
+            {
+              headers: {
+                'x-org-id': orgId,
+              },
+            },
+          );
 
-        if (response.ok) {
-          const data = await response.json();
-          await setCached(key, data, CacheTTL.dashboardStats);
+          if (response.ok) {
+            const data = await response.json();
+            await setCached(key, data, CacheTTL.dashboardStats);
+          }
+        } catch (error) {
+          console.error(
+            `[CacheWarmer] Error warming dashboard stats for ${period}:`,
+            error,
+          );
         }
-      } catch (error) {
-        console.error(`[CacheWarmer] Error warming dashboard stats for ${period}:`, error);
-      }
-    }));
+      }),
+    );
   }
 
   /**
@@ -315,36 +325,38 @@ export class CacheWarmer {
       { limit: 20 }, // First page
     ];
 
-    await Promise.all(commonFilters.map(async (filters) => {
-      const key = CacheKeys.libraryListing(orgId, filters);
+    await Promise.all(
+      commonFilters.map(async (filters) => {
+        const key = CacheKeys.libraryListing(orgId, filters);
 
-      try {
-        const exists = await redis.exists(key);
-        if (exists) return;
+        try {
+          const exists = await redis.exists(key);
+          if (exists) return;
 
-        // Build query string
-        const params = new URLSearchParams(filters as any);
-        const response = await fetch(`/api/library?${params}`, {
-          headers: {
-            'x-org-id': orgId,
-          },
-        });
+          // Build query string
+          const params = new URLSearchParams(filters as any);
+          const response = await fetch(`/api/library?${params}`, {
+            headers: {
+              'x-org-id': orgId,
+            },
+          });
 
-        if (response.ok) {
-          const data = await response.json();
-          await setCached(key, data, CacheTTL.libraryListing);
+          if (response.ok) {
+            const data = await response.json();
+            await setCached(key, data, CacheTTL.libraryListing);
+          }
+        } catch (error) {
+          console.error('[CacheWarmer] Error warming library cache:', error);
         }
-      } catch (error) {
-        console.error('[CacheWarmer] Error warming library cache:', error);
-      }
-    }));
+      }),
+    );
   }
 }
 
 /**
  * Batch cache operations for efficiency
  */
-export class BatchCache {
+class BatchCache {
   private operations: Array<{
     type: 'get' | 'set' | 'del';
     key: string;
@@ -417,14 +429,14 @@ export class BatchCache {
     this.operations = [];
 
     // Group operations by type
-    const getOps = ops.filter(op => op.type === 'get');
-    const setOps = ops.filter(op => op.type === 'set');
-    const delOps = ops.filter(op => op.type === 'del');
+    const getOps = ops.filter((op) => op.type === 'get');
+    const setOps = ops.filter((op) => op.type === 'set');
+    const delOps = ops.filter((op) => op.type === 'del');
 
     try {
       // Execute batch gets
       if (getOps.length > 0) {
-        const keys = getOps.map(op => op.key);
+        const keys = getOps.map((op) => op.key);
         const values = await redis.mget(...keys);
 
         getOps.forEach((op, index) => {
@@ -436,37 +448,36 @@ export class BatchCache {
       if (setOps.length > 0) {
         const pipeline = redis.pipeline();
 
-        setOps.forEach(op => {
+        setOps.forEach((op) => {
           pipeline.setex(op.key, op.ttl || 300, op.value);
         });
 
         await pipeline.exec();
 
-        setOps.forEach(op => {
+        setOps.forEach((op) => {
           op.resolve(undefined);
         });
       }
 
       // Execute batch deletes
       if (delOps.length > 0) {
-        const keys = delOps.map(op => op.key);
+        const keys = delOps.map((op) => op.key);
         await redis.del(...keys);
 
-        delOps.forEach(op => {
+        delOps.forEach((op) => {
           op.resolve(undefined);
         });
       }
-
     } catch (error) {
       // Reject all operations in this batch
-      ops.forEach(op => {
+      ops.forEach((op) => {
         op.reject(error);
       });
     }
   }
 }
 
-export const batchCache = new BatchCache();
+const batchCache = new BatchCache();
 
 /**
  * Performance monitoring for cache operations
@@ -505,8 +516,3 @@ export async function getCacheMetrics(): Promise<{
 export function resetCacheStats() {
   cacheStats.reset();
 }
-
-/**
- * Export singleton instance for direct Redis access if needed
- */
-export { redis };

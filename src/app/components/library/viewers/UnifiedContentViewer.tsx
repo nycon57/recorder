@@ -11,22 +11,22 @@ const PDFDocumentViewer = dynamic(
   {
     loading: () => (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     ),
-  }
+  },
 );
 
 const TextNoteViewer = dynamic(
-  () => import('@/app/components/library/detail-views/TextNoteViewer')
+  () => import('@/app/components/library/detail-views/TextNoteViewer'),
 );
 
 const AudioPlayer = dynamic(
-  () => import('@/app/components/library/detail-views/AudioPlayer')
+  () => import('@/app/components/library/detail-views/AudioPlayer'),
 );
 
 const RichTextViewer = dynamic(
-  () => import('@/app/components/library/viewers/RichTextViewer')
+  () => import('@/app/components/library/viewers/RichTextViewer'),
 );
 
 // RecordingPlayer will be imported for video playback
@@ -58,7 +58,7 @@ const isTranscriptWords = (words: unknown): words is TranscriptWord[] =>
       word !== null &&
       typeof (word as TranscriptWord).word === 'string' &&
       typeof (word as TranscriptWord).start === 'number' &&
-      typeof (word as TranscriptWord).end === 'number'
+      typeof (word as TranscriptWord).end === 'number',
   );
 
 interface UnifiedContentViewerProps {
@@ -103,110 +103,138 @@ export default function UnifiedContentViewer({
   transcript,
   onContentUpdate,
 }: UnifiedContentViewerProps) {
-  // Determine which viewer to render based on content type
-  const renderViewer = () => {
-    switch (contentType) {
-      case 'video':
-        // TODO: Import and use RecordingPlayer component
+  return (
+    <div className="unified-content-viewer">
+      <UnifiedContentViewerBody
+        contentType={contentType}
+        fileType={fileType}
+        recordingId={recordingId}
+        audioUrl={audioUrl}
+        downloadUrl={downloadUrl}
+        documentUrl={documentUrl}
+        textContent={textContent}
+        title={title}
+        duration={duration}
+        fileSize={fileSize}
+        originalFilename={originalFilename}
+        transcript={transcript}
+        onContentUpdate={onContentUpdate}
+      />
+    </div>
+  );
+}
+
+function UnifiedContentViewerBody({
+  contentType,
+  fileType,
+  recordingId,
+  audioUrl,
+  downloadUrl,
+  documentUrl,
+  textContent,
+  title,
+  duration,
+  fileSize,
+  originalFilename,
+  transcript,
+  onContentUpdate,
+}: UnifiedContentViewerProps) {
+  switch (contentType) {
+    case 'video':
+      // TODO: Import and use RecordingPlayer component
+      return (
+        <div className="aspect-video bg-zinc-950 rounded-lg flex items-center justify-center">
+          <p className="text-white">Video Player (to be integrated)</p>
+        </div>
+      );
+
+    case 'audio': {
+      if (!audioUrl) {
         return (
-          <div className="aspect-video bg-black rounded-lg flex items-center justify-center">
-            <p className="text-white">Video Player (to be integrated)</p>
+          <div className="p-12 text-center text-muted-foreground">
+            Audio file not available
           </div>
         );
+      }
+      const audioTranscript = transcript
+        ? {
+            ...transcript,
+            words_json: isTranscriptWords(transcript.words_json)
+              ? transcript.words_json
+              : null,
+          }
+        : null;
+      return (
+        <AudioPlayer
+          audioUrl={audioUrl}
+          downloadUrl={downloadUrl}
+          transcript={audioTranscript}
+          title={title}
+          duration={duration}
+        />
+      );
+    }
 
-      case 'audio': {
-        if (!audioUrl) {
+    case 'document':
+      // Handle PDF vs DOCX differently
+      if (fileType === 'pdf') {
+        if (!documentUrl) {
           return (
             <div className="p-12 text-center text-muted-foreground">
-              Audio file not available
+              PDF document not available
             </div>
           );
         }
-        const audioTranscript = transcript
-          ? {
-              ...transcript,
-              words_json: isTranscriptWords(transcript.words_json)
-                ? transcript.words_json
-                : null,
-            }
-          : null;
         return (
-          <AudioPlayer
-            audioUrl={audioUrl}
-            downloadUrl={downloadUrl}
-            transcript={audioTranscript}
+          <PDFDocumentViewer
+            documentUrl={documentUrl}
             title={title}
-            duration={duration}
+            fileSize={fileSize}
+            originalFilename={originalFilename}
           />
         );
-      }
-
-      case 'document':
-        // Handle PDF vs DOCX differently
-        if (fileType === 'pdf') {
-          if (!documentUrl) {
-            return (
-              <div className="p-12 text-center text-muted-foreground">
-                PDF document not available
-              </div>
-            );
-          }
-          return (
-            <PDFDocumentViewer
-              documentUrl={documentUrl}
-              title={title}
-              fileSize={fileSize}
-              originalFilename={originalFilename}
-            />
-          );
-        } else if (fileType === 'docx' || fileType === 'doc') {
-          // For DOCX, use RichTextViewer to display extracted text
-          if (!textContent) {
-            return (
-              <div className="p-12 text-center text-muted-foreground">
-                Text extraction in progress...
-              </div>
-            );
-          }
-          return (
-            <RichTextViewer
-              content={textContent}
-              title={title}
-            />
-          );
-        }
-        break;
-
-      case 'text':
+      } else if (fileType === 'docx' || fileType === 'doc') {
+        // For DOCX, use RichTextViewer to display extracted text
         if (!textContent) {
           return (
             <div className="p-12 text-center text-muted-foreground">
-              Text content not available
+              Text extraction in progress…
             </div>
           );
         }
-        return (
-          <TextNoteViewer
-            recordingId={recordingId}
-            content={textContent}
-            title={title}
-            fileType={fileType as 'txt' | 'md' | null}
-            onContentUpdate={onContentUpdate}
-          />
-        );
+        return <RichTextViewer content={textContent} title={title} />;
+      }
+      break;
 
-      default:
+    case 'text':
+      if (!textContent) {
         return (
           <div className="p-12 text-center text-muted-foreground">
-            Unsupported content type: {contentType}
+            Text content not available
           </div>
         );
-    }
-  };
+      }
+      return (
+        <TextNoteViewer
+          recordingId={recordingId}
+          content={textContent}
+          title={title}
+          fileType={fileType as 'txt' | 'md' | null}
+          onContentUpdate={onContentUpdate}
+        />
+      );
+
+    default:
+      return (
+        <div className="p-12 text-center text-muted-foreground">
+          Unsupported content type: {contentType}
+        </div>
+      );
+  }
 
   return (
-    <div className="unified-content-viewer">
-      {renderViewer()}
+    <div className="p-12 text-center text-muted-foreground">
+      Unsupported document type: {fileType}
     </div>
   );
 }

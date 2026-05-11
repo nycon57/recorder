@@ -56,7 +56,9 @@ const isActivityAction = (value: string): value is ActivityAction =>
 const isActivityResource = (value: string): value is ActivityResource =>
   ACTIVITY_RESOURCES.includes(value as ActivityResource);
 
-const toActivityAction = (value: LogActivityInput['action']): ActivityAction => {
+const toActivityAction = (
+  value: LogActivityInput['action'],
+): ActivityAction => {
   const action = value.split('.').pop() ?? value;
   if (action === 'item_added' || action === 'applied') return 'tagged';
   if (action === 'item_removed' || action === 'removed') return 'untagged';
@@ -66,7 +68,7 @@ const toActivityAction = (value: LogActivityInput['action']): ActivityAction => 
 };
 
 const toActivityResource = (
-  value: LogActivityInput['resource_type']
+  value: LogActivityInput['resource_type'],
 ): ActivityResource => {
   if (value === 'document') return 'note';
   if (value === 'user') return 'share';
@@ -92,7 +94,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
   const query = parseSearchParams<ListActivityQueryInput>(
     request,
-    listActivityQuerySchema
+    listActivityQuerySchema,
   );
   const supabase = await createClient();
 
@@ -115,7 +117,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
         avatar_url
       )
     `,
-      { count: 'exact' }
+      { count: 'exact' },
     )
     .eq('org_id', orgId);
 
@@ -146,10 +148,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
   activityQuery = activityQuery.order('created_at', { ascending: false });
 
   // Apply pagination
-  const { data: activities, error, count } = await activityQuery.range(
-    query.offset,
-    query.offset + query.limit - 1
-  );
+  const {
+    data: activities,
+    error,
+    count,
+  } = await activityQuery.range(query.offset, query.offset + query.limit - 1);
 
   if (error) {
     console.error('[GET /api/activity] Error fetching activity:', error);
@@ -157,10 +160,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   // Collect all resource IDs grouped by resource type
-  const resourcesByType: Record<
-    string,
-    Set<string>
-  > = {};
+  const resourcesByType: Record<string, Set<string>> = {};
 
   for (const activity of activities || []) {
     if (activity.resource_id && activity.resource_type) {
@@ -187,7 +187,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
       if (recordings) {
         for (const recording of recordings) {
-          recordingTitles.set(recording.id, recording.title ?? 'Untitled recording');
+          recordingTitles.set(
+            recording.id,
+            recording.title ?? 'Untitled recording',
+          );
         }
       }
     } catch {
@@ -305,9 +308,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * logging happens automatically within other API endpoints.
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireOrg();
-  const body = await parseBody<LogActivityInput>(request, logActivitySchema);
-  const supabase = await createClient();
+  const [{ orgId, userId }, body, supabase] = await Promise.all([
+    requireOrg(),
+    parseBody<LogActivityInput>(request, logActivitySchema),
+    createClient(),
+  ]);
 
   // Insert activity log
   const { data: activity, error } = await supabase

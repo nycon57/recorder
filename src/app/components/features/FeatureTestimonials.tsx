@@ -42,7 +42,9 @@ interface FeatureTestimonialsProps {
   testimonials: TestimonialData[];
 }
 
-export function FeatureTestimonials({ testimonials }: FeatureTestimonialsProps) {
+export function FeatureTestimonials({
+  testimonials,
+}: FeatureTestimonialsProps) {
   if (!testimonials.length) return null;
 
   return (
@@ -66,14 +68,19 @@ export function FeatureTestimonials({ testimonials }: FeatureTestimonialsProps) 
           viewport={{ once: true, amount: 0.2 }}
         >
           {/* Header */}
-          <motion.div variants={itemVariants} className="text-center mb-12 sm:mb-16">
+          <motion.div
+            variants={itemVariants}
+            className="text-center mb-12 sm:mb-16"
+          >
             <Badge
               variant="outline"
               className="mb-6 px-4 py-2 rounded-full
                 bg-accent/5 backdrop-blur-sm border-accent/30"
             >
-              <MessageSquare className="h-4 w-4 mr-2 text-accent" />
-              <span className="text-sm font-medium text-accent">What Users Say</span>
+              <MessageSquare className="size-4 mr-2 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                What Users Say
+              </span>
             </Badge>
 
             <h2
@@ -81,12 +88,7 @@ export function FeatureTestimonials({ testimonials }: FeatureTestimonialsProps) 
                 leading-tight tracking-tight"
             >
               <span className="text-foreground">Loved by </span>
-              <span
-                className="bg-gradient-to-r from-accent via-secondary to-primary
-                  bg-clip-text text-transparent"
-              >
-                teams
-              </span>
+              <span className=" text-primary">teams</span>
             </h2>
           </motion.div>
 
@@ -96,10 +98,10 @@ export function FeatureTestimonials({ testimonials }: FeatureTestimonialsProps) 
               'grid gap-6 lg:gap-8',
               testimonials.length === 1
                 ? 'grid-cols-1 max-w-2xl mx-auto'
-                : 'grid-cols-1 md:grid-cols-2'
+                : 'grid-cols-1 md:grid-cols-2',
             )}
           >
-            {testimonials.map((testimonial, index) => {
+            {testimonials.map((testimonial) => {
               // Generate initials from author name
               const initials = testimonial.author
                 .split(' ')
@@ -109,7 +111,7 @@ export function FeatureTestimonials({ testimonials }: FeatureTestimonialsProps) 
 
               return (
                 <motion.div
-                  key={index}
+                  key={`${testimonial.author}-${testimonial.company}-${testimonial.quote.slice(0, 32)}`}
                   variants={itemVariants}
                   className={cn(
                     'relative p-6 sm:p-8 rounded-2xl',
@@ -118,16 +120,16 @@ export function FeatureTestimonials({ testimonials }: FeatureTestimonialsProps) 
                     'transition-all duration-500',
                     'hover:border-accent/30',
                     'hover:shadow-[0_0_40px_rgba(0,223,130,0.1)]',
-                    'group'
+                    'group',
                   )}
                 >
                   {/* Quote Icon */}
                   <Quote
                     className={cn(
-                      'absolute top-4 right-4 h-8 w-8',
+                      'absolute top-4 right-4 size-8',
                       'text-accent/20',
                       'transition-all duration-300',
-                      'group-hover:text-accent/40'
+                      'group-hover:text-accent/40',
                     )}
                   />
 
@@ -140,10 +142,10 @@ export function FeatureTestimonials({ testimonials }: FeatureTestimonialsProps) 
                   <div className="flex items-center gap-4">
                     <Avatar
                       className={cn(
-                        'h-12 w-12',
+                        'size-12',
                         'border-2 border-accent/20',
                         'transition-all duration-300',
-                        'group-hover:border-accent/40'
+                        'group-hover:border-accent/40',
                       )}
                     >
                       <AvatarFallback className="bg-accent/10 text-accent font-medium">

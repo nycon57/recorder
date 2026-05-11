@@ -303,8 +303,12 @@ body {
 }
 
 .user-avatar {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: 1px solid var(--trb-line-strong);
+  background-position: center;
+  background-size: cover;
   flex-shrink: 0;
 }
 

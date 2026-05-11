@@ -1,4 +1,4 @@
-export type WidgetBootstrapMode = 'hidden' | 'idle' | 'connecting';
+type WidgetBootstrapMode = 'hidden' | 'idle' | 'connecting';
 
 export interface WidgetBootstrapInput {
   extensionEnabled: boolean;
@@ -67,7 +67,7 @@ export function deriveWidgetBootstrapState(
   };
 }
 
-export function isMicPermissionError(message?: string | null): boolean {
+function isMicPermissionError(message?: string | null): boolean {
   if (!message) return false;
 
   const normalized = message.trim().toLowerCase();

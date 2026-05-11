@@ -15,28 +15,37 @@ import {
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { cn } from '@/lib/utils/cn';
 
 import type { ReviewQueueRoutingItem } from './review-queue';
 
-export interface RoutingDecisionInput {
+interface RoutingDecisionInput {
   pageId: string;
   topic: string;
   app: string | null;
   screen: string | null;
 }
 
-export interface RoutingActionResult {
+interface RoutingActionResult {
   ok: boolean;
   error?: string;
 }
 
 interface RoutingReviewCardProps {
   item: ReviewQueueRoutingItem;
-  onApproveAsProposed?: (input: RoutingDecisionInput) => Promise<RoutingActionResult>;
-  onEditAndApply?: (input: RoutingDecisionInput) => Promise<RoutingActionResult>;
+  onApproveAsProposed?: (
+    input: RoutingDecisionInput,
+  ) => Promise<RoutingActionResult>;
+  onEditAndApply?: (
+    input: RoutingDecisionInput,
+  ) => Promise<RoutingActionResult>;
   onReject?: (pageId: string) => Promise<RoutingActionResult>;
 }
 
@@ -45,6 +54,12 @@ type ViewState =
   | { kind: 'editing' }
   | { kind: 'submitting' }
   | { kind: 'error'; message: string };
+
+interface RoutingDraft {
+  topic: string;
+  app: string;
+  screen: string;
+}
 
 function normalizeOptionalInput(value: string): string | null {
   const trimmed = value.trim();
@@ -60,24 +75,31 @@ function formatTimestamp(value: string | null): string | null {
   }
 }
 
-export function RoutingReviewCard({
+export function RoutingReviewCard(
+  props: Parameters<typeof useRoutingReviewCardImplementation>[0],
+) {
+  return useRoutingReviewCardImplementation(props);
+}
+
+function useRoutingReviewCardImplementation({
   item,
   onApproveAsProposed,
   onEditAndApply,
   onReject,
 }: RoutingReviewCardProps) {
   const [view, setView] = React.useState<ViewState>({ kind: 'idle' });
-  const [draftTopic, setDraftTopic] = React.useState(item.topic);
-  const [draftApp, setDraftApp] = React.useState(item.app ?? '');
-  const [draftScreen, setDraftScreen] = React.useState(item.screen ?? '');
+  const [draftOverride, setDraftOverride] = React.useState<RoutingDraft | null>(
+    null,
+  );
+  const draft = draftOverride ?? {
+    topic: item.topic,
+    app: item.app ?? '',
+    screen: item.screen ?? '',
+  };
 
-  React.useEffect(() => {
-    setDraftTopic(item.topic);
-    setDraftApp(item.app ?? '');
-    setDraftScreen(item.screen ?? '');
-  }, [item.app, item.id, item.screen, item.topic]);
-
-  const actionsReady = Boolean(onApproveAsProposed && onEditAndApply && onReject);
+  const actionsReady = Boolean(
+    onApproveAsProposed && onEditAndApply && onReject,
+  );
   const isSubmitting = view.kind === 'submitting';
   const isEditing = view.kind === 'editing';
   const latestSourceLabel = formatTimestamp(item.latestSourceAt);
@@ -89,17 +111,17 @@ export function RoutingReviewCard({
       app: item.app,
       screen: item.screen,
     }),
-    [item.app, item.pageId, item.screen, item.topic]
+    [item.app, item.pageId, item.screen, item.topic],
   );
 
   const editedDecision = React.useMemo<RoutingDecisionInput>(
     () => ({
       pageId: item.pageId,
-      topic: draftTopic.trim(),
-      app: normalizeOptionalInput(draftApp),
-      screen: normalizeOptionalInput(draftScreen),
+      topic: draft.topic.trim(),
+      app: normalizeOptionalInput(draft.app),
+      screen: normalizeOptionalInput(draft.screen),
     }),
-    [draftApp, draftScreen, draftTopic, item.pageId]
+    [draft.app, draft.screen, draft.topic, item.pageId],
   );
 
   const handleApprove = async () => {
@@ -108,7 +130,10 @@ export function RoutingReviewCard({
     setView({ kind: 'submitting' });
     const result = await onApproveAsProposed(proposedDecision);
     if (!result.ok) {
-      setView({ kind: 'error', message: result.error ?? 'Failed to approve routing' });
+      setView({
+        kind: 'error',
+        message: result.error ?? 'Failed to approve routing',
+      });
       return;
     }
     setView({ kind: 'idle' });
@@ -120,7 +145,10 @@ export function RoutingReviewCard({
     setView({ kind: 'submitting' });
     const result = await onReject(item.pageId);
     if (!result.ok) {
-      setView({ kind: 'error', message: result.error ?? 'Failed to reject routing' });
+      setView({
+        kind: 'error',
+        message: result.error ?? 'Failed to reject routing',
+      });
       return;
     }
     setView({ kind: 'idle' });
@@ -136,16 +164,21 @@ export function RoutingReviewCard({
     setView({ kind: 'submitting' });
     const result = await onEditAndApply(editedDecision);
     if (!result.ok) {
-      setView({ kind: 'error', message: result.error ?? 'Failed to save routing' });
+      setView({
+        kind: 'error',
+        message: result.error ?? 'Failed to save routing',
+      });
       return;
     }
     setView({ kind: 'idle' });
   };
 
   const resetDraft = () => {
-    setDraftTopic(item.topic);
-    setDraftApp(item.app ?? '');
-    setDraftScreen(item.screen ?? '');
+    setDraftOverride({
+      topic: item.topic,
+      app: item.app ?? '',
+      screen: item.screen ?? '',
+    });
   };
 
   return (
@@ -157,20 +190,23 @@ export function RoutingReviewCard({
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <Badge variant="outline">Needs Routing</Badge>
               <Badge variant="outline">App: {item.app ?? 'Unassigned'}</Badge>
-              <Badge variant="outline">Screen: {item.screen ?? 'Unassigned'}</Badge>
               <Badge variant="outline">
-                {item.sourceCount} linked {item.sourceCount === 1 ? 'source' : 'sources'}
+                Screen: {item.screen ?? 'Unassigned'}
+              </Badge>
+              <Badge variant="outline">
+                {item.sourceCount} linked{' '}
+                {item.sourceCount === 1 ? 'source' : 'sources'}
               </Badge>
             </div>
           </div>
-          <Route className="mt-1 h-4 w-4 text-sky-600 dark:text-sky-400" />
+          <Route className="mt-1 size-4 text-sky-600 dark:text-sky-400" />
         </div>
       </CardHeader>
 
       <CardContent className="space-y-6">
         {!actionsReady ? (
           <Alert>
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle className="size-4" />
             <AlertDescription>
               Routing apply actions will enable once the backend hooks land. The
               review surface is ready for approve, edit, and reject wiring.
@@ -180,7 +216,7 @@ export function RoutingReviewCard({
 
         {view.kind === 'error' ? (
           <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle className="size-4" />
             <AlertDescription>{view.message}</AlertDescription>
           </Alert>
         ) : null}
@@ -209,13 +245,13 @@ export function RoutingReviewCard({
                     className="mt-2 inline-flex items-center gap-1 text-sky-700 underline underline-offset-4 dark:text-sky-300"
                   >
                     Open source detail
-                    <ExternalLink className="h-3 w-3" />
+                    <ExternalLink className="size-3" />
                   </Link>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  No source detail is linked yet. Reviewers can still confirm the
-                  route once the backend starts surfacing proposals here.
+                  No source detail is linked yet. Reviewers can still confirm
+                  the route once the backend starts surfacing proposals here.
                 </p>
               )}
             </CardContent>
@@ -252,36 +288,60 @@ export function RoutingReviewCard({
               ) : (
                 <div className="space-y-3">
                   <div className="space-y-2">
-                    <label htmlFor={`routing-topic-${item.pageId}`} className="text-sm font-medium">
+                    <label
+                      htmlFor={`routing-topic-${item.pageId}`}
+                      className="text-sm font-medium"
+                    >
                       Topic
                     </label>
                     <Input
                       id={`routing-topic-${item.pageId}`}
-                      value={draftTopic}
-                      onChange={(event) => setDraftTopic(event.target.value)}
+                      value={draft.topic}
+                      onChange={(event) =>
+                        setDraftOverride((current) => ({
+                          ...(current ?? draft),
+                          topic: event.target.value,
+                        }))
+                      }
                       disabled={isSubmitting}
                     />
                   </div>
                   <div className="space-y-2">
-                    <label htmlFor={`routing-app-${item.pageId}`} className="text-sm font-medium">
+                    <label
+                      htmlFor={`routing-app-${item.pageId}`}
+                      className="text-sm font-medium"
+                    >
                       App
                     </label>
                     <Input
                       id={`routing-app-${item.pageId}`}
-                      value={draftApp}
-                      onChange={(event) => setDraftApp(event.target.value)}
+                      value={draft.app}
+                      onChange={(event) =>
+                        setDraftOverride((current) => ({
+                          ...(current ?? draft),
+                          app: event.target.value,
+                        }))
+                      }
                       placeholder="hubspot"
                       disabled={isSubmitting}
                     />
                   </div>
                   <div className="space-y-2">
-                    <label htmlFor={`routing-screen-${item.pageId}`} className="text-sm font-medium">
+                    <label
+                      htmlFor={`routing-screen-${item.pageId}`}
+                      className="text-sm font-medium"
+                    >
                       Screen
                     </label>
                     <Input
                       id={`routing-screen-${item.pageId}`}
-                      value={draftScreen}
-                      onChange={(event) => setDraftScreen(event.target.value)}
+                      value={draft.screen}
+                      onChange={(event) =>
+                        setDraftOverride((current) => ({
+                          ...(current ?? draft),
+                          screen: event.target.value,
+                        }))
+                      }
                       placeholder="record-view"
                       disabled={isSubmitting}
                     />
@@ -301,9 +361,9 @@ export function RoutingReviewCard({
                 disabled={!actionsReady || isSubmitting}
               >
                 {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <CheckIcon className="h-4 w-4" />
+                  <CheckIcon className="size-4" />
                 )}
                 Approve as proposed
               </Button>
@@ -316,7 +376,7 @@ export function RoutingReviewCard({
                 }}
                 disabled={isSubmitting}
               >
-                <PencilIcon className="h-4 w-4" />
+                <PencilIcon className="size-4" />
                 Edit &amp; Apply
               </Button>
               <Button
@@ -325,7 +385,7 @@ export function RoutingReviewCard({
                 onClick={handleReject}
                 disabled={!actionsReady || isSubmitting}
               >
-                <XIcon className="h-4 w-4" />
+                <XIcon className="size-4" />
                 Reject routing
               </Button>
             </>
@@ -348,9 +408,9 @@ export function RoutingReviewCard({
                 disabled={!actionsReady || isSubmitting}
               >
                 {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <CheckIcon className="h-4 w-4" />
+                  <CheckIcon className="size-4" />
                 )}
                 Save &amp; Apply
               </Button>

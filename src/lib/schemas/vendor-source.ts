@@ -17,9 +17,12 @@ function isValidUrl(value: string): boolean {
   }
 }
 
-const optionalHttpsUrlSchema = z.preprocess(
-  (value) => (value === '' ? null : value),
-  z
+const optionalHttpsUrlSchema = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value === '' ? null : value))
+  .pipe(z
     .string()
     .refine(
       (url) => url.startsWith('https://'),
@@ -29,8 +32,7 @@ const optionalHttpsUrlSchema = z.preprocess(
       message: 'Legal review reference must be a valid URL',
     })
     .nullable()
-    .optional(),
-);
+    .optional());
 
 export const vendorIngestInputSchema = z.object({
   app: z
@@ -55,6 +57,7 @@ export const vendorIngestInputSchema = z.object({
 });
 
 export type VendorIngestInput = z.infer<typeof vendorIngestInputSchema>;
+export type VendorIngestFormValues = z.input<typeof vendorIngestInputSchema>;
 
 /** Re-sync existing source schema (sourceId path) */
 export const vendorResyncInputSchema = z.object({
@@ -68,9 +71,9 @@ export const vendorResyncInputSchema = z.object({
     .optional(),
 });
 
-export type VendorResyncInput = z.infer<typeof vendorResyncInputSchema>;
+type VendorResyncInput = z.infer<typeof vendorResyncInputSchema>;
 
-export const vendorSourceLifecycleSchema = z.enum(['active', 'paused', 'retired']);
+const vendorSourceLifecycleSchema = z.enum(['active', 'paused', 'retired']);
 
 export const vendorSourceUpdateSchema = z.object({
   lifecycle: vendorSourceLifecycleSchema.optional(),
@@ -86,5 +89,5 @@ export const vendorSourceRetireSchema = z.object({
   replacementSourceId: z.string().uuid().nullable().optional(),
 });
 
-export type VendorSourceUpdateInput = z.infer<typeof vendorSourceUpdateSchema>;
-export type VendorSourceRetireInput = z.infer<typeof vendorSourceRetireSchema>;
+type VendorSourceUpdateInput = z.infer<typeof vendorSourceUpdateSchema>;
+type VendorSourceRetireInput = z.infer<typeof vendorSourceRetireSchema>;

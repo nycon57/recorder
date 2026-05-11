@@ -10,7 +10,7 @@ import type { OrgAgentSettings, PlanTier } from '@/lib/services/agent-config';
 import { AGENT_COLUMN_MAP, planTierAllowsAgent } from '@/lib/services/agent-config';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-export interface EnabledAgent {
+interface EnabledAgent {
   type: string;
   name: string;
   /** Most recent success/failure outcome, or null when no history exists. */
@@ -28,7 +28,7 @@ export interface AgentStatusSummary {
 /** All known agent types, derived from the canonical column map. */
 const ALL_AGENT_TYPES = Object.keys(AGENT_COLUMN_MAP);
 
-export const AGENT_DISPLAY_NAMES: Record<string, string> = {
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
   curator: 'Curator',
   gap_intelligence: 'Gap Intelligence',
   onboarding: 'Onboarding',

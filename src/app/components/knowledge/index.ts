@@ -9,8 +9,6 @@
 // Badge components for displaying individual concepts
 export {
   ConceptBadge,
-  ConceptList,
-  ConceptTypeLabel,
 } from './ConceptBadge';
 
 // Section components for sidebars and detail views
@@ -18,47 +16,27 @@ export {
   ConceptSection,
   ConceptSectionCompact,
 } from './ConceptSection';
-
-// Empty state components
-export {
-  ConceptsEmptyState,
-  ConceptsEmptyStateCompact,
-} from './ConceptsEmptyState';
-
 // Dashboard widget for knowledge insights
 export {
   KnowledgeInsightsCard,
-  KnowledgeInsightsCardSkeleton,
 } from './KnowledgeInsightsCard';
 
 // Slide-over panel for concept details
 export { ConceptPanel } from './ConceptPanel';
-
-// Concept correction (edit, merge, remove)
-export { ConceptCorrection } from './ConceptCorrection';
-
 // Filter components for concept type filtering
 export {
   ConceptFilter,
-  ConceptTypeBadges,
-  ConceptFilterCompact,
 } from './ConceptFilter';
 
 // Graph visualization components
 export {
-  KnowledgeGraph,
   KnowledgeGraphSkeleton,
 } from './KnowledgeGraph';
-
-// 3D Graph visualization (dynamic import recommended)
-export { KnowledgeGraph3DSkeleton } from './KnowledgeGraph3D';
-
 // Container with 2D/3D toggle
 export { KnowledgeGraphContainer } from './KnowledgeGraphContainer';
 
 // List view components
 export {
   ConceptListView,
-  ConceptListViewHeader,
   ConceptListViewSkeleton,
 } from './ConceptListView';

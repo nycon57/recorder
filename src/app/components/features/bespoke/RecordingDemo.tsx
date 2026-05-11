@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useReducer, useRef, useCallback } from 'react';
 import * as motion from 'motion/react-client';
 import {
   Video,
@@ -34,10 +34,25 @@ import { Button } from '@/app/components/ui/button';
 type RecordingStep = 'setup' | 'ready' | 'recording' | 'review';
 
 const steps = [
-  { id: 'setup', label: 'Setup', icon: Monitor, description: 'Configure your recording' },
+  {
+    id: 'setup',
+    label: 'Setup',
+    icon: Monitor,
+    description: 'Configure your recording',
+  },
   { id: 'ready', label: 'Ready', icon: Circle, description: 'Screen shared' },
-  { id: 'recording', label: 'Recording', icon: Play, description: 'Capturing content' },
-  { id: 'review', label: 'Review', icon: Upload, description: 'Save or discard' },
+  {
+    id: 'recording',
+    label: 'Recording',
+    icon: Play,
+    description: 'Capturing content',
+  },
+  {
+    id: 'review',
+    label: 'Review',
+    icon: Upload,
+    description: 'Save or discard',
+  },
 ] as const;
 
 const stepOrder: Record<RecordingStep, number> = {
@@ -48,13 +63,69 @@ const stepOrder: Record<RecordingStep, number> = {
 };
 
 // Generate mock waveform data
-const generateWaveform = () => Array.from({ length: 64 }, () => Math.random() * 0.8 + 0.2);
+const generateWaveform = () =>
+  Array.from({ length: 64 }, () => Math.random() * 0.8 + 0.2);
+
+type RecordingDemoState = {
+  currentStep: RecordingStep;
+  isRecording: boolean;
+  elapsedTime: number;
+  waveformData: number[];
+};
+
+type RecordingDemoAction =
+  | { type: 'set-step'; step: RecordingStep }
+  | { type: 'tick'; elapsedTime: number; waveformData: number[] };
+
+const initialRecordingDemoState: RecordingDemoState = {
+  currentStep: 'setup',
+  isRecording: false,
+  elapsedTime: 0,
+  waveformData: generateWaveform(),
+};
+
+function recordingDemoReducer(
+  state: RecordingDemoState,
+  action: RecordingDemoAction,
+): RecordingDemoState {
+  if (action.type === 'tick') {
+    return {
+      ...state,
+      elapsedTime: action.elapsedTime,
+      waveformData: action.waveformData,
+    };
+  }
+
+  if (action.step === 'recording') {
+    return { ...state, currentStep: action.step, isRecording: true };
+  }
+
+  if (action.step === 'review') {
+    return { ...state, currentStep: action.step, isRecording: false };
+  }
+
+  if (action.step === 'setup') {
+    return {
+      ...state,
+      currentStep: action.step,
+      isRecording: false,
+      elapsedTime: 0,
+    };
+  }
+
+  return { ...state, currentStep: action.step };
+}
 
 export function RecordingDemo() {
-  const [currentStep, setCurrentStep] = useState<RecordingStep>('setup');
-  const [isRecording, setIsRecording] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [waveformData, setWaveformData] = useState(generateWaveform());
+  return useRecordingDemoImplementation();
+}
+
+function useRecordingDemoImplementation() {
+  const [state, dispatch] = useReducer(
+    recordingDemoReducer,
+    initialRecordingDemoState,
+  );
+  const { currentStep, isRecording, elapsedTime, waveformData } = state;
   const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
 
@@ -76,19 +147,18 @@ export function RecordingDemo() {
 
     const timers = stepProgression.map(({ step, delay }) =>
       setTimeout(() => {
-        setCurrentStep(step);
         if (step === 'recording') {
-          setIsRecording(true);
           startTimeRef.current = Date.now();
-        } else if (step === 'review') {
-          setIsRecording(false);
-        } else if (step === 'setup') {
-          setElapsedTime(0);
         }
-      }, delay)
+        dispatch({ type: 'set-step', step });
+      }, delay),
     );
 
-    return () => timers.forEach(clearTimeout);
+    return () => {
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
+    };
   }, []);
 
   // Timer animation
@@ -97,8 +167,11 @@ export function RecordingDemo() {
 
     const animate = () => {
       const elapsed = (Date.now() - startTimeRef.current!) / 1000;
-      setElapsedTime(elapsed);
-      setWaveformData(generateWaveform());
+      dispatch({
+        type: 'tick',
+        elapsedTime: elapsed,
+        waveformData: generateWaveform(),
+      });
       animationRef.current = requestAnimationFrame(animate);
     };
 
@@ -139,14 +212,13 @@ export function RecordingDemo() {
               className="inline-flex items-center gap-2 mb-4 px-4 py-2 rounded-full
                 bg-accent/10 border border-accent/30"
             >
-              <Video className="h-4 w-4 text-accent" />
-              <span className="text-sm font-medium text-accent">Screen Recording</span>
+              <Video className="size-4 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                Screen Recording
+              </span>
             </div>
             <h3 className="font-outfit text-2xl sm:text-3xl font-light mb-2">
-              Capture your{' '}
-              <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                expertise
-              </span>
+              Capture your <span className=" text-primary">expertise</span>
             </h3>
             <p className="text-muted-foreground">
               One click to start capturing your workflow
@@ -158,13 +230,18 @@ export function RecordingDemo() {
             initial={{ opacity: 0, y: 40, scale: 0.95 }}
             whileInView={{ opacity: 1, y: 0, scale: 1 }}
             viewport={{ once: true }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30, delay: 0.2 }}
+            transition={{
+              type: 'spring',
+              stiffness: 400,
+              damping: 30,
+              delay: 0.2,
+            }}
             className={cn(
               'relative rounded-3xl overflow-hidden',
               'bg-gradient-to-b from-card/80 to-card/60',
               'backdrop-blur-xl',
               'border border-accent/20',
-              'shadow-[0_0_80px_rgba(0,223,130,0.15)]'
+              'shadow-[0_0_80px_rgba(0,223,130,0.15)]',
             )}
           >
             {/* Step Indicator - Matches RecordingSteps.tsx */}
@@ -182,7 +259,10 @@ export function RecordingDemo() {
                 </div>
 
                 {/* Desktop: Full step indicator */}
-                <nav aria-label="Recording progress" className="hidden sm:block">
+                <nav
+                  aria-label="Recording progress"
+                  className="hidden sm:block"
+                >
                   <ol className="flex items-center justify-center gap-2">
                     {steps.map((step, index) => {
                       const Icon = step.icon;
@@ -195,10 +275,13 @@ export function RecordingDemo() {
                           <div className="flex items-center">
                             <div
                               className={cn(
-                                'flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-200',
-                                isCompleted && 'bg-accent border-accent text-accent-foreground',
-                                isCurrent && 'border-accent bg-accent/10 text-accent',
-                                isPending && 'border-muted-foreground/30 text-muted-foreground/50'
+                                'flex items-center justify-center size-8 rounded-full border-2 transition-all duration-200',
+                                isCompleted &&
+                                  'bg-accent border-accent text-accent-foreground',
+                                isCurrent &&
+                                  'border-accent bg-accent/10 text-accent',
+                                isPending &&
+                                  'border-muted-foreground/30 text-muted-foreground/50',
                               )}
                             >
                               {isCompleted ? (
@@ -212,7 +295,7 @@ export function RecordingDemo() {
                                 'ml-2 text-sm font-medium transition-colors',
                                 isCompleted && 'text-accent',
                                 isCurrent && 'text-foreground',
-                                isPending && 'text-muted-foreground/50'
+                                isPending && 'text-muted-foreground/50',
                               )}
                             >
                               {step.label}
@@ -223,7 +306,9 @@ export function RecordingDemo() {
                             <div
                               className={cn(
                                 'w-12 h-0.5 mx-3 transition-colors',
-                                index < currentIndex ? 'bg-accent' : 'bg-muted-foreground/20'
+                                index < currentIndex
+                                  ? 'bg-accent'
+                                  : 'bg-muted-foreground/20',
                               )}
                             />
                           )}
@@ -243,13 +328,13 @@ export function RecordingDemo() {
                   className={cn(
                     'relative rounded-xl overflow-hidden',
                     'bg-background/80 border border-border/50',
-                    'aspect-video'
+                    'aspect-video',
                   )}
                 >
                   {/* Mock Screen Content */}
                   {currentStep === 'setup' ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <Monitor className="h-16 w-16 text-muted-foreground/30 mb-4" />
+                      <Monitor className="size-16 text-muted-foreground/30 mb-4" />
                       <p className="text-muted-foreground text-sm">
                         Click "Start Recording" to share your screen
                       </p>
@@ -259,9 +344,9 @@ export function RecordingDemo() {
                       {/* Browser Chrome */}
                       <div className="flex items-center gap-2 px-4 py-3 bg-muted/30 border-b border-border/30">
                         <div className="flex gap-1.5">
-                          <div className="w-3 h-3 rounded-full bg-red-400/50" />
-                          <div className="w-3 h-3 rounded-full bg-yellow-400/50" />
-                          <div className="w-3 h-3 rounded-full bg-green-400/50" />
+                          <div className="size-3 rounded-full bg-red-400/50" />
+                          <div className="size-3 rounded-full bg-yellow-400/50" />
+                          <div className="size-3 rounded-full bg-green-400/50" />
                         </div>
                         <div className="flex-1 mx-4">
                           <div className="px-3 py-1.5 rounded-md bg-background/50 text-xs text-muted-foreground font-mono">
@@ -289,10 +374,12 @@ export function RecordingDemo() {
                           <motion.div
                             animate={{ scale: [1, 1.2, 1] }}
                             transition={{ repeat: Infinity, duration: 1.5 }}
-                            className="w-2 h-2 rounded-full bg-white"
+                            className="size-2 rounded-full bg-white"
                           />
                           <span className="text-xs font-medium">REC</span>
-                          <span className="text-xs font-mono">{formatTime(elapsedTime)}</span>
+                          <span className="text-xs font-mono">
+                            {formatTime(elapsedTime)}
+                          </span>
                         </div>
                       )}
                     </>
@@ -307,12 +394,16 @@ export function RecordingDemo() {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-medium text-foreground">
-                          {isRecording ? 'Recording Audio' : 'Recording Preview'}
+                          {isRecording
+                            ? 'Recording Audio'
+                            : 'Recording Preview'}
                         </h3>
                         {isRecording && (
                           <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
-                            <span className="text-xs text-muted-foreground">Live</span>
+                            <div className="size-2 bg-destructive rounded-full animate-pulse" />
+                            <span className="text-xs text-muted-foreground">
+                              Live
+                            </span>
                           </div>
                         )}
                       </div>
@@ -321,9 +412,11 @@ export function RecordingDemo() {
                       <div className="h-20 rounded-lg bg-muted/30 border border-border flex items-center justify-center gap-[2px] px-2">
                         {waveformData.map((value, i) => (
                           <motion.div
-                            key={i}
+                            key={JSON.stringify(value)}
                             className="w-1 rounded-full bg-accent"
-                            animate={{ height: isRecording ? `${value * 60}px` : '4px' }}
+                            animate={{
+                              height: isRecording ? `${value * 60}px` : '4px',
+                            }}
                             transition={{ duration: 0.1 }}
                           />
                         ))}
@@ -343,10 +436,14 @@ export function RecordingDemo() {
                   <div className="flex items-center justify-start">
                     <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50">
                       <Button variant="ghost" size="sm" className="h-8 px-2">
-                        <Maximize2 className="h-4 w-4" />
+                        <Maximize2 className="size-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 px-2 bg-accent/20 text-accent">
-                        <Layout className="h-4 w-4" />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 bg-accent/20 text-accent"
+                      >
+                        <Layout className="size-4" />
                       </Button>
                     </div>
                   </div>
@@ -356,17 +453,17 @@ export function RecordingDemo() {
                     <Button
                       size="lg"
                       className={cn(
-                        'h-14 w-14 rounded-full p-0',
+                        'size-14 rounded-full p-0',
                         isRecording
                           ? 'bg-destructive hover:bg-destructive/90'
                           : 'bg-accent hover:bg-accent/90',
-                        'shadow-[0_0_30px_rgba(0,223,130,0.3)]'
+                        'shadow-[0_0_30px_rgba(0,223,130,0.3)]',
                       )}
                     >
                       {isRecording ? (
-                        <Square className="h-6 w-6 text-white" />
+                        <Square className="size-6 text-white" />
                       ) : (
-                        <Circle className="h-6 w-6 text-accent-foreground fill-current" />
+                        <Circle className="size-6 text-accent-foreground fill-current" />
                       )}
                     </Button>
                   </div>
@@ -374,11 +471,11 @@ export function RecordingDemo() {
                   {/* Right - Device Selectors */}
                   <div className="flex items-center justify-end gap-3">
                     <Button variant="outline" size="sm" className="h-9">
-                      <Mic className="h-4 w-4 mr-2 text-accent" />
+                      <Mic className="size-4 mr-2 text-accent" />
                       <span className="text-xs">Microphone</span>
                     </Button>
                     <Button variant="outline" size="sm" className="h-9">
-                      <Camera className="h-4 w-4 mr-2 text-accent" />
+                      <Camera className="size-4 mr-2 text-accent" />
                       <span className="text-xs">Camera</span>
                     </Button>
                   </div>
@@ -390,25 +487,25 @@ export function RecordingDemo() {
                     <Button
                       size="lg"
                       className={cn(
-                        'h-14 w-14 rounded-full p-0',
+                        'size-14 rounded-full p-0',
                         isRecording
                           ? 'bg-destructive hover:bg-destructive/90'
-                          : 'bg-accent hover:bg-accent/90'
+                          : 'bg-accent hover:bg-accent/90',
                       )}
                     >
                       {isRecording ? (
-                        <Square className="h-6 w-6 text-white" />
+                        <Square className="size-6 text-white" />
                       ) : (
-                        <Circle className="h-6 w-6 text-accent-foreground fill-current" />
+                        <Circle className="size-6 text-accent-foreground fill-current" />
                       )}
                     </Button>
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <Button variant="outline" size="sm">
-                      <Mic className="h-4 w-4" />
+                      <Mic className="size-4" />
                     </Button>
                     <Button variant="outline" size="sm">
-                      <Camera className="h-4 w-4" />
+                      <Camera className="size-4" />
                     </Button>
                   </div>
                 </div>

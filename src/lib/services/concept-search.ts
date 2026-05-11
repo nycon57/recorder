@@ -183,7 +183,7 @@ export async function getConceptContentIds(
  * @param limit - Maximum results
  * @returns Matching concepts
  */
-export async function searchConceptsByName(
+async function searchConceptsByName(
   pattern: string,
   orgId: string,
   limit: number = 10

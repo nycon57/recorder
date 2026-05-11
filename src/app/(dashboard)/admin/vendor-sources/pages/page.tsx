@@ -13,16 +13,16 @@
 
 import { redirect } from 'next/navigation';
 
-import { requireSystemAdmin } from '@/lib/utils/api';
+import { canAccessSystemAdminPage } from '@/lib/auth/system-admin-page-guard';
 
 import { PagesPageClient } from './pages-page-client';
 
 export const dynamic = 'force-dynamic';
 
 export default async function VendorSourcesPagesPage() {
-  try {
-    await requireSystemAdmin();
-  } catch {
+  const hasAccess = await canAccessSystemAdminPage();
+
+  if (!hasAccess) {
     redirect('/dashboard');
   }
 

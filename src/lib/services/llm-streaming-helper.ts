@@ -12,6 +12,28 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger({ service: 'llm-streaming' });
 
+interface TranscriptSegment {
+  text: string;
+  timestamp?: number;
+  speaker?: string;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function streamSequentially<T>(
+  items: T[],
+  handler: (item: T, index: number) => void | Promise<void>,
+  delayMs: number,
+): Promise<void> {
+  return items.reduce<Promise<void>>(
+    (chain, item, index) =>
+      chain.then(() => handler(item, index)).then(() => delay(delayMs)),
+    Promise.resolve(),
+  );
+}
+
 export interface StreamingConfig {
   recordingId: string;
   chunkBufferSize?: number; // Characters to buffer before sending
@@ -38,7 +60,7 @@ class ChunkBuffer {
 
   constructor(
     private readonly config: StreamingConfig,
-    private readonly onFlush: (chunk: string, chunkNumber: number) => void
+    private readonly onFlush: (chunk: string, chunkNumber: number) => void,
   ) {}
 
   /**
@@ -71,7 +93,10 @@ class ChunkBuffer {
     }
 
     // Flush if enough time has passed and we have content
-    if (bufferSize > 0 && timeSinceLastFlush >= (this.config.chunkDelayMs || 100)) {
+    if (
+      bufferSize > 0 &&
+      timeSinceLastFlush >= (this.config.chunkDelayMs || 100)
+    ) {
       return true;
     }
 
@@ -121,7 +146,7 @@ export async function streamTranscription(
   model: GenerativeModel,
   videoSource: string | VideoSource,
   prompt: string,
-  config: StreamingConfig
+  config: StreamingConfig,
 ): Promise<StreamingResult> {
   const startTime = Date.now();
   let fullText = '';
@@ -187,39 +212,40 @@ export async function streamTranscription(
           .replace(/```\n?/g, '')
           .trim();
 
-        const parsedResponse = JSON.parse(jsonText);
+        const parsedResponse = JSON.parse(jsonText) as {
+          audioTranscript?: TranscriptSegment[];
+          visualEvents?: unknown[];
+        };
         const audioTranscript = parsedResponse.audioTranscript || [];
 
-        // Stream each audio segment with timing
-        for (let i = 0; i < audioTranscript.length; i++) {
-          const segment = audioTranscript[i];
-          const progress = Math.round((i / audioTranscript.length) * 100);
+        await streamSequentially(
+          audioTranscript,
+          (segment, i) => {
+            const progress = Math.round((i / audioTranscript.length) * 100);
 
-          // Send transcript chunk
-          streamingManager.sendTranscriptChunk(
-            config.recordingId,
-            segment.text,
-            {
-              timestamp: segment.timestamp,
-              speaker: segment.speaker,
-              segmentIndex: i,
-              totalSegments: audioTranscript.length,
-            }
-          );
-
-          // Update progress periodically
-          if (i % 5 === 0) {
-            streamingManager.sendProgress(
+            streamingManager.sendTranscriptChunk(
               config.recordingId,
-              'transcribe',
-              progress,
-              `Processing segment ${i + 1} of ${audioTranscript.length}`
+              segment.text,
+              {
+                timestamp: segment.timestamp,
+                speaker: segment.speaker,
+                segmentIndex: i,
+                totalSegments: audioTranscript.length,
+              },
             );
-          }
 
-          // Small delay to simulate streaming
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
+            // Update progress periodically
+            if (i % 5 === 0) {
+              streamingManager.sendProgress(
+                config.recordingId,
+                'transcribe',
+                progress,
+                `Processing segment ${i + 1} of ${audioTranscript.length}`,
+              );
+            }
+          },
+          50,
+        );
 
         // Send visual events summary if available
         const visualEvents = parsedResponse.visualEvents || [];
@@ -227,23 +253,36 @@ export async function streamTranscription(
           streamingManager.sendLog(
             config.recordingId,
             `Detected ${visualEvents.length} visual events`,
-            { visualEventsCount: visualEvents.length }
+            { visualEventsCount: visualEvents.length },
           );
         }
-
       } catch (parseError) {
-        logger.warn('Failed to parse response for streaming, falling back to raw text', {
-          context: { recordingId: config.recordingId },
-          error: parseError as Error,
-        });
+        logger.warn(
+          'Failed to parse response for streaming, falling back to raw text',
+          {
+            context: { recordingId: config.recordingId },
+            error: parseError as Error,
+          },
+        );
 
         // Fallback: stream raw text in chunks
         const chunkSize = 500;
-        for (let i = 0; i < fullText.length; i += chunkSize) {
-          const chunk = fullText.slice(i, Math.min(i + chunkSize, fullText.length));
-          streamingManager.sendTranscriptChunk(config.recordingId, chunk);
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
+        await streamSequentially(
+          Array.from(
+            {
+              length: Math.max(0, Math.ceil((fullText.length - 0) / chunkSize)),
+            },
+            (_, __loopIndex) => 0 + __loopIndex * chunkSize,
+          ),
+          (i) => {
+            const chunk = fullText.slice(
+              i,
+              Math.min(i + chunkSize, fullText.length),
+            );
+            streamingManager.sendTranscriptChunk(config.recordingId, chunk);
+          },
+          100,
+        );
       }
     }
 
@@ -264,7 +303,6 @@ export async function streamTranscription(
       totalTime,
       streamedToClient,
     };
-
   } catch (error) {
     logger.error('Transcription streaming failed', {
       context: { recordingId: config.recordingId },
@@ -275,7 +313,7 @@ export async function streamTranscription(
     if (isConnected) {
       streamingManager.sendError(
         config.recordingId,
-        `Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
 
@@ -289,7 +327,7 @@ export async function streamTranscription(
 export async function streamDocumentGeneration(
   model: GenerativeModel,
   prompt: string,
-  config: StreamingConfig
+  config: StreamingConfig,
 ): Promise<StreamingResult> {
   const startTime = Date.now();
   let fullText = '';
@@ -316,12 +354,12 @@ export async function streamDocumentGeneration(
 
       // Send progress updates periodically
       if (chunkNumber % (config.progressUpdateInterval || 5) === 0) {
-        const estimatedProgress = Math.min(30 + (chunkNumber * 2), 80);
+        const estimatedProgress = Math.min(30 + chunkNumber * 2, 80);
         streamingManager.sendProgress(
           config.recordingId,
           'document',
           estimatedProgress,
-          `Generating document... (${fullText.length} characters)`
+          `Generating document... (${fullText.length} characters)`,
         );
       }
     }
@@ -378,7 +416,6 @@ export async function streamDocumentGeneration(
       totalTime,
       streamedToClient,
     };
-
   } catch (streamError) {
     logger.warn('Streaming failed, falling back to standard generation', {
       context: { recordingId: config.recordingId },
@@ -405,22 +442,32 @@ export async function streamDocumentGeneration(
       // If client is connected, send the full response in chunks
       if (isConnected) {
         const chunkSize = 500;
-        for (let i = 0; i < fullText.length; i += chunkSize) {
-          const chunk = fullText.slice(i, Math.min(i + chunkSize, fullText.length));
-          streamingManager.sendDocumentChunk(config.recordingId, chunk);
-
-          const progress = Math.round((i / fullText.length) * 100);
-          if (i % (chunkSize * 3) === 0) {
-            streamingManager.sendProgress(
-              config.recordingId,
-              'document',
-              progress,
-              'Generating document...'
+        await streamSequentially(
+          Array.from(
+            {
+              length: Math.max(0, Math.ceil((fullText.length - 0) / chunkSize)),
+            },
+            (_, __loopIndex) => 0 + __loopIndex * chunkSize,
+          ),
+          (i) => {
+            const chunk = fullText.slice(
+              i,
+              Math.min(i + chunkSize, fullText.length),
             );
-          }
+            streamingManager.sendDocumentChunk(config.recordingId, chunk);
 
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
+            const progress = Math.round((i / fullText.length) * 100);
+            if (i % (chunkSize * 3) === 0) {
+              streamingManager.sendProgress(
+                config.recordingId,
+                'document',
+                progress,
+                'Generating document...',
+              );
+            }
+          },
+          100,
+        );
         streamedToClient = true;
       }
 
@@ -432,7 +479,6 @@ export async function streamDocumentGeneration(
         totalTime,
         streamedToClient,
       };
-
     } catch (fallbackError) {
       logger.error('Fallback generation also failed', {
         context: { recordingId: config.recordingId },
@@ -443,7 +489,7 @@ export async function streamDocumentGeneration(
       if (isConnected) {
         streamingManager.sendError(
           config.recordingId,
-          `Document generation failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`
+          `Document generation failed: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}`,
         );
       }
 
@@ -459,7 +505,7 @@ export function sendEmbeddingProgress(
   recordingId: string,
   currentChunk: number,
   totalChunks: number,
-  message?: string
+  message?: string,
 ): void {
   const isConnected = streamingManager.isConnected(recordingId);
   if (!isConnected) {
@@ -477,7 +523,7 @@ export function sendEmbeddingProgress(
     {
       currentChunk,
       totalChunks,
-    }
+    },
   );
 }
 
@@ -494,7 +540,7 @@ export function isStreamingAvailable(recordingId: string): boolean {
 export function sendCompletionNotification(
   recordingId: string,
   step: string,
-  duration: number
+  duration: number,
 ): void {
   const isConnected = streamingManager.isConnected(recordingId);
   if (!isConnected) {

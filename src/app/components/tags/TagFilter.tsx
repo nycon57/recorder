@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Tag, X, Check } from 'lucide-react';
+
 import {
   Popover,
   PopoverContent,
@@ -77,7 +78,7 @@ export function TagFilter({
               selectedTags.length > 0 && 'border-accent'
             )}
           >
-            <Tag className="mr-2 h-4 w-4" />
+            <Tag className="mr-2 size-4" />
             Tags
             {selectedTags.length > 0 && (
               <Badge variant="secondary" className="ml-2">
@@ -102,13 +103,13 @@ export function TagFilter({
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Filter Mode</Label>
                 <RadioGroup value={filterMode} onValueChange={onFilterModeChange as any}>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-x-2">
                     <RadioGroupItem value="or" id="or" />
                     <Label htmlFor="or" className="text-sm font-normal cursor-pointer">
                       Any tag (OR)
                     </Label>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-x-2">
                     <RadioGroupItem value="and" id="and" />
                     <Label htmlFor="and" className="text-sm font-normal cursor-pointer">
                       All tags (AND)
@@ -137,7 +138,7 @@ export function TagFilter({
                       )}
                     >
                       <div
-                        className="w-4 h-4 rounded-full flex-shrink-0"
+                        className="size-4 rounded-full flex-shrink-0"
                         style={{ backgroundColor: tag.color }}
                       />
                       <span className="flex-1 text-left truncate">{tag.name}</span>
@@ -147,7 +148,7 @@ export function TagFilter({
                         </span>
                       )}
                       {isSelected && (
-                        <Check className="h-4 w-4 text-accent flex-shrink-0" />
+                        <Check className="size-4 text-accent flex-shrink-0" />
                       )}
                     </button>
                   );
@@ -193,7 +194,7 @@ export function TagFilter({
                 onClick={() => handleTagToggle(tag.id)}
                 className="ml-1 hover:bg-black/10 rounded p-0.5"
               >
-                <X className="h-3 w-3" />
+                <X className="size-3" />
               </button>
             </Badge>
           ))}
@@ -214,7 +215,7 @@ export function TagFilter({
 /**
  * Compact version for mobile or limited space
  */
-export function TagFilterCompact({
+function TagFilterCompact({
   tags,
   selectedTags,
   onSelectionChange,
@@ -228,7 +229,7 @@ export function TagFilterCompact({
           size="sm"
           className={cn('h-8', className)}
         >
-          <Tag className="h-4 w-4" />
+          <Tag className="size-4" />
           {selectedTags.length > 0 && (
             <span className="ml-1">{selectedTags.length}</span>
           )}
@@ -259,11 +260,11 @@ export function TagFilterCompact({
                   )}
                 >
                   <div
-                    className="w-3 h-3 rounded-full"
+                    className="size-3 rounded-full"
                     style={{ backgroundColor: tag.color }}
                   />
                   <span className="flex-1 text-left">{tag.name}</span>
-                  {isSelected && <Check className="h-3 w-3 text-accent" />}
+                  {isSelected && <Check className="size-3 text-accent" />}
                 </button>
               );
             })}

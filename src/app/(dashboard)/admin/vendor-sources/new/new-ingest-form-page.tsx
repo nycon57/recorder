@@ -15,10 +15,10 @@ import { NewIngestForm } from '@/app/components/admin/vendor-sources/new-ingest-
  * TRIB-149
  */
 export function NewIngestFormPage() {
-  const router = useRouter();
+  const { push } = useRouter();
 
   function handleSuccess() {
-    router.push('/admin/vendor-sources');
+    push('/admin/vendor-sources');
   }
 
   return (
@@ -34,7 +34,7 @@ export function NewIngestFormPage() {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="trbd-page-title flex items-center gap-2">
-            <BookOpen className="h-7 w-7" />
+            <BookOpen className="size-7" />
             Add vendor source
           </h1>
           <p className="text-muted-foreground">
@@ -43,7 +43,7 @@ export function NewIngestFormPage() {
         </div>
         <Button variant="ghost" size="sm" className="gap-1.5 shrink-0" asChild>
           <Link href="/admin/vendor-sources">
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
             Back to sources
           </Link>
         </Button>

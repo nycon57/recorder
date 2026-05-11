@@ -26,6 +26,7 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import { apiHandler, successResponse, errorResponse } from '@/lib/utils/api';
 import { runWikiLintAllOrgs } from '@/lib/services/wiki-lint';
 

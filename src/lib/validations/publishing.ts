@@ -12,7 +12,7 @@ import { z } from 'zod';
 // =====================================================
 
 /** Supported publishing destinations */
-export const publishDestinationSchema = z.enum([
+const publishDestinationSchema = z.enum([
   'google_drive',
   'sharepoint',
   'onedrive',
@@ -20,10 +20,10 @@ export const publishDestinationSchema = z.enum([
 ]);
 
 /** Output format for published documents */
-export const publishFormatSchema = z.enum(['native', 'markdown', 'pdf', 'html']);
+const publishFormatSchema = z.enum(['native', 'markdown', 'pdf', 'html']);
 
 /** Type of publish action */
-export const publishActionSchema = z.enum([
+const publishActionSchema = z.enum([
   'publish',
   'update',
   'delete',
@@ -32,7 +32,7 @@ export const publishActionSchema = z.enum([
 ]);
 
 /** What triggered the publish action */
-export const publishTriggerSchema = z.enum([
+const publishTriggerSchema = z.enum([
   'manual',
   'auto',
   'webhook',
@@ -40,7 +40,7 @@ export const publishTriggerSchema = z.enum([
 ]);
 
 /** Publication status */
-export const publishStatusSchema = z.enum([
+const publishStatusSchema = z.enum([
   'pending',
   'published',
   'failed',
@@ -53,7 +53,7 @@ export const publishStatusSchema = z.enum([
 // =====================================================
 
 /** Branding configuration for published documents */
-export const brandingConfigSchema = z.object({
+const brandingConfigSchema = z.object({
   includeVideoLink: z.boolean().default(true),
   includePoweredByFooter: z.boolean().default(true),
   includeEmbeddedPlayer: z.boolean().default(false),
@@ -61,14 +61,14 @@ export const brandingConfigSchema = z.object({
 });
 
 /** Partial branding config for updates */
-export const partialBrandingConfigSchema = brandingConfigSchema.partial();
+const partialBrandingConfigSchema = brandingConfigSchema.partial();
 
 // =====================================================
 // PUBLISH REQUEST SCHEMAS
 // =====================================================
 
 /** POST /api/library/[id]/publish - Publish a document */
-export const publishRequestSchema = z.object({
+const publishRequestSchema = z.object({
   destination: publishDestinationSchema,
   connectorId: z.string().uuid().optional(),
   folderId: z.string().max(500).optional(),
@@ -92,7 +92,7 @@ export const deletePublicationQuerySchema = z.object({
     .transform((val) => val === 'true'),
 });
 
-export type DeletePublicationQueryInput = z.infer<
+type DeletePublicationQueryInput = z.infer<
   typeof deletePublicationQuerySchema
 >;
 
@@ -104,7 +104,7 @@ export type DeletePublicationQueryInput = z.infer<
 const INVALID_FOLDER_NAME_CHARS = /[<>:"/\\|?*]/;
 
 /** GET /api/integrations/[type]/folders - List folders */
-export const folderListQuerySchema = z.object({
+const folderListQuerySchema = z.object({
   connectorId: z.string().uuid('Invalid connector ID'),
   parentId: z.string().max(500).optional(),
   search: z.string().max(100).optional(),
@@ -120,7 +120,7 @@ export const folderListQuerySchema = z.object({
 export type FolderListQueryInput = z.infer<typeof folderListQuerySchema>;
 
 /** POST /api/integrations/[type]/folders - Create folder */
-export const createFolderSchema = z.object({
+const createFolderSchema = z.object({
   connectorId: z.string().uuid('Invalid connector ID'),
   name: z
     .string()
@@ -162,7 +162,7 @@ const orgPublishSettingsBaseSchema = z.object({
 });
 
 /** PUT /api/organizations/[orgId]/settings/publish - Update settings */
-export const orgPublishSettingsSchema = orgPublishSettingsBaseSchema.refine(
+const orgPublishSettingsSchema = orgPublishSettingsBaseSchema.refine(
   (data) => {
     // If auto-publish is enabled, destination and connector must be set
     if (data.autoPublishEnabled) {
@@ -180,12 +180,12 @@ export const orgPublishSettingsSchema = orgPublishSettingsBaseSchema.refine(
   }
 );
 
-export type OrgPublishSettingsInput = z.infer<typeof orgPublishSettingsSchema>;
+type OrgPublishSettingsInput = z.infer<typeof orgPublishSettingsSchema>;
 
 /** Partial settings update - uses base schema to avoid refine/partial conflict */
-export const orgPublishSettingsUpdateSchema = orgPublishSettingsBaseSchema.partial();
+const orgPublishSettingsUpdateSchema = orgPublishSettingsBaseSchema.partial();
 
-export type OrgPublishSettingsUpdateInput = z.infer<
+type OrgPublishSettingsUpdateInput = z.infer<
   typeof orgPublishSettingsUpdateSchema
 >;
 
@@ -194,13 +194,13 @@ export type OrgPublishSettingsUpdateInput = z.infer<
 // =====================================================
 
 /** Schema for connector publish configuration in connector_configs */
-export const connectorPublishConfigSchema = z.object({
+const connectorPublishConfigSchema = z.object({
   supportsPublish: z.boolean().default(false),
   publishScopes: z.array(z.string()).optional(),
   lastPublishAt: z.string().datetime().optional(),
 });
 
-export type ConnectorPublishConfigInput = z.infer<
+type ConnectorPublishConfigInput = z.infer<
   typeof connectorPublishConfigSchema
 >;
 
@@ -209,7 +209,7 @@ export type ConnectorPublishConfigInput = z.infer<
 // =====================================================
 
 /** Payload for publish_document background job */
-export const publishDocumentJobPayloadSchema = z.object({
+const publishDocumentJobPayloadSchema = z.object({
   contentId: z.string().uuid(),
   documentId: z.string().uuid(),
   orgId: z.string().uuid(),
@@ -233,7 +233,7 @@ export type PublishDocumentJobPayloadInput = z.infer<
 // =====================================================
 
 /** Folder info in responses */
-export const folderInfoSchema = z.object({
+const folderInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
   path: z.string(),
@@ -243,19 +243,19 @@ export const folderInfoSchema = z.object({
   modifiedAt: z.string().datetime().optional(),
 });
 
-export type FolderInfoOutput = z.infer<typeof folderInfoSchema>;
+type FolderInfoOutput = z.infer<typeof folderInfoSchema>;
 
 /** Folder list response */
-export const folderListResponseSchema = z.object({
+const folderListResponseSchema = z.object({
   folders: z.array(folderInfoSchema),
   nextPageToken: z.string().optional(),
   hasMore: z.boolean(),
 });
 
-export type FolderListResponseOutput = z.infer<typeof folderListResponseSchema>;
+type FolderListResponseOutput = z.infer<typeof folderListResponseSchema>;
 
 /** Publication in responses */
-export const publicationResponseSchema = z.object({
+const publicationResponseSchema = z.object({
   id: z.string().uuid(),
   contentId: z.string().uuid(),
   documentId: z.string().uuid(),
@@ -276,28 +276,28 @@ export const publicationResponseSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
-export type PublicationResponseOutput = z.infer<
+type PublicationResponseOutput = z.infer<
   typeof publicationResponseSchema
 >;
 
 /** Publish success response */
-export const publishSuccessResponseSchema = z.object({
+const publishSuccessResponseSchema = z.object({
   success: z.literal(true),
   publication: publicationResponseSchema,
   externalUrl: z.string().url(),
 });
 
-export type PublishSuccessResponseOutput = z.infer<
+type PublishSuccessResponseOutput = z.infer<
   typeof publishSuccessResponseSchema
 >;
 
 /** Publications list response */
-export const publicationsListResponseSchema = z.object({
+const publicationsListResponseSchema = z.object({
   publications: z.array(publicationResponseSchema),
   total: z.number().int().min(0),
 });
 
-export type PublicationsListResponseOutput = z.infer<
+type PublicationsListResponseOutput = z.infer<
   typeof publicationsListResponseSchema
 >;
 
@@ -333,7 +333,7 @@ export function validateCreateFolderRequest(data: unknown): CreateFolderInput {
  * Validate org publish settings update
  * Returns validated data or throws ZodError
  */
-export function validateOrgPublishSettings(
+function validateOrgPublishSettings(
   data: unknown
 ): OrgPublishSettingsInput {
   return orgPublishSettingsSchema.parse(data);
@@ -352,20 +352,20 @@ export function validatePublishJobPayload(
 /**
  * Safe parse publish request (returns result object instead of throwing)
  */
-export function safeParsePublishRequest(data: unknown) {
+function safeParsePublishRequest(data: unknown) {
   return publishRequestSchema.safeParse(data);
 }
 
 /**
  * Safe parse folder list query
  */
-export function safeParseFolderListQuery(data: unknown) {
+function safeParseFolderListQuery(data: unknown) {
   return folderListQuerySchema.safeParse(data);
 }
 
 /**
  * Safe parse create folder request
  */
-export function safeParseCreateFolderRequest(data: unknown) {
+function safeParseCreateFolderRequest(data: unknown) {
   return createFolderSchema.safeParse(data);
 }

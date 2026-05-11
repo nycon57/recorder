@@ -18,19 +18,19 @@ import { SOURCE_STATUS_VALUES } from '@/lib/utils/status-helpers';
  * Single file upload validation schema
  * Note: Files are handled via FormData, this schema validates metadata
  */
-export const uploadFileSchema = z.object({
+const uploadFileSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-export type UploadFileInput = z.infer<typeof uploadFileSchema>;
+type UploadFileInput = z.infer<typeof uploadFileSchema>;
 
 /**
  * Multiple file upload validation schema
  * For batch uploads (future enhancement)
  */
-export const uploadMultipleFilesSchema = z.object({
+const uploadMultipleFilesSchema = z.object({
   files: z
     .array(
       z.object({
@@ -43,7 +43,7 @@ export const uploadMultipleFilesSchema = z.object({
     .max(10), // Max 10 files per batch
 });
 
-export type UploadMultipleFilesInput = z.infer<
+type UploadMultipleFilesInput = z.infer<
   typeof uploadMultipleFilesSchema
 >;
 
@@ -63,12 +63,12 @@ export const createTextNoteSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-export type CreateTextNoteInput = z.infer<typeof createTextNoteSchema>;
+type CreateTextNoteInput = z.infer<typeof createTextNoteSchema>;
 
 /**
  * Update text note schema
  */
-export const updateTextNoteSchema = z.object({
+const updateTextNoteSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: z.string().min(1).max(500000).optional(),
   format: z.enum(['plain', 'markdown']).optional(),
@@ -76,7 +76,7 @@ export const updateTextNoteSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-export type UpdateTextNoteInput = z.infer<typeof updateTextNoteSchema>;
+type UpdateTextNoteInput = z.infer<typeof updateTextNoteSchema>;
 
 // ============================================================================
 // Library Query Schemas
@@ -86,7 +86,7 @@ export type UpdateTextNoteInput = z.infer<typeof updateTextNoteSchema>;
  * Library list query parameters schema
  * For filtering and pagination
  */
-export const libraryQuerySchema = z.object({
+const libraryQuerySchema = z.object({
   type: z.enum(['recording', 'video', 'audio', 'document', 'text']).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
@@ -106,12 +106,12 @@ export const libraryQuerySchema = z.object({
   dateTo: z.string().datetime().optional(),
 });
 
-export type LibraryQueryInput = z.infer<typeof libraryQuerySchema>;
+type LibraryQueryInput = z.infer<typeof libraryQuerySchema>;
 
 /**
  * Content type filter validation helper
  */
-export function validateContentType(type: string): type is ContentType {
+function validateContentType(type: string): type is ContentType {
   return ['recording', 'video', 'audio', 'document', 'text'].includes(type);
 }
 
@@ -129,16 +129,16 @@ export const updateLibraryItemSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-export type UpdateLibraryItemInput = z.infer<typeof updateLibraryItemSchema>;
+type UpdateLibraryItemInput = z.infer<typeof updateLibraryItemSchema>;
 
 /**
  * Soft delete schema
  */
-export const softDeleteSchema = z.object({
+const softDeleteSchema = z.object({
   permanent: z.boolean().optional().default(false),
 });
 
-export type SoftDeleteInput = z.infer<typeof softDeleteSchema>;
+type SoftDeleteInput = z.infer<typeof softDeleteSchema>;
 
 // ============================================================================
 // Dashboard Schemas
@@ -154,7 +154,7 @@ export const dashboardRecentQuerySchema = z.object({
     .optional(),
 });
 
-export type DashboardRecentQueryInput = z.infer<
+type DashboardRecentQueryInput = z.infer<
   typeof dashboardRecentQuerySchema
 >;
 
@@ -167,7 +167,7 @@ export const dashboardStatsQuerySchema = z.object({
   includeBreakdown: z.boolean().default(true),
 });
 
-export type DashboardStatsQueryInput = z.infer<
+type DashboardStatsQueryInput = z.infer<
   typeof dashboardStatsQuerySchema
 >;
 
@@ -178,24 +178,24 @@ export type DashboardStatsQueryInput = z.infer<
 /**
  * Batch delete schema
  */
-export const batchDeleteSchema = z.object({
+const batchDeleteSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(100),
   permanent: z.boolean().optional().default(false),
 });
 
-export type BatchDeleteInput = z.infer<typeof batchDeleteSchema>;
+type BatchDeleteInput = z.infer<typeof batchDeleteSchema>;
 
 /**
  * Batch update schema
  */
-export const batchUpdateSchema = z.object({
+const batchUpdateSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(100),
   updates: z.object({
     metadata: z.record(z.string(), z.unknown()).optional(),
   }),
 });
 
-export type BatchUpdateInput = z.infer<typeof batchUpdateSchema>;
+type BatchUpdateInput = z.infer<typeof batchUpdateSchema>;
 
 // ============================================================================
 // File Validation Helpers
@@ -204,7 +204,7 @@ export type BatchUpdateInput = z.infer<typeof batchUpdateSchema>;
 /**
  * Validate file size against content type limits
  */
-export function validateFileSize(
+function validateFileSize(
   sizeBytes: number,
   contentType: ContentType,
 ): boolean {
@@ -222,7 +222,7 @@ export function validateFileSize(
 /**
  * Get human-readable size limit label
  */
-export function getSizeLimitLabel(contentType: ContentType): string {
+function getSizeLimitLabel(contentType: ContentType): string {
   const labels: Record<ContentType, string> = {
     recording: '500 MB',
     video: '500 MB',
@@ -269,7 +269,7 @@ export function generateStoragePath(
 // Export all schemas
 // ============================================================================
 
-export const librarySchemas = {
+const librarySchemas = {
   uploadFile: uploadFileSchema,
   uploadMultipleFiles: uploadMultipleFilesSchema,
   createTextNote: createTextNoteSchema,

@@ -13,9 +13,14 @@ import sharp from 'sharp';
 import { getGoogleAI } from '@/lib/google/client';
 import type { ExtractedFrame } from '@/lib/services/frame-extraction';
 import type { OCRResult } from '@/lib/services/ocr-service';
-import { sanitizeVisualDescription, sanitizeOcrText, detectPII, logPIIDetection } from '@/lib/utils/security';
+import {
+  sanitizeVisualDescription,
+  sanitizeOcrText,
+  detectPII,
+  logPIIDetection,
+} from '@/lib/utils/security';
 
-export type TransitionType =
+type TransitionType =
   | 'navigation'
   | 'click'
   | 'form_fill'
@@ -43,16 +48,25 @@ const CLASSIFICATION_BATCH_SIZE = 3;
 
 /** Valid transition types returned by Gemini (excludes 'unknown', which is the fallback) */
 const VALID_TRANSITION_TYPES: Set<string> = new Set<TransitionType>([
-  'navigation', 'click', 'form_fill', 'modal_open',
-  'modal_close', 'page_load', 'scroll',
+  'navigation',
+  'click',
+  'form_fill',
+  'modal_open',
+  'modal_close',
+  'page_load',
+  'scroll',
 ]);
 
 /** Lazily initialized Gemini model for vision classification */
-let _visionModel: ReturnType<ReturnType<typeof getGoogleAI>['getGenerativeModel']> | null = null;
+let _visionModel: ReturnType<
+  ReturnType<typeof getGoogleAI>['getGenerativeModel']
+> | null = null;
 
 function getVisionModel() {
   if (!_visionModel) {
-    _visionModel = getGoogleAI().getGenerativeModel({ model: 'gemini-2.5-flash' });
+    _visionModel = getGoogleAI().getGenerativeModel({
+      model: 'gemini-2.5-flash',
+    });
   }
   return _visionModel;
 }
@@ -66,7 +80,7 @@ function getVisionModel() {
  */
 export async function detectUITransitions(
   frames: ExtractedFrame[],
-  ocrResults: OCRResult[]
+  ocrResults: OCRResult[],
 ): Promise<UITransition[]> {
   if (frames.length < 2) {
     return [];
@@ -78,9 +92,9 @@ export async function detectUITransitions(
   const diffs = await computeFrameDifferences(frames);
 
   // Step 2: Identify candidate transitions (>15% pixel change)
-  const candidates = diffs
-    .map((diff, index) => ({ index, diff }))
-    .filter(({ diff }) => diff > PIXEL_DIFF_THRESHOLD);
+  const candidates = diffs.flatMap((diff, index): Candidate[] =>
+    diff > PIXEL_DIFF_THRESHOLD ? [{ index, diff }] : [],
+  );
 
   if (candidates.length === 0) {
     console.log('[UI State Detector] No significant transitions detected');
@@ -90,7 +104,7 @@ export async function detectUITransitions(
   console.log(
     '[UI State Detector] Found',
     candidates.length,
-    'candidate transitions'
+    'candidate transitions',
   );
 
   // Step 3: Filter noise — scrolling with no meaningful content change
@@ -98,7 +112,7 @@ export async function detectUITransitions(
 
   if (meaningful.length === 0) {
     console.log(
-      '[UI State Detector] All candidates filtered as noise (scrolling/minor changes)'
+      '[UI State Detector] All candidates filtered as noise (scrolling/minor changes)',
     );
     return [];
   }
@@ -106,15 +120,11 @@ export async function detectUITransitions(
   console.log(
     '[UI State Detector] After noise filter:',
     meaningful.length,
-    'transitions'
+    'transitions',
   );
 
   // Step 4: Classify transitions using Gemini Vision
-  const transitions = await classifyTransitions(
-    meaningful,
-    frames,
-    ocrResults
-  );
+  const transitions = await classifyTransitions(meaningful, frames, ocrResults);
 
   // Step 5: Sort by timestamp
   transitions.sort((a, b) => a.timestamp - b.timestamp);
@@ -122,7 +132,7 @@ export async function detectUITransitions(
   console.log(
     '[UI State Detector] Detected',
     transitions.length,
-    'UI transitions'
+    'UI transitions',
   );
 
   return transitions;
@@ -133,17 +143,22 @@ export async function detectUITransitions(
  * of consecutive frames. Returns array of length (frames.length - 1).
  */
 async function computeFrameDifferences(
-  frames: ExtractedFrame[]
+  frames: ExtractedFrame[],
 ): Promise<number[]> {
   const diffs: number[] = [];
 
-  for (let i = 0; i < frames.length - 1; i++) {
-    const diff = await computePairDifference(
-      frames[i].localPath,
-      frames[i + 1].localPath
-    );
-    diffs.push(diff);
-  }
+  await Promise.all(
+    Array.from(
+      { length: Math.max(0, Math.ceil((frames.length - 1 - 0) / 1)) },
+      (_, __loopIndex) => 0 + __loopIndex * 1,
+    ).map(async (i) => {
+      const diff = await computePairDifference(
+        frames[i].localPath,
+        frames[i + 1].localPath,
+      );
+      diffs.push(diff);
+    }),
+  );
 
   return diffs;
 }
@@ -155,7 +170,7 @@ async function computeFrameDifferences(
  */
 async function computePairDifference(
   pathA: string,
-  pathB: string
+  pathB: string,
 ): Promise<number> {
   const compareWidth = 320;
   const compareHeight = 240;
@@ -202,7 +217,7 @@ interface Candidate {
  */
 function filterNoise(
   candidates: Candidate[],
-  ocrResults: OCRResult[]
+  ocrResults: OCRResult[],
 ): Candidate[] {
   return candidates.filter(({ index }) => {
     const beforeOcr = ocrResults[index];
@@ -236,7 +251,7 @@ function extractWords(text: string): Set<string> {
     text
       .toLowerCase()
       .split(/\s+/)
-      .filter((w) => w.length > 2)
+      .filter((w) => w.length > 2),
   );
 }
 
@@ -263,26 +278,36 @@ function wordOverlap(a: Set<string>, b: Set<string>): number {
 async function classifyTransitions(
   candidates: Candidate[],
   frames: ExtractedFrame[],
-  ocrResults: OCRResult[]
+  ocrResults: OCRResult[],
 ): Promise<UITransition[]> {
   const transitions: UITransition[] = [];
 
-  for (let i = 0; i < candidates.length; i += CLASSIFICATION_BATCH_SIZE) {
-    const batch = candidates.slice(i, i + CLASSIFICATION_BATCH_SIZE);
+  await Promise.all(
+    Array.from(
+      {
+        length: Math.max(
+          0,
+          Math.ceil((candidates.length - 0) / CLASSIFICATION_BATCH_SIZE),
+        ),
+      },
+      (_, __loopIndex) => 0 + __loopIndex * CLASSIFICATION_BATCH_SIZE,
+    ).map(async (i) => {
+      const batch = candidates.slice(i, i + CLASSIFICATION_BATCH_SIZE);
 
-    const batchResults = await Promise.all(
-      batch.map((candidate) =>
-        classifySingleTransition(candidate, frames, ocrResults)
-      )
-    );
+      const batchResults = await Promise.all(
+        batch.map((candidate) =>
+          classifySingleTransition(candidate, frames, ocrResults),
+        ),
+      );
 
-    transitions.push(...batchResults);
+      transitions.push(...batchResults);
 
-    // Delay between batches to avoid Gemini API rate limits
-    if (i + CLASSIFICATION_BATCH_SIZE < candidates.length) {
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
-  }
+      // Delay between batches to avoid Gemini API rate limits
+      if (i + CLASSIFICATION_BATCH_SIZE < candidates.length) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }),
+  );
 
   return transitions;
 }
@@ -294,7 +319,7 @@ async function classifyTransitions(
 async function classifySingleTransition(
   candidate: Candidate,
   frames: ExtractedFrame[],
-  ocrResults: OCRResult[]
+  ocrResults: OCRResult[],
 ): Promise<UITransition> {
   const { index } = candidate;
   const frameBefore = frames[index];
@@ -335,8 +360,18 @@ Respond in JSON:
 }`;
 
     const result = await model.generateContent([
-      { inlineData: { mimeType: frameBefore.mimeType, data: imgBefore.toString('base64') } },
-      { inlineData: { mimeType: frameAfter.mimeType, data: imgAfter.toString('base64') } },
+      {
+        inlineData: {
+          mimeType: frameBefore.mimeType,
+          data: imgBefore.toString('base64'),
+        },
+      },
+      {
+        inlineData: {
+          mimeType: frameAfter.mimeType,
+          data: imgAfter.toString('base64'),
+        },
+      },
       { text: prompt },
     ]);
 
@@ -352,16 +387,26 @@ Respond in JSON:
     // Check raw Gemini output for PII before sanitization
     const rawFromState = parsed.fromState ?? '';
     const rawToState = parsed.toState ?? '';
-    const rawElements: string[] = Array.isArray(parsed.uiElements) ? parsed.uiElements : [];
+    const rawElements: string[] = Array.isArray(parsed.uiElements)
+      ? parsed.uiElements
+      : [];
 
-    const piiCheck = detectPII(`${rawFromState} ${rawToState} ${rawElements.join(' ')}`);
+    const piiCheck = detectPII(
+      `${rawFromState} ${rawToState} ${rawElements.join(' ')}`,
+    );
     if (piiCheck.hasPII) {
       logPIIDetection('ui-state-transition', piiCheck.types);
     }
 
     // Sanitize Gemini output to redact any PII visible in screenshots
-    const fromState = sanitizeVisualDescription(rawFromState || 'unknown state', 500);
-    const toState = sanitizeVisualDescription(rawToState || 'unknown state', 500);
+    const fromState = sanitizeVisualDescription(
+      rawFromState || 'unknown state',
+      500,
+    );
+    const toState = sanitizeVisualDescription(
+      rawToState || 'unknown state',
+      500,
+    );
     const uiElements = rawElements
       .slice(0, 20)
       .map((el) => sanitizeVisualDescription(String(el), 200));
@@ -380,7 +425,7 @@ Respond in JSON:
   } catch (error) {
     console.error(
       `[UI State Detector] Classification failed for frame pair ${index}/${index + 1}:`,
-      error
+      error,
     );
 
     // Graceful degradation: mark as 'unknown' with lower confidence
@@ -388,8 +433,14 @@ Respond in JSON:
       frameIndex: index,
       timestamp: frameBefore.timeSec,
       transitionType: 'unknown',
-      fromState: sanitizeVisualDescription(ocrBefore?.text?.slice(0, 100) || 'unknown state', 200),
-      toState: sanitizeVisualDescription(ocrAfter?.text?.slice(0, 100) || 'unknown state', 200),
+      fromState: sanitizeVisualDescription(
+        ocrBefore?.text?.slice(0, 100) || 'unknown state',
+        200,
+      ),
+      toState: sanitizeVisualDescription(
+        ocrAfter?.text?.slice(0, 100) || 'unknown state',
+        200,
+      ),
       confidence: 0.3,
       uiElements: [],
     };
@@ -397,10 +448,7 @@ Respond in JSON:
 }
 
 /** Build OCR context string for the Gemini prompt, with PII sanitization */
-function buildOcrContext(
-  ocrBefore?: OCRResult,
-  ocrAfter?: OCRResult
-): string {
+function buildOcrContext(ocrBefore?: OCRResult, ocrAfter?: OCRResult): string {
   const sanitizePart = (text: string): string => {
     const piiCheck = detectPII(text.slice(0, 500));
     if (piiCheck.hasPII) {
@@ -410,8 +458,10 @@ function buildOcrContext(
   };
 
   return [
-    ocrBefore?.text && `Text visible in "before" frame: ${sanitizePart(ocrBefore.text)}`,
-    ocrAfter?.text && `Text visible in "after" frame: ${sanitizePart(ocrAfter.text)}`,
+    ocrBefore?.text &&
+      `Text visible in "before" frame: ${sanitizePart(ocrBefore.text)}`,
+    ocrAfter?.text &&
+      `Text visible in "after" frame: ${sanitizePart(ocrAfter.text)}`,
   ]
     .filter(Boolean)
     .join('\n');

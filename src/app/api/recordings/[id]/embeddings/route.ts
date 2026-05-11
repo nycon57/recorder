@@ -18,12 +18,14 @@ import {
  * Returns staleness information and refresh recommendations
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const { id } = await params;
-
-    // Check embeddings status
-    const status = await checkEmbeddingsStatus(id);
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const { id, status } = await Promise.all([requireOrg(), params]).then(
+      ([{ orgId }, { id }]) =>
+        checkEmbeddingsStatus(id, orgId).then((status) => ({ id, status })),
+    );
 
     return successResponse({
       recordingId: id,
@@ -38,7 +40,7 @@ export const GET = apiHandler(
         ? 'Embeddings should be refreshed to ensure accurate search results'
         : 'Embeddings are up to date',
     });
-  }
+  },
 );
 
 /**
@@ -47,9 +49,11 @@ export const GET = apiHandler(
  * Deletes old chunks and enqueues regeneration
  */
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const { id } = await params;
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId }, { id }] = await Promise.all([requireOrg(), params]);
 
     try {
       const result = await triggerEmbeddingsRefresh(id, orgId);
@@ -62,7 +66,7 @@ export const POST = apiHandler(
           status: 'Embeddings will be regenerated shortly',
         },
         undefined,
-        202 // Accepted
+        202, // Accepted
       );
     } catch (error) {
       console.error('[POST /embeddings] Error:', error);
@@ -75,5 +79,5 @@ export const POST = apiHandler(
 
       return errors.internalError();
     }
-  }
+  },
 );

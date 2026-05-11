@@ -146,7 +146,7 @@ export function classifyContent(text: string): ContentClassification {
  * @param text - Text to check
  * @returns True if content is code-focused
  */
-export function isCodeFocused(text: string): boolean {
+function isCodeFocused(text: string): boolean {
   const classification = classifyContent(text);
   return classification.type === 'technical' && classification.features.hasCode;
 }
@@ -157,7 +157,7 @@ export function isCodeFocused(text: string): boolean {
  * @param text - Text to check
  * @returns True if content has structured elements
  */
-export function hasStructuredContent(text: string): boolean {
+function hasStructuredContent(text: string): boolean {
   const classification = classifyContent(text);
   return classification.features.hasList || classification.features.hasTable;
 }

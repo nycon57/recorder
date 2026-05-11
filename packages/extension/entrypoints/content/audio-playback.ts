@@ -16,9 +16,9 @@
  * Part of TRIB-26: ElevenLabs streaming TTS.
  */
 
-import type { TtsState } from "@tribora/shared";
+import type { TtsState } from '@tribora/shared';
 
-import { streamTts } from "../../utils/elevenlabs-client.js";
+import { streamTts } from '../../utils/elevenlabs-client.js';
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ export interface AudioPlayer {
 export function createAudioPlayer(
   onStateChange?: (state: TtsState) => void,
 ): AudioPlayer {
-  let state: TtsState = { status: "idle" };
+  let state: TtsState = { status: 'idle' };
   let currentAudio: HTMLAudioElement | null = null;
   let currentObjectUrl: string | null = null;
   let currentSession: { cleanup: () => void } | null = null;
@@ -75,7 +75,7 @@ export function createAudioPlayer(
   const teardown = (): void => {
     if (currentAudio) {
       currentAudio.pause();
-      currentAudio.src = "";
+      currentAudio.src = '';
       currentAudio = null;
     }
     if (currentObjectUrl) {
@@ -97,7 +97,7 @@ export function createAudioPlayer(
     async speak(text: string): Promise<void> {
       teardown();
       const token = ++activeToken;
-      setState({ status: "requesting", text });
+      setState({ status: 'requesting', text });
 
       try {
         const session = await streamTts(text);
@@ -115,9 +115,9 @@ export function createAudioPlayer(
         const reader = session.stream.getReader();
         const chunks: Uint8Array[] = [];
 
-        while (true) {
+        const readNextChunk = async (): Promise<boolean> => {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) return true;
           // Stream read is the main async boundary — re-check the token on
           // every chunk so we can bail out promptly if we've been superseded.
           if (token !== activeToken) {
@@ -127,10 +127,14 @@ export function createAudioPlayer(
               // cancel() errors are non-fatal
             }
             session.cleanup();
-            return;
+            return false;
           }
           if (value) chunks.push(value);
-        }
+          return readNextChunk();
+        };
+
+        const streamComplete = await readNextChunk();
+        if (!streamComplete) return;
 
         // Re-check one more time before we touch any shared state.
         if (token !== activeToken) {
@@ -142,7 +146,7 @@ export function createAudioPlayer(
         currentSession.cleanup();
         currentSession = null;
 
-        const blob = new Blob(chunks as BlobPart[], { type: "audio/mpeg" });
+        const blob = new Blob(chunks as BlobPart[], { type: 'audio/mpeg' });
         const objectUrl = URL.createObjectURL(blob);
         currentObjectUrl = objectUrl;
 
@@ -154,7 +158,7 @@ export function createAudioPlayer(
           URL.revokeObjectURL(objectUrl);
           currentObjectUrl = null;
           currentAudio = null;
-          setState({ status: "idle" });
+          setState({ status: 'idle' });
         };
 
         audio.onerror = () => {
@@ -163,28 +167,28 @@ export function createAudioPlayer(
           currentObjectUrl = null;
           currentAudio = null;
           setState({
-            status: "error",
+            status: 'error',
             text,
-            error: "Audio element failed to play the TTS response.",
+            error: 'Audio element failed to play the TTS response.',
           });
         };
 
-        setState({ status: "playing", text });
+        setState({ status: 'playing', text });
         await audio.play();
       } catch (error) {
         // Do not clobber state if a newer call has taken over.
         if (token !== activeToken) return;
         teardown();
         const message = (error as Error).message;
-        console.error("[Tribora TTS]", message);
-        setState({ status: "error", text, error: message });
+        console.error('[Tribora TTS]', message);
+        setState({ status: 'error', text, error: message });
       }
     },
 
     async playUrl(url: string): Promise<void> {
       teardown();
       const token = ++activeToken;
-      setState({ status: "playing" });
+      setState({ status: 'playing' });
 
       try {
         const audio = new Audio(url);
@@ -193,15 +197,15 @@ export function createAudioPlayer(
         audio.onended = () => {
           if (token !== activeToken) return;
           currentAudio = null;
-          setState({ status: "idle" });
+          setState({ status: 'idle' });
         };
 
         audio.onerror = () => {
           if (token !== activeToken) return;
           currentAudio = null;
           setState({
-            status: "error",
-            error: "Audio element failed to play the provided URL.",
+            status: 'error',
+            error: 'Audio element failed to play the provided URL.',
           });
         };
 
@@ -210,7 +214,7 @@ export function createAudioPlayer(
         if (token !== activeToken) return;
         teardown();
         setState({
-          status: "error",
+          status: 'error',
           error: (error as Error).message,
         });
       }
@@ -220,7 +224,7 @@ export function createAudioPlayer(
       // Bump the token so any in-flight awaits on the old session bail out.
       activeToken++;
       teardown();
-      setState({ status: "idle" });
+      setState({ status: 'idle' });
     },
 
     getState(): TtsState {

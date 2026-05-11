@@ -2,9 +2,9 @@ import type {
   KnowledgeAvailability,
   KnowledgeMatchBasis,
   KnowledgeMatchCategory,
-} from './types.js';
-import { sanitizePageContextLocation } from './context-telemetry.js';
-import { sanitizePageContextText } from './page-context-sanitizer.js';
+} from './types';
+import { sanitizePageContextLocation } from './context-telemetry';
+import { sanitizePageContextText } from './page-context-sanitizer';
 
 export type ExtensionProductTelemetryEventType =
   | 'sdk_init'
@@ -108,9 +108,7 @@ export const EXTENSION_PRODUCT_TELEMETRY_EVENT_TYPES: readonly ExtensionProductT
     'tts_usage',
   ];
 
-const EVENT_TYPE_SET = new Set<string>(
-  EXTENSION_PRODUCT_TELEMETRY_EVENT_TYPES,
-);
+const EVENT_TYPE_SET = new Set<string>(EXTENSION_PRODUCT_TELEMETRY_EVENT_TYPES);
 
 const UNSAFE_FIELD_NAMES = new Set([
   'answer',
@@ -150,25 +148,32 @@ const ALLOWED_METADATA_KEYS = new Set([
   'authState',
   'bindingEpoch',
   'contentInstancePresent',
+  'disconnectReason',
   'durationMs',
+  'firstResponseLatencyMs',
   'hadOrgKnowledge',
   'hadVendorKnowledge',
   'inputPresent',
   'knowledgeMode',
+  'model',
   'lowConfidence',
   'messageCount',
   'orgSourcesCount',
   'pageInstancePresent',
   'reason',
+  'reasoningEffort',
   'repeatedPageContext',
   'route',
   'sourceCount',
+  'startupLatencyMs',
   'stale',
   'surfaceCounts',
   'tabId',
   'targetAvailable',
   'toolCallCount',
+  'usage',
   'vendorSourcesCount',
+  'voiceRuntime',
   'windowId',
 ]);
 
@@ -237,16 +242,18 @@ function normalizeOccurredAt(value: unknown): string | null {
 function normalizeStringArray(value: unknown, limit = 8): string[] | null {
   if (!Array.isArray(value)) return null;
   const values = value
-    .map((item) => normalizeString(item, 60))
-    .filter((item): item is string => Boolean(item))
+    .flatMap((__item, __index, __array) => {
+      const __mapped = normalizeString(__item, 60);
+      return __mapped ? [__mapped] : [];
+    })
     .slice(0, limit);
   return values.length ? values : null;
 }
 
-function normalizeUrlFields(input: {
-  urlHost?: unknown;
-  urlPath?: unknown;
-}): { urlHost: string | null; urlPath: string | null } {
+function normalizeUrlFields(input: { urlHost?: unknown; urlPath?: unknown }): {
+  urlHost: string | null;
+  urlPath: string | null;
+} {
   const host = normalizeString(input.urlHost, 180);
   const path = normalizeString(input.urlPath, 240);
   if (!host && !path) return { urlHost: null, urlPath: null };
@@ -278,10 +285,10 @@ function normalizeMetadataValue(
       : value;
   }
   if (Array.isArray(value)) {
-    return value
-      .slice(0, 12)
-      .map((item) => normalizeMetadataValue(item, depth + 1))
-      .filter((item): item is ExtensionTelemetryJson => item !== undefined);
+    return value.slice(0, 12).flatMap((__item, __index, __array) => {
+      const __mapped = normalizeMetadataValue(__item, depth + 1);
+      return __mapped !== undefined ? [__mapped] : [];
+    });
   }
   if (typeof value === 'object' && value) {
     const result: Record<string, ExtensionTelemetryJson | undefined> = {};
@@ -323,10 +330,7 @@ export function sanitizeExtensionProductTelemetryEvent(
 
   const input = value as Record<string, unknown>;
   const occurredAt = normalizeOccurredAt(input.occurredAt);
-  if (
-    !isExtensionProductTelemetryEventType(input.eventType) ||
-    !occurredAt
-  ) {
+  if (!isExtensionProductTelemetryEventType(input.eventType) || !occurredAt) {
     return null;
   }
 
@@ -352,21 +356,26 @@ export function sanitizeExtensionProductTelemetryEvent(
     urlPath,
     app: normalizeString(input.app, 80),
     screen: normalizeString(input.screen, 80),
-    knowledgeMode: normalizeString(input.knowledgeMode, 60) as
-      | ExtensionTelemetryKnowledgeMode
-      | null,
-    vendorMatchBasis: normalizeString(input.vendorMatchBasis, 60) as
-      | ExtensionTelemetryMatchBasis
-      | null,
-    orgMatchBasis: normalizeString(input.orgMatchBasis, 60) as
-      | ExtensionTelemetryMatchBasis
-      | null,
-    vendorMatchCategory: normalizeString(input.vendorMatchCategory, 60) as
-      | ExtensionTelemetryMatchCategory
-      | null,
-    orgMatchCategory: normalizeString(input.orgMatchCategory, 60) as
-      | ExtensionTelemetryMatchCategory
-      | null,
+    knowledgeMode: normalizeString(
+      input.knowledgeMode,
+      60,
+    ) as ExtensionTelemetryKnowledgeMode | null,
+    vendorMatchBasis: normalizeString(
+      input.vendorMatchBasis,
+      60,
+    ) as ExtensionTelemetryMatchBasis | null,
+    orgMatchBasis: normalizeString(
+      input.orgMatchBasis,
+      60,
+    ) as ExtensionTelemetryMatchBasis | null,
+    vendorMatchCategory: normalizeString(
+      input.vendorMatchCategory,
+      60,
+    ) as ExtensionTelemetryMatchCategory | null,
+    orgMatchCategory: normalizeString(
+      input.orgMatchCategory,
+      60,
+    ) as ExtensionTelemetryMatchCategory | null,
     latencyMs: normalizeNonNegativeNumber(input.latencyMs),
     sourceCount: normalizeNonNegativeInteger(input.sourceCount),
     sourceKinds: normalizeStringArray(input.sourceKinds),

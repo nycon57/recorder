@@ -71,13 +71,7 @@ export function AuroraSidebar({
 }: AuroraSidebarProps) {
   // System admin access is only for platform operators, not org-level admins
   const hasSystemAdminAccess = isSystemAdmin === true;
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const MotionDiv = mounted ? motion.div : 'div';
+  const MotionDiv = motion.div;
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -89,13 +83,9 @@ export function AuroraSidebar({
             className="group flex items-center gap-2 rounded-lg p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1"
           >
             <MotionDiv
-              {...(mounted
-                ? {
-                    variants: logoVariants,
-                    initial: 'hidden',
-                    animate: 'visible',
-                  }
-                : {})}
+              variants={logoVariants}
+              initial="hidden"
+              animate="visible"
               className="relative flex size-8 items-center justify-center rounded-sm border border-sidebar-border bg-sidebar-accent text-sidebar-accent-foreground"
             >
               <span className="relative text-[11px] font-semibold tracking-[0.06em]">
@@ -103,18 +93,14 @@ export function AuroraSidebar({
               </span>
             </MotionDiv>
             <MotionDiv
-              {...(mounted
-                ? {
-                    initial: { opacity: 0, x: -8 },
-                    animate: { opacity: 1, x: 0 },
-                    transition: {
-                      type: 'spring',
-                      stiffness: 400,
-                      damping: 30,
-                      delay: 0.1,
-                    },
-                  }
-                : {})}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{
+                type: 'spring',
+                stiffness: 400,
+                damping: 30,
+                delay: 0.1,
+              }}
               className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden"
             >
               <span className="trbd-brand-lockup truncate font-semibold">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
+import { useEffect, useReducer, useMemo, useRef, Fragment } from 'react';
 import * as motion from 'motion/react-client';
 import {
   Mic,
@@ -17,7 +17,12 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Badge } from '@/app/components/ui/badge';
@@ -40,6 +45,8 @@ interface Word {
   end: number;
   confidence: number;
 }
+
+const getPlaybackStartTime = (wordStart: number) => Date.now() - wordStart * 1000;
 
 // Mock transcript data
 const mockTranscript = {
@@ -71,23 +78,46 @@ const generateWords = (text: string): Word[] => {
 mockTranscript.words = generateWords(mockTranscript.text);
 
 export function TranscriptionDemo() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [highlightedIndices, setHighlightedIndices] = useState<number[]>([]);
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [activeWordIndex, setActiveWordIndex] = useState(-1);
+  return useTranscriptionDemoImplementation();
+}
+
+function useTranscriptionDemoImplementation() {
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        searchQuery: string;
+        isExpanded: boolean;
+        isPlaying: boolean;
+        currentTime: number;
+        activeWordIndex: number;
+      },
+      patch: Partial<{
+        searchQuery: string;
+        isExpanded: boolean;
+        isPlaying: boolean;
+        currentTime: number;
+        activeWordIndex: number;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      searchQuery: '',
+      isExpanded: true,
+      isPlaying: false,
+      currentTime: 0,
+      activeWordIndex: -1,
+    },
+  );
+  const { searchQuery, isExpanded, isPlaying, currentTime, activeWordIndex } =
+    state;
   const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const words = mockTranscript.words;
 
-  // Search functionality
-  useEffect(() => {
+  const highlightedIndices = useMemo(() => {
     if (!searchQuery.trim()) {
-      setHighlightedIndices([]);
-      return;
+      return [];
     }
 
     const query = searchQuery.toLowerCase();
@@ -99,13 +129,13 @@ export function TranscriptionDemo() {
       }
     });
 
-    setHighlightedIndices(matches);
+    return matches;
   }, [searchQuery, words]);
 
   // Auto-play simulation
   useEffect(() => {
     const autoPlayTimer = setTimeout(() => {
-      setIsPlaying(true);
+      dispatch({ isPlaying: true });
       startTimeRef.current = Date.now();
     }, 2000);
 
@@ -131,15 +161,12 @@ export function TranscriptionDemo() {
 
       // Loop playback
       const loopedTime = elapsed % loopDuration;
-      setCurrentTime(loopedTime);
 
       // Find active word
       const activeIdx = words.findIndex(
-        (w) => loopedTime >= w.start && loopedTime <= w.end
+        (w) => loopedTime >= w.start && loopedTime <= w.end,
       );
-      if (activeIdx !== activeWordIndex) {
-        setActiveWordIndex(activeIdx);
-      }
+      dispatch({ currentTime: loopedTime, activeWordIndex: activeIdx });
 
       animationRef.current = requestAnimationFrame(animate);
     };
@@ -157,17 +184,16 @@ export function TranscriptionDemo() {
     if (isPlaying) {
       startTimeRef.current = null;
     }
-    setIsPlaying(!isPlaying);
+    dispatch({ isPlaying: !isPlaying });
   };
 
   const handleWordClick = (wordData: Word) => {
-    setCurrentTime(wordData.start);
-    startTimeRef.current = Date.now() - wordData.start * 1000;
-    setIsPlaying(true);
+    startTimeRef.current = getPlaybackStartTime(wordData.start);
+    dispatch({ currentTime: wordData.start, isPlaying: true });
   };
 
   const clearSearch = () => {
-    setSearchQuery('');
+    dispatch({ searchQuery: '' });
   };
 
   const formatTime = (seconds: number) => {
@@ -202,14 +228,13 @@ export function TranscriptionDemo() {
               className="inline-flex items-center gap-2 mb-4 px-4 py-2 rounded-full
                 bg-accent/10 border border-accent/30"
             >
-              <Mic className="h-4 w-4 text-accent" />
-              <span className="text-sm font-medium text-accent">AI Transcription</span>
+              <Mic className="size-4 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                AI Transcription
+              </span>
             </div>
             <h3 className="font-outfit text-2xl sm:text-3xl font-light mb-2">
-              Watch words{' '}
-              <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                appear
-              </span>
+              Watch words <span className=" text-primary">appear</span>
             </h3>
             <p className="text-muted-foreground">
               95%+ accuracy with automatic speaker detection
@@ -221,14 +246,19 @@ export function TranscriptionDemo() {
             initial={{ opacity: 0, y: 40, scale: 0.95 }}
             whileInView={{ opacity: 1, y: 0, scale: 1 }}
             viewport={{ once: true }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30, delay: 0.2 }}
+            transition={{
+              type: 'spring',
+              stiffness: 400,
+              damping: 30,
+              delay: 0.2,
+            }}
           >
             {/* Mini Player */}
             <div
               className={cn(
                 'mb-4 p-4 rounded-xl',
                 'bg-card/80 border border-accent/20',
-                'shadow-[0_0_40px_rgba(0,223,130,0.1)]'
+                'shadow-[0_0_40px_rgba(0,223,130,0.1)]',
               )}
             >
               <div className="flex items-center gap-4">
@@ -236,12 +266,12 @@ export function TranscriptionDemo() {
                   variant="outline"
                   size="icon"
                   onClick={togglePlayback}
-                  className="h-10 w-10 rounded-full"
+                  className="size-10 rounded-full"
                 >
                   {isPlaying ? (
-                    <Pause className="h-4 w-4" />
+                    <Pause className="size-4" />
                   ) : (
-                    <Play className="h-4 w-4 ml-0.5" />
+                    <Play className="size-4 ml-0.5" />
                   )}
                 </Button>
 
@@ -256,7 +286,8 @@ export function TranscriptionDemo() {
                 </div>
 
                 <span className="text-sm font-mono text-muted-foreground min-w-[80px] text-right">
-                  {formatTime(currentTime)} / {formatTime(words[words.length - 1]?.end || 0)}
+                  {formatTime(currentTime)} /{' '}
+                  {formatTime(words[words.length - 1]?.end || 0)}
                 </span>
               </div>
             </div>
@@ -266,7 +297,7 @@ export function TranscriptionDemo() {
               className={cn(
                 'overflow-hidden',
                 'border-accent/20',
-                'shadow-[0_0_80px_rgba(0,223,130,0.15)]'
+                'shadow-[0_0_80px_rgba(0,223,130,0.15)]',
               )}
             >
               <CardHeader>
@@ -288,7 +319,7 @@ export function TranscriptionDemo() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setIsExpanded(!isExpanded)}
+                    onClick={() => dispatch({ isExpanded: !isExpanded })}
                   >
                     {isExpanded ? (
                       <ChevronUp className="size-4" />
@@ -309,7 +340,9 @@ export function TranscriptionDemo() {
                         type="text"
                         placeholder="Search transcript..."
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) =>
+                          dispatch({ searchQuery: e.target.value })
+                        }
                         className="pl-9 pr-9"
                       />
                       {searchQuery && (
@@ -317,45 +350,57 @@ export function TranscriptionDemo() {
                           variant="ghost"
                           size="sm"
                           onClick={clearSearch}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 size-7 p-0"
                         >
                           <X className="size-3" />
                         </Button>
                       )}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      title="Copy transcript"
-                    >
+                    <Button variant="outline" size="sm" title="Copy transcript">
                       <Copy className="size-4" />
                     </Button>
+                    <Button variant="outline" size="sm" title="Download as TXT">
+                      <Download className="size-4" />
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      title="Download as TXT"
+                      title="Download as VTT subtitles"
                     >
-                      <Download className="size-4" />
-                    </Button>
-                    <Button variant="outline" size="sm" title="Download as VTT subtitles">
                       VTT
                     </Button>
                   </div>
 
                   {/* Transcript Content */}
-                  <ScrollArea className="h-[400px] rounded-md border p-4" ref={scrollAreaRef}>
+                  <ScrollArea
+                    className="h-[400px] rounded-md border p-4"
+                    ref={scrollAreaRef}
+                  >
                     <div className="prose prose-sm dark:prose-invert max-w-none">
                       <p className="leading-relaxed whitespace-pre-wrap">
                         {words.map((word, index) => {
                           const isSearchMatch =
                             searchQuery &&
-                            word.word.toLowerCase().includes(searchQuery.toLowerCase());
+                            word.word
+                              .toLowerCase()
+                              .includes(searchQuery.toLowerCase());
                           const isActiveWord = index === activeWordIndex;
 
                           return (
-                            <Fragment key={index}>
+                            <Fragment key={JSON.stringify(word)}>
                               <span
                                 onClick={() => handleWordClick(word)}
+                                onKeyDown={(event) => {
+                                  if (
+                                    event.key === 'Enter' ||
+                                    event.key === ' '
+                                  ) {
+                                    event.preventDefault();
+                                    handleWordClick(word);
+                                  }
+                                }}
+                                role="button"
+                                tabIndex={0}
                                 className={cn(
                                   'cursor-pointer transition-all duration-150 rounded px-0.5',
                                   isSearchMatch &&
@@ -363,7 +408,9 @@ export function TranscriptionDemo() {
                                   isActiveWord &&
                                     !isSearchMatch &&
                                     'bg-accent/30 text-accent font-medium',
-                                  !isSearchMatch && !isActiveWord && 'hover:bg-muted'
+                                  !isSearchMatch &&
+                                    !isActiveWord &&
+                                    'hover:bg-muted',
                                 )}
                                 title={`${word.start.toFixed(1)}s - ${word.end.toFixed(1)}s`}
                               >
@@ -384,11 +431,12 @@ export function TranscriptionDemo() {
                   {/* Metadata */}
                   <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t">
                     <span className="flex items-center gap-1">
-                      <Globe className="h-3 w-3" />
+                      <Globe className="size-3" />
                       Provider: {mockTranscript.provider}
                     </span>
                     <span>
-                      Confidence: {(mockTranscript.confidence * 100).toFixed(1)}%
+                      Confidence: {(mockTranscript.confidence * 100).toFixed(1)}
+                      %
                     </span>
                   </div>
                 </CardContent>

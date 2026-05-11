@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { auth } from '@/lib/auth/auth';
 import {
   AlertTriangle,
   BookOpen,
@@ -11,6 +10,7 @@ import {
   Settings,
 } from 'lucide-react';
 
+import { auth } from '@/lib/auth/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { fetchKnowledgeHealth } from '@/lib/services/knowledge-health';
 import {

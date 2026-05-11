@@ -9,19 +9,26 @@ import { GoogleGenAI } from '@google/genai';
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { isAgentEnabled, getAgentSettings } from '@/lib/services/agent-config';
-import { checkPermission, requestApproval } from '@/lib/services/agent-permissions';
+import {
+  checkPermission,
+  requestApproval,
+} from '@/lib/services/agent-permissions';
 import { estimateActionCost } from '@/lib/services/agent-cost-estimator';
 import { withAgentLogging, logAgentAction } from '@/lib/services/agent-logger';
 import { storeMemory, recallMemory } from '@/lib/services/agent-memory';
 import { getConceptsForContent } from '@/lib/services/concept-extractor';
-import { hammingDistance, hammingToSimilarity } from '@/lib/services/similarity-detector';
+import {
+  hammingDistance,
+  hammingToSimilarity,
+} from '@/lib/services/similarity-detector';
 import { generateEmbeddingWithFallback } from '@/lib/services/embedding-fallback';
 import type { Database } from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
-type SessionState = Database['public']['Tables']['agent_sessions']['Update']['state'];
+type SessionState =
+  Database['public']['Tables']['agent_sessions']['Update']['state'];
 
 const AGENT_TYPE = 'curator';
 const ZERO_HASH = '0'.repeat(64);
@@ -107,9 +114,14 @@ async function requestApprovalWithCost(
         },
       },
     });
-    console.log(`[CurateKnowledge] Approval requested for ${actionType} on ${contentId}`);
+    console.log(
+      `[CurateKnowledge] Approval requested for ${actionType} on ${contentId}`,
+    );
   } catch (error) {
-    console.error(`[CurateKnowledge] Failed to request approval for ${actionType} on ${contentId}:`, error);
+    console.error(
+      `[CurateKnowledge] Failed to request approval for ${actionType} on ${contentId}:`,
+      error,
+    );
   }
 }
 
@@ -133,7 +145,7 @@ const SUB_TASKS: SubTask[] = [
 
 export async function handleCurateKnowledge(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as Record<string, unknown>;
   const orgId = (payload.orgId as string) || '';
@@ -174,7 +186,8 @@ export async function handleCurateKnowledge(
   if (existingSession) {
     sessionId = existingSession.id;
     lastProcessedAt =
-      (existingSession.state as { lastProcessedAt?: string | null })?.lastProcessedAt ?? null;
+      (existingSession.state as { lastProcessedAt?: string | null })
+        ?.lastProcessedAt ?? null;
 
     await supabase
       .from('agent_sessions')
@@ -198,7 +211,9 @@ export async function handleCurateKnowledge(
       .single();
 
     if (createError || !newSession) {
-      throw new Error(`Failed to create curator session: ${createError?.message}`);
+      throw new Error(
+        `Failed to create curator session: ${createError?.message}`,
+      );
     }
 
     sessionId = newSession.id;
@@ -238,56 +253,72 @@ export async function handleCurateKnowledge(
       .eq('id', sessionId);
 
     progressCallback?.(100, 'No new content to process');
-    console.log(`[CurateKnowledge] No new content for ${orgId} since ${lastProcessedAt ?? 'first run'}`);
+    console.log(
+      `[CurateKnowledge] No new content for ${orgId} since ${lastProcessedAt ?? 'first run'}`,
+    );
     return;
   }
 
-  console.log(`[CurateKnowledge] Found ${newContent.length} new content items for ${orgId}`);
+  console.log(
+    `[CurateKnowledge] Found ${newContent.length} new content items for ${orgId}`,
+  );
 
-  for (const [i, item] of newContent.entries()) {
-    const progressPercent = 30 + Math.round((i / newContent.length) * 60);
-    progressCallback?.(progressPercent, `Processing item ${i + 1} of ${newContent.length}...`);
+  await Promise.all(
+    Array.from(newContent.entries()).map(async ([i, item]) => {
+      const progressPercent = 30 + Math.round((i / newContent.length) * 60);
+      progressCallback?.(
+        progressPercent,
+        `Processing item ${i + 1} of ${newContent.length}...`,
+      );
 
-    try {
-      for (const task of SUB_TASKS) {
-        await withAgentLogging(
-          {
-            orgId,
-            agentType: AGENT_TYPE,
-            actionType: task.actionType,
-            contentId: item.id,
-            inputSummary: `${task.label} ${item.id}`,
-          },
-          () => task.run(item.id, orgId)
+      try {
+        await Promise.all(
+          SUB_TASKS.map((task) =>
+            withAgentLogging(
+              {
+                orgId,
+                agentType: AGENT_TYPE,
+                actionType: task.actionType,
+                contentId: item.id,
+                inputSummary: `${task.label} ${item.id}`,
+              },
+              () => task.run(item.id, orgId),
+            ),
+          ),
         );
+
+        await supabase
+          .from('agent_sessions')
+          .update({
+            last_active_at: new Date().toISOString(),
+            state: curatorState(item.created_at),
+          })
+          .eq('id', sessionId);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        console.error(
+          `[CurateKnowledge] Error processing content ${item.id}: ${errorMessage}`,
+        );
+
+        await logAgentAction({
+          orgId,
+          agentType: AGENT_TYPE,
+          actionType: 'curate_knowledge',
+          contentId: item.id,
+          outcome: 'failure',
+          errorMessage,
+        });
+
+        throw error;
       }
-
-      await supabase
-        .from('agent_sessions')
-        .update({
-          last_active_at: new Date().toISOString(),
-          state: curatorState(item.created_at),
-        })
-        .eq('id', sessionId);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[CurateKnowledge] Error processing content ${item.id}: ${errorMessage}`);
-
-      await logAgentAction({
-        orgId,
-        agentType: AGENT_TYPE,
-        actionType: 'curate_knowledge',
-        contentId: item.id,
-        outcome: 'failure',
-        errorMessage,
-      });
-
-      throw error;
-    }
-  }
+    }),
+  );
 
   progressCallback?.(100, 'Knowledge curation complete');
-  console.log(`[CurateKnowledge] Curation complete for ${orgId} -- processed ${newContent.length} items`);
+  console.log(
+    `[CurateKnowledge] Curation complete for ${orgId} -- processed ${newContent.length} items`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +331,10 @@ export async function handleCurateKnowledge(
  * agent_activity_log (action_type 'suggest_tags'). Tags are NOT
  * auto-applied (requires authorization framework E06).
  */
-async function categorizeContent(contentId: string, orgId: string): Promise<void> {
+async function categorizeContent(
+  contentId: string,
+  orgId: string,
+): Promise<void> {
   const supabase = createAdminClient();
   const concepts = await getConceptsForContent(contentId);
 
@@ -314,7 +348,9 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
   } as const;
 
   if (concepts.length === 0) {
-    console.log(`[CurateKnowledge] Skipping categorization: no extracted concepts for ${contentId}`);
+    console.log(
+      `[CurateKnowledge] Skipping categorization: no extracted concepts for ${contentId}`,
+    );
     await logAgentAction({
       ...tagLogBase,
       outcome: 'skipped',
@@ -331,18 +367,20 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
     .order('name');
 
   const tags = orgTags ?? [];
-  const orgTagNames = tags.map(t => t.name);
+  const orgTagNames = tags.map((t) => t.name);
 
   const { data: existingAssociations } = await supabase
     .from('content_tags')
     .select('tag_id')
     .eq('content_id', contentId);
 
-  const existingTagIds = new Set((existingAssociations ?? []).map(a => a.tag_id));
+  const existingTagIds = new Set(
+    (existingAssociations ?? []).map((a) => a.tag_id),
+  );
   const existingTagNames = new Set(
-    tags
-      .filter(t => existingTagIds.has(t.id))
-      .map(t => t.name.toLowerCase())
+    tags.flatMap((__item, __index, __array) =>
+      existingTagIds.has(__item.id) ? [__item.name.toLowerCase()] : [],
+    ),
   );
 
   const tagVocabulary = await recallMemory({
@@ -351,12 +389,12 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
     key: `tag_vocabulary:${orgId}`,
   });
 
-  const conceptNames = concepts.map(c => c.name);
+  const conceptNames = concepts.map((c) => c.name);
   const prompt = buildCategorizationPrompt(
     conceptNames,
     orgTagNames,
     existingTagNames,
-    tagVocabulary?.memory_value ?? ''
+    tagVocabulary?.memory_value ?? '',
   );
 
   let suggestions: TagSuggestion[];
@@ -369,11 +407,16 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
     });
 
     const parsed = parseTagSuggestions(result.text ?? '');
-    const filtered = parsed.filter(s => !existingTagNames.has(s.name.toLowerCase()));
+    const filtered = parsed.filter(
+      (s) => !existingTagNames.has(s.name.toLowerCase()),
+    );
     suggestions = deduplicateSuggestions(filtered, orgTagNames);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[CurateKnowledge] Tag suggestion failed for ${contentId}:`, errorMessage);
+    console.error(
+      `[CurateKnowledge] Tag suggestion failed for ${contentId}:`,
+      errorMessage,
+    );
     await logAgentAction({ ...tagLogBase, outcome: 'failure', errorMessage });
     return;
   }
@@ -382,7 +425,7 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
     ...tagLogBase,
     outcome: 'success',
     outputSummary: JSON.stringify(
-      suggestions.map(s => ({ name: s.name, confidence: s.confidence }))
+      suggestions.map((s) => ({ name: s.name, confidence: s.confidence })),
     ),
     metadata: {
       conceptCount: concepts.length,
@@ -394,27 +437,30 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
 
   console.log(
     `[CurateKnowledge] Suggested ${suggestions.length} tags for ${contentId}: ` +
-      suggestions.map(s => `${s.name} (${s.confidence})`).join(', ')
+      suggestions.map((s) => `${s.name} (${s.confidence})`).join(', '),
   );
 
   if (suggestions.length > 0) {
     await requestApprovalWithCost(orgId, 'auto_apply_tags', contentId, {
-      description: `Auto-apply ${suggestions.length} suggested tags: ${suggestions.map(s => s.name).join(', ')}`,
+      description: `Auto-apply ${suggestions.length} suggested tags: ${suggestions.map((s) => s.name).join(', ')}`,
       proposedAction: {
         type: 'apply_tags',
-        tags: suggestions.map(s => ({ name: s.name, confidence: s.confidence })),
+        tags: suggestions.map((s) => ({
+          name: s.name,
+          confidence: s.confidence,
+        })),
       },
     });
   }
 
   // Best-effort: update agent memory with org tag vocabulary
   try {
-    const allKnownTags = [
-      ...new Set([
-        ...orgTagNames.map(t => t.toLowerCase()),
-        ...suggestions.map(s => s.name.toLowerCase()),
+    const allKnownTags = Array.from(
+      new Set([
+        ...orgTagNames.map((t) => t.toLowerCase()),
+        ...suggestions.map((s) => s.name.toLowerCase()),
       ]),
-    ].sort();
+    ).toSorted();
 
     await storeMemory({
       orgId,
@@ -428,7 +474,10 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
       importance: 0.7,
     });
   } catch (memoryError) {
-    console.error('[CurateKnowledge] Tag vocabulary memory update failed (non-critical):', memoryError);
+    console.error(
+      '[CurateKnowledge] Tag vocabulary memory update failed (non-critical):',
+      memoryError,
+    );
   }
 }
 
@@ -451,7 +500,10 @@ async function categorizeContent(contentId: string, orgId: string): Promise<void
  * Stores all matches in agent memory for later review. Does NOT auto-delete
  * or merge content.
  */
-async function detectDuplicates(contentId: string, orgId: string): Promise<void> {
+async function detectDuplicates(
+  contentId: string,
+  orgId: string,
+): Promise<void> {
   const supabase = createAdminClient();
 
   const logBase = {
@@ -471,14 +523,29 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
     .single();
 
   if (contentError || !content) {
-    console.error(`[CurateKnowledge] Cannot load content ${contentId} for duplicate check`);
-    await logAgentAction({ ...logBase, outcome: 'failure', errorMessage: contentError?.message ?? 'Content not found' });
+    console.error(
+      `[CurateKnowledge] Cannot load content ${contentId} for duplicate check`,
+    );
+    await logAgentAction({
+      ...logBase,
+      outcome: 'failure',
+      errorMessage: contentError?.message ?? 'Content not found',
+    });
     return;
   }
 
-  const perceptualMatches = await findPerceptualMatches(supabase, content.video_hash, content.audio_hash, orgId, contentId);
-  const embeddingMatches = await findEmbeddingMatches(supabase, contentId, orgId);
-  const conceptOverlapMap = await findConceptOverlap(supabase, contentId, orgId);
+  const [perceptualMatches, embeddingMatches, conceptOverlapMap] =
+    await Promise.all([
+      findPerceptualMatches(
+        supabase,
+        content.video_hash,
+        content.audio_hash,
+        orgId,
+        contentId,
+      ),
+      findEmbeddingMatches(supabase, contentId, orgId),
+      findConceptOverlap(supabase, contentId, orgId),
+    ]);
 
   const candidateIds = new Set([
     ...perceptualMatches.keys(),
@@ -497,48 +564,59 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
     .in('id', Array.from(candidateIds))
     .is('deleted_at', null);
 
-  const titleMap = new Map((candidateRows ?? []).map(r => [r.id, r.title ?? 'Untitled']));
+  const titleMap = new Map(
+    (candidateRows ?? []).map((r) => [r.id, r.title ?? 'Untitled']),
+  );
 
-  const matches: DuplicateMatch[] = [...candidateIds].flatMap(candidateId => {
+  const matches: DuplicateMatch[] = [...candidateIds].flatMap((candidateId) => {
     const phash = perceptualMatches.get(candidateId) ?? null;
     const embedding = embeddingMatches.get(candidateId) ?? null;
     const concepts = conceptOverlapMap.get(candidateId) ?? null;
     const level = classifyDuplicateLevel(phash, embedding, concepts);
 
     if (!level) return [];
-    return [{
-      matchedContentId: candidateId,
-      matchedTitle: titleMap.get(candidateId) ?? 'Untitled',
-      level,
-      perceptualSimilarity: phash,
-      embeddingSimilarity: embedding,
-      conceptOverlap: concepts,
-    }];
+    return [
+      {
+        matchedContentId: candidateId,
+        matchedTitle: titleMap.get(candidateId) ?? 'Untitled',
+        level,
+        perceptualSimilarity: phash,
+        embeddingSimilarity: embedding,
+        conceptOverlap: concepts,
+      },
+    ];
   });
 
   if (matches.length === 0) {
-    console.log(`[CurateKnowledge] No duplicates above threshold for ${contentId}`);
+    console.log(
+      `[CurateKnowledge] No duplicates above threshold for ${contentId}`,
+    );
     return;
   }
 
   const actionableMatches = matches.filter(
-    m => m.level === 'EXACT_DUPLICATE' || m.level === 'NEAR_DUPLICATE'
+    (m) => m.level === 'EXACT_DUPLICATE' || m.level === 'NEAR_DUPLICATE',
   );
-  for (const match of actionableMatches) {
-    await logAgentAction({
-      ...logBase,
-      outcome: 'success',
-      outputSummary: JSON.stringify({
-        level: match.level,
-        matchedContentId: match.matchedContentId,
-        matchedTitle: match.matchedTitle,
-        perceptualSimilarity: match.perceptualSimilarity,
-        embeddingSimilarity: match.embeddingSimilarity,
-        conceptOverlap: match.conceptOverlap,
-      }),
-      metadata: { level: match.level, matchedContentId: match.matchedContentId },
-    });
-  }
+  await Promise.all(
+    Array.from(actionableMatches).map(async (match) => {
+      await logAgentAction({
+        ...logBase,
+        outcome: 'success',
+        outputSummary: JSON.stringify({
+          level: match.level,
+          matchedContentId: match.matchedContentId,
+          matchedTitle: match.matchedTitle,
+          perceptualSimilarity: match.perceptualSimilarity,
+          embeddingSimilarity: match.embeddingSimilarity,
+          conceptOverlap: match.conceptOverlap,
+        }),
+        metadata: {
+          level: match.level,
+          matchedContentId: match.matchedContentId,
+        },
+      });
+    }),
+  );
 
   if (actionableMatches.length > 0) {
     const topMatch = actionableMatches[0];
@@ -546,14 +624,16 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
       description: `Merge duplicate recordings: ${topMatch.matchedTitle} (${topMatch.level})`,
       proposedAction: {
         type: 'merge',
-        sourceIds: actionableMatches.map(m => m.matchedContentId),
+        sourceIds: actionableMatches.map((m) => m.matchedContentId),
       },
     });
   }
 
   // Generate a structured merge suggestion for every NEAR_DUPLICATE pair.
   // Non-fatal: a logging failure here should not abort duplicate detection.
-  const nearDuplicates = actionableMatches.filter(m => m.level === 'NEAR_DUPLICATE');
+  const nearDuplicates = actionableMatches.filter(
+    (m) => m.level === 'NEAR_DUPLICATE',
+  );
   if (nearDuplicates.length > 0) {
     try {
       await suggestMerges(contentId, orgId, nearDuplicates);
@@ -571,22 +651,31 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
       agentType: AGENT_TYPE,
       key: `duplicate:${contentId}`,
       value: JSON.stringify(
-        matches.map(m => ({
+        matches.map((m) => ({
           matchedContentId: m.matchedContentId,
           level: m.level,
           perceptualSimilarity: m.perceptualSimilarity,
           embeddingSimilarity: m.embeddingSimilarity,
           conceptOverlap: m.conceptOverlap,
-        }))
+        })),
       ),
-      importance: matches.some(m => m.level === 'EXACT_DUPLICATE') ? 0.9 : 0.7,
+      importance: matches.some((m) => m.level === 'EXACT_DUPLICATE')
+        ? 0.9
+        : 0.7,
     });
   } catch (memoryError) {
-    console.error('[CurateKnowledge] Duplicate memory store failed (non-critical):', memoryError);
+    console.error(
+      '[CurateKnowledge] Duplicate memory store failed (non-critical):',
+      memoryError,
+    );
   }
 
-  const summary = matches.map(m => `${m.level}: ${m.matchedContentId}`).join(', ');
-  console.log(`[CurateKnowledge] Duplicate detection for ${contentId}: ${summary}`);
+  const summary = matches
+    .map((m) => `${m.level}: ${m.matchedContentId}`)
+    .join(', ');
+  console.log(
+    `[CurateKnowledge] Duplicate detection for ${contentId}: ${summary}`,
+  );
 }
 
 /**
@@ -595,7 +684,7 @@ async function detectDuplicates(contentId: string, orgId: string): Promise<void>
 function classifyDuplicateLevel(
   perceptualSimilarity: number | null,
   embeddingSimilarity: number | null,
-  conceptOverlap: number | null
+  conceptOverlap: number | null,
 ): DuplicateLevel | null {
   // EXACT_DUPLICATE: perceptual hash > 95%
   if (perceptualSimilarity !== null && perceptualSimilarity > 95) {
@@ -604,8 +693,10 @@ function classifyDuplicateLevel(
 
   // NEAR_DUPLICATE: embedding > 0.9 AND concept overlap > 80%
   if (
-    embeddingSimilarity !== null && embeddingSimilarity > 0.9 &&
-    conceptOverlap !== null && conceptOverlap > 80
+    embeddingSimilarity !== null &&
+    embeddingSimilarity > 0.9 &&
+    conceptOverlap !== null &&
+    conceptOverlap > 80
   ) {
     return 'NEAR_DUPLICATE';
   }
@@ -631,7 +722,7 @@ async function findPerceptualMatches(
   videoHash: string | null,
   audioHash: string | null,
   orgId: string,
-  excludeContentId: string
+  excludeContentId: string,
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
 
@@ -652,8 +743,12 @@ async function findPerceptualMatches(
 
   for (const candidate of candidates) {
     try {
-      const videoSim = hammingToSimilarity(hammingDistance(videoHash, candidate.video_hash!));
-      const audioSim = hammingToSimilarity(hammingDistance(audioHash, candidate.audio_hash!));
+      const videoSim = hammingToSimilarity(
+        hammingDistance(videoHash, candidate.video_hash!),
+      );
+      const audioSim = hammingToSimilarity(
+        hammingDistance(audioHash, candidate.audio_hash!),
+      );
       const overall = videoSim * 0.6 + audioSim * 0.4;
 
       if (overall > 50) {
@@ -675,7 +770,7 @@ async function findPerceptualMatches(
 async function findEmbeddingMatches(
   supabase: ReturnType<typeof createAdminClient>,
   contentId: string,
-  orgId: string
+  orgId: string,
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
 
@@ -689,15 +784,24 @@ async function findEmbeddingMatches(
 
   if (!chunks?.length) return result;
 
-  const representativeText = chunks.map(c => c.chunk_text).join(' ').slice(0, 2000);
+  const representativeText = chunks
+    .map((c) => c.chunk_text)
+    .join(' ')
+    .slice(0, 2000);
   if (!representativeText.trim()) return result;
 
   let queryEmbedding: number[];
   try {
-    const embeddingResult = await generateEmbeddingWithFallback(representativeText, 'RETRIEVAL_QUERY');
+    const embeddingResult = await generateEmbeddingWithFallback(
+      representativeText,
+      'RETRIEVAL_QUERY',
+    );
     queryEmbedding = embeddingResult.embedding;
   } catch (error) {
-    console.error(`[CurateKnowledge] Embedding generation failed for ${contentId}:`, error);
+    console.error(
+      `[CurateKnowledge] Embedding generation failed for ${contentId}:`,
+      error,
+    );
     return result;
   }
 
@@ -715,7 +819,10 @@ async function findEmbeddingMatches(
   });
 
   if (error || !matches) {
-    console.error(`[CurateKnowledge] match_chunks failed for ${contentId}:`, error?.message);
+    console.error(
+      `[CurateKnowledge] match_chunks failed for ${contentId}:`,
+      error?.message,
+    );
     return result;
   }
 
@@ -738,14 +845,14 @@ async function findEmbeddingMatches(
 async function findConceptOverlap(
   supabase: ReturnType<typeof createAdminClient>,
   contentId: string,
-  orgId: string
+  orgId: string,
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>();
 
   const concepts = await getConceptsForContent(contentId);
   if (concepts.length === 0) return result;
 
-  const conceptIds = concepts.map(c => c.id);
+  const conceptIds = concepts.map((c) => c.id);
 
   const { data: activeContent } = await supabase
     .from('content')
@@ -762,7 +869,10 @@ async function findConceptOverlap(
     .select('content_id, concept_id')
     .in('concept_id', conceptIds)
     .eq('org_id', orgId)
-    .in('content_id', activeContent.map(c => c.id));
+    .in(
+      'content_id',
+      activeContent.map((c) => c.id),
+    );
 
   if (!mentions?.length) return result;
 
@@ -787,7 +897,7 @@ function buildCategorizationPrompt(
   concepts: string[],
   orgTags: string[],
   existingContentTags: Set<string>,
-  memoryContext: string
+  memoryContext: string,
 ): string {
   const existingTagsList =
     orgTags.length > 0
@@ -806,7 +916,7 @@ function buildCategorizationPrompt(
   return `You are a content categorization specialist. Based on the extracted concepts from a piece of content, suggest appropriate tags.
 
 **Extracted concepts from the content:**
-${concepts.map(c => `- ${c}`).join('\n')}
+${concepts.map((c) => `- ${c}`).join('\n')}
 ${existingTagsList}${alreadyApplied}${memoryHint}
 
 **Rules:**
@@ -835,7 +945,9 @@ function parseTagSuggestions(responseText: string): TagSuggestion[] {
   try {
     let cleaned = responseText.trim();
     if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      cleaned = cleaned
+        .replace(/^```(?:json)?\s*\n?/, '')
+        .replace(/\n?```\s*$/, '');
     }
 
     const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
@@ -844,22 +956,26 @@ function parseTagSuggestions(responseText: string): TagSuggestion[] {
     const parsed = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(parsed)) return [];
 
-    return (parsed as Partial<TagSuggestion>[])
-      .filter(
-        (s): s is TagSuggestion =>
-          typeof s?.name === 'string' &&
-          s.name.length > 0 &&
-          typeof s?.confidence === 'number' &&
-          s.confidence >= 0 &&
-          s.confidence <= 1
-      )
-      .map(s => ({
-        name: s.name.trim().toLowerCase(),
-        confidence: Math.round(s.confidence * 100) / 100,
-        reason: s.reason?.trim() ?? '',
-      }));
+    return (parsed as Partial<TagSuggestion>[]).flatMap(
+      (__item, __index, __array) =>
+        typeof __item?.name === 'string' &&
+        __item.name.length > 0 &&
+        typeof __item?.confidence === 'number' &&
+        __item.confidence >= 0 &&
+        __item.confidence <= 1
+          ? [
+              {
+                name: __item.name.trim().toLowerCase(),
+                confidence: Math.round(__item.confidence * 100) / 100,
+                reason: __item.reason?.trim() ?? '',
+              },
+            ]
+          : [],
+    );
   } catch {
-    console.error('[CurateKnowledge] Failed to parse tag suggestions from Gemini response');
+    console.error(
+      '[CurateKnowledge] Failed to parse tag suggestions from Gemini response',
+    );
     return [];
   }
 }
@@ -870,26 +986,60 @@ function parseTagSuggestions(responseText: string): TagSuggestion[] {
  */
 function deduplicateSuggestions(
   suggestions: TagSuggestion[],
-  orgTagNames: string[]
+  orgTagNames: string[],
 ): TagSuggestion[] {
-  const orgTagSet = new Set(orgTagNames.map(t => t.toLowerCase()));
+  const orgTagSet = new Set(orgTagNames.map((t) => t.toLowerCase()));
   const result: TagSuggestion[] = [];
   const seen = new Set<string>();
+  const similarCandidateIndicesByPrefix = new Map<string, Set<number>>();
+
+  const indexSuggestionPrefixes = (name: string, index: number) => {
+    const minLength = Math.max(1, name.length - 5);
+    for (let length = minLength; length <= name.length; length++) {
+      const prefix = name.slice(0, length);
+      const indices =
+        similarCandidateIndicesByPrefix.get(prefix) ?? new Set<number>();
+      indices.add(index);
+      similarCandidateIndicesByPrefix.set(prefix, indices);
+    }
+  };
 
   for (const suggestion of suggestions) {
     const lower = suggestion.name.toLowerCase();
     if (seen.has(lower)) continue;
 
-    const dupeIdx = result.findIndex(kept => areSimilarTags(kept.name, lower));
+    const candidateIndices = new Set<number>();
+    similarCandidateIndicesByPrefix.get(lower)?.forEach((index) => {
+      candidateIndices.add(index);
+    });
+    const minPrefixLength = Math.max(1, lower.length - 5);
+    for (let length = minPrefixLength; length <= lower.length; length++) {
+      similarCandidateIndicesByPrefix
+        .get(lower.slice(0, length))
+        ?.forEach((index) => {
+          candidateIndices.add(index);
+        });
+    }
+
+    let dupeIdx = -1;
+    for (const candidateIndex of candidateIndices) {
+      const kept = result[candidateIndex];
+      if (kept && areSimilarTags(kept.name, lower)) {
+        dupeIdx = candidateIndex;
+        break;
+      }
+    }
     if (dupeIdx >= 0) {
       if (orgTagSet.has(lower) && !orgTagSet.has(result[dupeIdx].name)) {
         result[dupeIdx] = suggestion;
+        indexSuggestionPrefixes(lower, dupeIdx);
       }
       continue;
     }
 
     seen.add(lower);
     result.push(suggestion);
+    indexSuggestionPrefixes(lower, result.length - 1);
   }
 
   return result;
@@ -923,20 +1073,27 @@ function buildMergeSuggestion(
   match: DuplicateMatch,
   matchedCreatedAt: string | null,
 ): MergeSuggestion {
-  const overlapPct = match.conceptOverlap !== null ? Math.round(match.conceptOverlap) : null;
-  const embPct = match.embeddingSimilarity !== null
-    ? Math.round(match.embeddingSimilarity * 100)
-    : null;
+  const overlapPct =
+    match.conceptOverlap !== null ? Math.round(match.conceptOverlap) : null;
+  const embPct =
+    match.embeddingSimilarity !== null
+      ? Math.round(match.embeddingSimilarity * 100)
+      : null;
 
   // Identify which item is older so the reason can name it explicitly.
   const currentDate = contentCreatedAt ? new Date(contentCreatedAt) : null;
   const matchedDate = matchedCreatedAt ? new Date(matchedCreatedAt) : null;
   const currentIsOlder =
     currentDate && matchedDate ? currentDate < matchedDate : null;
-  const newerTitle = currentIsOlder === true ? match.matchedTitle : contentTitle;
+  const newerTitle =
+    currentIsOlder === true ? match.matchedTitle : contentTitle;
 
-  const overlapDesc = overlapPct !== null ? `${overlapPct}% concept overlap` : 'high content similarity';
-  const embeddingDesc = embPct !== null ? ` and ${embPct}% embedding similarity` : '';
+  const overlapDesc =
+    overlapPct !== null
+      ? `${overlapPct}% concept overlap`
+      : 'high content similarity';
+  const embeddingDesc =
+    embPct !== null ? ` and ${embPct}% embedding similarity` : '';
   const reason =
     `Both "${contentTitle}" and "${match.matchedTitle}" cover similar content with ` +
     `${overlapDesc}${embeddingDesc}. "${newerTitle}" is newer and may be more comprehensive.`;
@@ -944,7 +1101,11 @@ function buildMergeSuggestion(
   const suggestedAction: MergeSuggestion['suggestedAction'] =
     overlapPct !== null && overlapPct >= 80 ? 'archive_older' : 'review';
 
-  return { sourceIds: [contentId, match.matchedContentId], reason, suggestedAction };
+  return {
+    sourceIds: [contentId, match.matchedContentId],
+    reason,
+    suggestedAction,
+  };
 }
 
 /**
@@ -962,46 +1123,46 @@ async function suggestMerges(
 
   const supabase = createAdminClient();
 
-  const allIds = [contentId, ...nearDuplicates.map(m => m.matchedContentId)];
+  const allIds = [contentId, ...nearDuplicates.map((m) => m.matchedContentId)];
   const { data: contentRows } = await supabase
     .from('content')
     .select('id, title, created_at')
     .in('id', allIds);
 
-  const contentMap = new Map((contentRows ?? []).map(r => [r.id, r]));
+  const contentMap = new Map((contentRows ?? []).map((r) => [r.id, r]));
   const currentContent = contentMap.get(contentId);
 
-  for (const match of nearDuplicates) {
-    const matchedContent = contentMap.get(match.matchedContentId);
-    const suggestion = buildMergeSuggestion(
-      contentId,
-      currentContent?.title ?? 'Untitled',
-      currentContent?.created_at ?? null,
-      match,
-      matchedContent?.created_at ?? null,
-    );
-
-    await logAgentAction({
-      orgId,
-      agentType: AGENT_TYPE,
-      actionType: 'suggest_merge',
-      contentId,
-      targetEntity: 'content',
-      targetId: match.matchedContentId,
-      outcome: 'success',
-      outputSummary: JSON.stringify(suggestion),
-      metadata: {
-        level: match.level,
-        embeddingSimilarity: match.embeddingSimilarity,
-        conceptOverlap: match.conceptOverlap,
-        perceptualSimilarity: match.perceptualSimilarity,
-      },
-    });
-
-    console.log(
-      `[CurateKnowledge] Merge suggestion: ${contentId} ↔ ${match.matchedContentId} → ${suggestion.suggestedAction}`
-    );
-  }
+  await Promise.all(
+    Array.from(nearDuplicates).map(async (match) => {
+      const matchedContent = contentMap.get(match.matchedContentId);
+      const suggestion = buildMergeSuggestion(
+        contentId,
+        currentContent?.title ?? 'Untitled',
+        currentContent?.created_at ?? null,
+        match,
+        matchedContent?.created_at ?? null,
+      );
+      await logAgentAction({
+        orgId,
+        agentType: AGENT_TYPE,
+        actionType: 'suggest_merge',
+        contentId,
+        targetEntity: 'content',
+        targetId: match.matchedContentId,
+        outcome: 'success',
+        outputSummary: JSON.stringify(suggestion),
+        metadata: {
+          level: match.level,
+          embeddingSimilarity: match.embeddingSimilarity,
+          conceptOverlap: match.conceptOverlap,
+          perceptualSimilarity: match.perceptualSimilarity,
+        },
+      });
+      console.log(
+        `[CurateKnowledge] Merge suggestion: ${contentId} ↔ ${match.matchedContentId} → ${suggestion.suggestedAction}`,
+      );
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1022,7 +1183,10 @@ const DEFAULT_STALENESS_THRESHOLD_DAYS = 90;
  * Each stale item is logged to agent_activity_log (action_type 'detect_stale')
  * and stored in agent memory with key 'stale:{contentId}'.
  */
-async function detectStaleness(contentId: string, orgId: string): Promise<void> {
+async function detectStaleness(
+  contentId: string,
+  orgId: string,
+): Promise<void> {
   const supabase = createAdminClient();
 
   // Read configurable threshold from org_agent_settings.metadata
@@ -1044,12 +1208,14 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
     .single();
 
   if (contentError || !newContent) {
-    console.error(`[CurateKnowledge] Cannot load content ${contentId} for staleness check`);
+    console.error(
+      `[CurateKnowledge] Cannot load content ${contentId} for staleness check`,
+    );
     return;
   }
 
   const newConcepts = await getConceptsForContent(contentId);
-  const newConceptIds = newConcepts.map(c => c.id);
+  const newConceptIds = newConcepts.map((c) => c.id);
 
   // Concept overlap: other contentId -> shared concept count
   const conceptOverlap = new Map<string, number>();
@@ -1078,7 +1244,7 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
     .lt('updated_at', thresholdDate.toISOString());
 
   const candidateIds = new Set([
-    ...(agedContent ?? []).map(c => c.id),
+    ...(agedContent ?? []).map((c) => c.id),
     ...conceptOverlap.keys(),
   ]);
 
@@ -1099,8 +1265,10 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
 
   // Batch-fetch total concept counts per candidate (for overlap %)
   const candidateConceptCounts = new Map<string, number>();
-  const candidateIdSet = new Set(candidates.map(c => c.id));
-  const overlapIds = [...conceptOverlap.keys()].filter(id => candidateIdSet.has(id));
+  const candidateIdSet = new Set(candidates.map((c) => c.id));
+  const overlapIds = [...conceptOverlap.keys()].filter((id) =>
+    candidateIdSet.has(id),
+  );
 
   if (overlapIds.length > 0) {
     const { data: allMentions } = await supabase
@@ -1121,134 +1289,142 @@ async function detectStaleness(contentId: string, orgId: string): Promise<void> 
     }
   }
 
-  let flaggedCount = 0;
+  const flaggedResults = await Promise.all(
+    candidates.map(async (item) => {
+      const reasons: string[] = [];
+      let confidence = 0;
+      let supersededBy: string | null = null;
 
-  for (const item of candidates) {
-    const reasons: string[] = [];
-    let confidence = 0;
-    let supersededBy: string | null = null;
-
-    const updatedAt = new Date(item.updated_at);
-    const daysSinceUpdate = Math.floor(
-      (now.getTime() - updatedAt.getTime()) / MS_PER_DAY
-    );
-
-    // Criterion 1: content age
-    if (daysSinceUpdate > thresholdDays) {
-      reasons.push(
-        `Content is ${daysSinceUpdate} days old (threshold: ${thresholdDays} days) and has not been updated`
+      const updatedAt = new Date(item.updated_at);
+      const daysSinceUpdate = Math.floor(
+        (now.getTime() - updatedAt.getTime()) / MS_PER_DAY,
       );
-      confidence = Math.max(
-        confidence,
-        Math.min(0.9, 0.5 + (daysSinceUpdate - thresholdDays) / 365)
-      );
-    }
 
-    // Criteria 2 & 3 only apply to content older than the new item
-    const isOlderThanNew = item.updated_at < newContent.updated_at;
-    if (isOlderThanNew && newConceptIds.length > 0) {
-      const sharedCount = conceptOverlap.get(item.id) ?? 0;
-      const oldConceptCount = candidateConceptCounts.get(item.id) ?? 0;
-      const overlapPercent = oldConceptCount > 0
-        ? (sharedCount / oldConceptCount) * 100
-        : 0;
-
-      // Criterion 3: supersession (80%+ concept overlap OR matching title)
-      const titleMatch =
-        newContent.title != null &&
-        item.title != null &&
-        areSimilarTitles(item.title, newContent.title);
-
-      if (overlapPercent >= 80 || titleMatch) {
-        supersededBy = contentId;
-        const detail =
-          overlapPercent >= 80
-            ? `${Math.round(overlapPercent)}% concept overlap`
-            : 'matching title pattern';
+      // Criterion 1: content age
+      if (daysSinceUpdate > thresholdDays) {
         reasons.push(
-          `Potentially superseded by "${newContent.title ?? 'Untitled'}" (${detail})`
+          `Content is ${daysSinceUpdate} days old (threshold: ${thresholdDays} days) and has not been updated`,
         );
-        confidence = Math.max(confidence, 0.8);
+        confidence = Math.max(
+          confidence,
+          Math.min(0.9, 0.5 + (daysSinceUpdate - thresholdDays) / 365),
+        );
+      }
 
-        // When concept overlap ≥ 80%, mark any active workflows for this content as outdated
-        if (overlapPercent >= 80) {
-          try {
-            await markSupersededWorkflowsAsOutdated(supabase, item.id, contentId, orgId);
-          } catch (workflowError) {
-            console.error(
-              `[CurateKnowledge] Failed to mark workflows outdated for ${item.id} (non-critical):`,
-              workflowError,
-            );
+      // Criteria 2 & 3 only apply to content older than the new item
+      const isOlderThanNew = item.updated_at < newContent.updated_at;
+      if (isOlderThanNew && newConceptIds.length > 0) {
+        const sharedCount = conceptOverlap.get(item.id) ?? 0;
+        const oldConceptCount = candidateConceptCounts.get(item.id) ?? 0;
+        const overlapPercent =
+          oldConceptCount > 0 ? (sharedCount / oldConceptCount) * 100 : 0;
+
+        // Criterion 3: supersession (80%+ concept overlap OR matching title)
+        const titleMatch =
+          newContent.title != null &&
+          item.title != null &&
+          areSimilarTitles(item.title, newContent.title);
+
+        if (overlapPercent >= 80 || titleMatch) {
+          supersededBy = contentId;
+          const detail =
+            overlapPercent >= 80
+              ? `${Math.round(overlapPercent)}% concept overlap`
+              : 'matching title pattern';
+          reasons.push(
+            `Potentially superseded by "${newContent.title ?? 'Untitled'}" (${detail})`,
+          );
+          confidence = Math.max(confidence, 0.8);
+
+          // When concept overlap ≥ 80%, mark any active workflows for this content as outdated
+          if (overlapPercent >= 80) {
+            try {
+              await markSupersededWorkflowsAsOutdated(
+                supabase,
+                item.id,
+                contentId,
+                orgId,
+              );
+            } catch (workflowError) {
+              console.error(
+                `[CurateKnowledge] Failed to mark workflows outdated for ${item.id} (non-critical):`,
+                workflowError,
+              );
+            }
           }
         }
+        // Criterion 2: concept freshness (any shared concepts, lower signal)
+        else if (sharedCount > 0) {
+          reasons.push(
+            `Newer content "${newContent.title ?? 'Untitled'}" covers similar concepts`,
+          );
+          confidence = Math.max(confidence, 0.6);
+        }
       }
-      // Criterion 2: concept freshness (any shared concepts, lower signal)
-      else if (sharedCount > 0) {
-        reasons.push(
-          `Newer content "${newContent.title ?? 'Untitled'}" covers similar concepts`
-        );
-        confidence = Math.max(confidence, 0.6);
-      }
-    }
 
-    if (reasons.length === 0) continue;
-    flaggedCount++;
+      if (reasons.length === 0) return 0;
 
-    await logAgentAction({
-      orgId,
-      agentType: AGENT_TYPE,
-      actionType: 'detect_stale',
-      contentId: item.id,
-      targetEntity: 'content',
-      targetId: item.id,
-      outcome: 'success',
-      confidence,
-      outputSummary: reasons.join('; '),
-      metadata: {
-        daysSinceUpdate,
-        thresholdDays,
-        supersededBy,
-        triggeredByContentId: contentId,
-      },
-    });
-
-    if (confidence >= 0.7) {
-      await requestApprovalWithCost(orgId, 'archive_content', item.id, {
-        description: `Archive stale content: ${item.title ?? 'Untitled'} (${reasons[0]})`,
-        proposedAction: {
-          type: 'archive',
-          contentId: item.id,
-          reason: reasons.join('; '),
-          confidence,
-        },
-      });
-    }
-
-    try {
-      await storeMemory({
+      await logAgentAction({
         orgId,
         agentType: AGENT_TYPE,
-        key: `stale:${item.id}`,
-        value: JSON.stringify({
-          reason: reasons.join('; '),
-          confidence,
+        actionType: 'detect_stale',
+        contentId: item.id,
+        targetEntity: 'content',
+        targetId: item.id,
+        outcome: 'success',
+        confidence,
+        outputSummary: reasons.join('; '),
+        metadata: {
           daysSinceUpdate,
           thresholdDays,
           supersededBy,
-          detectedAt: now.toISOString(),
-        }),
-        importance: confidence,
+          triggeredByContentId: contentId,
+        },
       });
-    } catch (memoryError) {
-      console.error(
-        '[CurateKnowledge] Staleness memory store failed (non-critical):',
-        memoryError
-      );
-    }
-  }
+
+      if (confidence >= 0.7) {
+        await requestApprovalWithCost(orgId, 'archive_content', item.id, {
+          description: `Archive stale content: ${item.title ?? 'Untitled'} (${reasons[0]})`,
+          proposedAction: {
+            type: 'archive',
+            contentId: item.id,
+            reason: reasons.join('; '),
+            confidence,
+          },
+        });
+      }
+
+      try {
+        await storeMemory({
+          orgId,
+          agentType: AGENT_TYPE,
+          key: `stale:${item.id}`,
+          value: JSON.stringify({
+            reason: reasons.join('; '),
+            confidence,
+            daysSinceUpdate,
+            thresholdDays,
+            supersededBy,
+            detectedAt: now.toISOString(),
+          }),
+          importance: confidence,
+        });
+      } catch (memoryError) {
+        console.error(
+          '[CurateKnowledge] Staleness memory store failed (non-critical):',
+          memoryError,
+        );
+      }
+      return 1;
+    }),
+  );
+  const flaggedCount = flaggedResults.reduce<number>(
+    (total, count) => total + count,
+    0,
+  );
 
   console.log(
-    `[CurateKnowledge] Staleness check triggered by ${contentId}: flagged ${flaggedCount} of ${candidates.length} candidates`
+    `[CurateKnowledge] Staleness check triggered by ${contentId}: flagged ${flaggedCount} of ${candidates.length} candidates`,
   );
 }
 
@@ -1296,15 +1472,22 @@ async function markSupersededWorkflowsAsOutdated(
     .update({ status: 'outdated', superseded_by: supersededById })
     .eq('content_id', supersededContentId)
     .eq('org_id', orgId)
-    .in('id', existingWorkflows.map(w => w.id));
+    .in(
+      'id',
+      existingWorkflows.map((w) => w.id),
+    );
 
   if (updateError) {
-    throw new Error(`Failed to mark workflows as outdated: ${updateError.message}`);
+    throw new Error(
+      `Failed to mark workflows as outdated: ${updateError.message}`,
+    );
   }
 
   console.log(
     `[CurateKnowledge] Marked ${existingWorkflows.length} workflow(s) for content ${supersededContentId} as outdated` +
-      (supersededById ? ` — superseded by workflow ${supersededById}` : ' (new workflow not yet extracted)'),
+      (supersededById
+        ? ` — superseded by workflow ${supersededById}`
+        : ' (new workflow not yet extracted)'),
   );
 }
 

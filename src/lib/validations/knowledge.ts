@@ -41,7 +41,7 @@ export const CONCEPT_TYPE_COLORS: Record<ConceptType, string> = {
 /**
  * Concept type icons (Lucide icon names)
  */
-export const CONCEPT_TYPE_ICONS: Record<ConceptType, string> = {
+const CONCEPT_TYPE_ICONS: Record<ConceptType, string> = {
   tool: 'Wrench',
   process: 'GitBranch',
   person: 'User',
@@ -85,17 +85,17 @@ export type GetConceptQueryInput = z.infer<typeof getConceptQuerySchema>;
 /**
  * Get concept content query schema
  */
-export const getConceptContentQuerySchema = z.object({
+const getConceptContentQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-export type GetConceptContentQueryInput = z.infer<typeof getConceptContentQuerySchema>;
+type GetConceptContentQueryInput = z.infer<typeof getConceptContentQuerySchema>;
 
 /**
  * Get knowledge graph query schema
  */
-export const getGraphQuerySchema = z.object({
+const getGraphQuerySchema = z.object({
   maxNodes: z.coerce.number().int().min(10).max(200).default(100),
   minStrength: z.coerce.number().min(0).max(1).default(0.3),
   minMentions: z.coerce.number().int().min(0).default(0),
@@ -107,7 +107,7 @@ export const getGraphQuerySchema = z.object({
   focusConceptId: z.string().uuid().optional(),
 });
 
-export type GetGraphQueryInput = z.infer<typeof getGraphQuerySchema>;
+type GetGraphQueryInput = z.infer<typeof getGraphQuerySchema>;
 
 /**
  * Get content concepts query schema
@@ -205,7 +205,7 @@ export interface GraphNode {
 /**
  * Valid relationship types for graph edges
  */
-export const RELATIONSHIP_TYPES = [
+const RELATIONSHIP_TYPES = [
   'related',
   'related_to',
   'co-occurs',
@@ -255,28 +255,28 @@ export interface KnowledgeGraphData {
 /**
  * Get color for concept type
  */
-export function getConceptColor(type: ConceptType): string {
+function getConceptColor(type: ConceptType): string {
   return CONCEPT_TYPE_COLORS[type] || CONCEPT_TYPE_COLORS.general;
 }
 
 /**
  * Get icon name for concept type
  */
-export function getConceptIcon(type: ConceptType): string {
+function getConceptIcon(type: ConceptType): string {
   return CONCEPT_TYPE_ICONS[type] || CONCEPT_TYPE_ICONS.general;
 }
 
 /**
  * Normalize concept name for comparison
  */
-export function normalizeConceptName(name: string): string {
+function normalizeConceptName(name: string): string {
   return name.toLowerCase().trim().replace(/\s+/g, '_');
 }
 
 /**
  * Check if a string is a valid concept type
  */
-export function isValidConceptType(type: string): type is ConceptType {
+function isValidConceptType(type: string): type is ConceptType {
   return CONCEPT_TYPES.includes(type as ConceptType);
 }
 
@@ -284,7 +284,7 @@ export function isValidConceptType(type: string): type is ConceptType {
 // Export all schemas
 // ============================================================================
 
-export const knowledgeSchemas = {
+const knowledgeSchemas = {
   listConceptsQuery: listConceptsQuerySchema,
   getConceptQuery: getConceptQuerySchema,
   getConceptContentQuery: getConceptContentQuerySchema,

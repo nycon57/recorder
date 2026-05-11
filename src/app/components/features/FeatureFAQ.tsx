@@ -52,7 +52,7 @@ export function FeatureFAQ({ items }: FeatureFAQProps) {
       {/* Background */}
       <div className="absolute inset-0 pointer-events-none">
         <div
-          className="absolute bottom-[20%] left-[10%] w-[400px] h-[400px] rounded-full
+          className="absolute bottom-[20%] left-[10%] size-[400px] rounded-full
             bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.05)_0%,transparent_70%)]
             blur-[80px]"
         />
@@ -73,7 +73,7 @@ export function FeatureFAQ({ items }: FeatureFAQProps) {
               className="mb-6 px-4 py-2 rounded-full
                 bg-accent/5 backdrop-blur-sm border-accent/30"
             >
-              <HelpCircle className="h-4 w-4 mr-2 text-accent" />
+              <HelpCircle className="size-4 mr-2 text-accent" />
               <span className="text-sm font-medium text-accent">FAQ</span>
             </Badge>
 
@@ -82,12 +82,7 @@ export function FeatureFAQ({ items }: FeatureFAQProps) {
                 leading-tight tracking-tight"
             >
               <span className="text-foreground">Frequently asked </span>
-              <span
-                className="bg-gradient-to-r from-accent via-secondary to-primary
-                  bg-clip-text text-transparent"
-              >
-                questions
-              </span>
+              <span className=" text-primary">questions</span>
             </h2>
           </motion.div>
 
@@ -98,14 +93,14 @@ export function FeatureFAQ({ items }: FeatureFAQProps) {
 
               return (
                 <motion.div
-                  key={index}
+                  key={JSON.stringify(item)}
                   variants={itemVariants}
                   className={cn(
                     'rounded-xl overflow-hidden',
                     'bg-card/50 backdrop-blur-sm',
                     'border',
                     isOpen ? 'border-accent/30' : 'border-border/50',
-                    'transition-all duration-300'
+                    'transition-all duration-300',
                   )}
                 >
                   {/* Question */}
@@ -115,7 +110,7 @@ export function FeatureFAQ({ items }: FeatureFAQProps) {
                       'w-full flex items-center justify-between',
                       'p-5 sm:p-6 text-left',
                       'transition-colors duration-300',
-                      'hover:bg-accent/5'
+                      'hover:bg-accent/5',
                     )}
                   >
                     <span className="font-medium text-foreground pr-4">
@@ -128,8 +123,8 @@ export function FeatureFAQ({ items }: FeatureFAQProps) {
                     >
                       <ChevronDown
                         className={cn(
-                          'h-5 w-5',
-                          isOpen ? 'text-accent' : 'text-muted-foreground'
+                          'size-5',
+                          isOpen ? 'text-accent' : 'text-muted-foreground',
                         )}
                       />
                     </motion.div>

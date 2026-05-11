@@ -14,9 +14,17 @@ import { GoogleGenAI } from '@google/genai';
 import { isAgentEnabled } from '@/lib/services/agent-config';
 import { withAgentLogging } from '@/lib/services/agent-logger';
 import { recallMemory } from '@/lib/services/agent-memory';
-import { getTopConceptsForOrg, type StoredConcept } from '@/lib/services/concept-extractor';
+import {
+  getTopConceptsForOrg,
+  type StoredConcept,
+} from '@/lib/services/concept-extractor';
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
-import type { ContentType, Database, Json, LearningPathItem } from '@/lib/types/database';
+import type {
+  ContentType,
+  Database,
+  Json,
+  LearningPathItem,
+} from '@/lib/types/database';
 
 import type { ProgressCallback } from '../job-processor';
 
@@ -71,7 +79,7 @@ function toContentCandidate(
   return {
     id: row.id,
     title: row.title ?? 'Untitled',
-    contentType: row.content_type ?? 'document',
+    contentType: (row.content_type ?? 'document') as ContentType,
     durationSec: row.duration_sec,
     createdAt: row.created_at,
     conceptNames,
@@ -81,7 +89,7 @@ function toContentCandidate(
 
 export async function handleGenerateOnboardingPlan(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as Record<string, unknown>;
   const orgId = (payload.orgId as string) || '';
@@ -90,16 +98,23 @@ export async function handleGenerateOnboardingPlan(
   const userRole = (payload.userRole as string) || null;
 
   if (!orgId || !userId) {
-    console.warn('[OnboardingPlan] Missing orgId or userId in payload, skipping');
+    console.warn(
+      '[OnboardingPlan] Missing orgId or userId in payload, skipping',
+    );
     return;
   }
 
   if (!(await isAgentEnabled(orgId, AGENT_TYPE))) {
-    console.log(`[OnboardingPlan] Onboarding agent disabled for ${orgId}, skipping`);
+    console.log(
+      `[OnboardingPlan] Onboarding agent disabled for ${orgId}, skipping`,
+    );
     return;
   }
 
-  progressCallback?.(5, 'Onboarding agent enabled, starting plan generation...');
+  progressCallback?.(
+    5,
+    'Onboarding agent enabled, starting plan generation...',
+  );
 
   await withAgentLogging(
     {
@@ -115,7 +130,9 @@ export async function handleGenerateOnboardingPlan(
       const allConcepts = await getTopConceptsForOrg(orgId, 100);
 
       if (allConcepts.length === 0) {
-        console.log(`[OnboardingPlan] No concepts found for ${orgId}, generating minimal plan`);
+        console.log(
+          `[OnboardingPlan] No concepts found for ${orgId}, generating minimal plan`,
+        );
       }
 
       progressCallback?.(20, 'Analyzing role relevance...');
@@ -125,11 +142,14 @@ export async function handleGenerateOnboardingPlan(
         try {
           relevantConcepts = await filterConceptsByRole(allConcepts, userRole);
         } catch (error) {
-          console.error('[OnboardingPlan] Role filtering failed, using all concepts:', error);
+          console.error(
+            '[OnboardingPlan] Role filtering failed, using all concepts:',
+            error,
+          );
         }
       }
 
-      const conceptNames = relevantConcepts.map(c => c.name);
+      const conceptNames = relevantConcepts.map((c) => c.name);
 
       // Recall engagement insights from previous onboardings for this role
       progressCallback?.(30, 'Checking past onboarding insights...');
@@ -143,21 +163,28 @@ export async function handleGenerateOnboardingPlan(
         });
         if (memory) {
           priorInsights = memory.memory_value;
-          console.log(`[OnboardingPlan] Found prior insights for role "${roleKey}"`);
+          console.log(
+            `[OnboardingPlan] Found prior insights for role "${roleKey}"`,
+          );
         }
       } catch (error) {
-        console.warn('[OnboardingPlan] Failed to recall engagement memory:', error);
+        console.warn(
+          '[OnboardingPlan] Failed to recall engagement memory:',
+          error,
+        );
       }
 
       progressCallback?.(35, 'Finding relevant content...');
       const contentCandidates = await findContentForConcepts(
         supabase,
         orgId,
-        relevantConcepts.map(c => c.id)
+        relevantConcepts.map((c) => c.id),
       );
 
       if (contentCandidates.length === 0) {
-        console.log(`[OnboardingPlan] No content found for ${orgId}, inserting empty plan`);
+        console.log(
+          `[OnboardingPlan] No content found for ${orgId}, inserting empty plan`,
+        );
         await insertOnboardingPlan(supabase, {
           orgId,
           userId,
@@ -166,7 +193,10 @@ export async function handleGenerateOnboardingPlan(
           learningPath: [],
           notes: 'No content available to generate a learning path.',
         });
-        progressCallback?.(100, 'Plan generation complete (no content available)');
+        progressCallback?.(
+          100,
+          'Plan generation complete (no content available)',
+        );
         return;
       }
 
@@ -184,11 +214,17 @@ export async function handleGenerateOnboardingPlan(
           priorInsights,
         );
       } catch (error) {
-        console.error('[OnboardingPlan] Gemini sequencing failed, using fallback order:', error);
+        console.error(
+          '[OnboardingPlan] Gemini sequencing failed, using fallback order:',
+          error,
+        );
         learningPath = buildFallbackPath(contentCandidates);
       }
 
-      const targetSize = Math.min(Math.max(MIN_PATH_ITEMS, learningPath.length), MAX_PATH_ITEMS);
+      const targetSize = Math.min(
+        Math.max(MIN_PATH_ITEMS, learningPath.length),
+        MAX_PATH_ITEMS,
+      );
       learningPath = learningPath
         .slice(0, targetSize)
         .map((item, i) => ({ ...item, order: i + 1 }));
@@ -222,7 +258,7 @@ async function filterConceptsByRole(
   const genai = getGenAIClient();
 
   const conceptList = concepts
-    .map(c => `- ${c.name}${c.description ? `: ${c.description}` : ''}`)
+    .map((c) => `- ${c.name}${c.description ? `: ${c.description}` : ''}`)
     .join('\n');
 
   const safeRole = sanitizeForPrompt(role);
@@ -249,13 +285,13 @@ Example: ["Kubernetes", "CI/CD", "API Design", "Local Development Setup"]`;
     return concepts;
   }
 
-  const nameSet = new Set(relevantNames.map(n => n.toLowerCase()));
-  const filtered = concepts.filter(c => nameSet.has(c.name.toLowerCase()));
+  const nameSet = new Set(relevantNames.map((n) => n.toLowerCase()));
+  const filtered = concepts.filter((c) => nameSet.has(c.name.toLowerCase()));
 
   // If filtering was too aggressive (< 30% of concepts kept), include top concepts by mention count
   if (filtered.length < concepts.length * 0.3) {
     const topByMention = concepts
-      .filter(c => !nameSet.has(c.name.toLowerCase()))
+      .filter((c) => !nameSet.has(c.name.toLowerCase()))
       .slice(0, Math.ceil(concepts.length * 0.2));
     return [...filtered, ...topByMention];
   }
@@ -282,30 +318,39 @@ async function findContentForConcepts(
   }
 
   if (conceptIds.length === 0) {
-    return contentRows.map(c => toContentCandidate(c));
+    return contentRows.map((c) => toContentCandidate(c));
   }
 
-  const contentIds = contentRows.map(c => c.id);
+  const contentIds = contentRows.map((c) => c.id);
   const BATCH_SIZE = 100;
   const allMentions: { content_id: string; concept_id: string }[] = [];
 
-  for (let i = 0; i < contentIds.length; i += BATCH_SIZE) {
-    const batch = contentIds.slice(i, i + BATCH_SIZE);
-    const { data: batchMentions, error: mentionError } = await supabase
-      .from('concept_mentions')
-      .select('content_id, concept_id')
-      .in('concept_id', conceptIds)
-      .eq('org_id', orgId)
-      .in('content_id', batch);
+  await Promise.all(
+    Array.from(
+      { length: Math.max(0, Math.ceil((contentIds.length - 0) / BATCH_SIZE)) },
+      (_, __loopIndex) => 0 + __loopIndex * BATCH_SIZE,
+    ).map(async (i) => {
+      const batch = contentIds.slice(i, i + BATCH_SIZE);
+      const { data: batchMentions, error: mentionError } = await supabase
+        .from('concept_mentions')
+        .select('content_id, concept_id')
+        .in('concept_id', conceptIds)
+        .eq('org_id', orgId)
+        .in('content_id', batch);
 
-    if (mentionError) {
-      throw new Error(`Failed to fetch concept mentions batch: ${mentionError.message}`);
-    }
-    allMentions.push(...batchMentions);
-  }
+      if (mentionError) {
+        throw new Error(
+          `Failed to fetch concept mentions batch: ${mentionError.message}`,
+        );
+      }
+      allMentions.push(...batchMentions);
+    }),
+  );
 
   if (!allMentions.length) {
-    return contentRows.slice(0, MAX_PATH_ITEMS).map(c => toContentCandidate(c));
+    return contentRows
+      .slice(0, MAX_PATH_ITEMS)
+      .map((c) => toContentCandidate(c));
   }
 
   const { data: conceptRows, error: conceptError } = await supabase
@@ -314,9 +359,14 @@ async function findContentForConcepts(
     .in('id', conceptIds);
 
   if (conceptError) {
-    console.warn('[OnboardingPlan] Failed to fetch concept names:', conceptError.message);
+    console.warn(
+      '[OnboardingPlan] Failed to fetch concept names:',
+      conceptError.message,
+    );
   }
-  const conceptNameMap = new Map((conceptRows ?? []).map(c => [c.id, c.name]));
+  const conceptNameMap = new Map(
+    (conceptRows ?? []).map((c) => [c.id, c.name]),
+  );
 
   const contentConceptMap = new Map<string, Set<string>>();
   for (const { content_id, concept_id } of allMentions) {
@@ -327,15 +377,20 @@ async function findContentForConcepts(
   }
 
   const scored = contentRows
-    .map(c => {
+    .flatMap((c) => {
       const coveredIds = contentConceptMap.get(c.id);
       const names = coveredIds
-        ? [...coveredIds].map(id => conceptNameMap.get(id) ?? id)
+        ? [...coveredIds].map((id) => conceptNameMap.get(id) ?? id)
         : [];
-      return { ...toContentCandidate(c, names), score: names.length };
+      const candidate = {
+        ...toContentCandidate(c, names),
+        score: names.length,
+      };
+      return candidate.score > 0 ? [candidate] : [];
     })
-    .filter(c => c.score > 0)
-    .sort((a, b) => b.score - a.score || b.createdAt.localeCompare(a.createdAt));
+    .sort(
+      (a, b) => b.score - a.score || b.createdAt.localeCompare(a.createdAt),
+    );
 
   return enrichWithWordCounts(supabase, scored.slice(0, MAX_PATH_ITEMS * 2));
 }
@@ -346,14 +401,17 @@ async function enrichWithWordCounts(
 ): Promise<ContentCandidate[]> {
   if (candidates.length === 0) return candidates;
 
-  const ids = candidates.map(c => c.id);
+  const ids = candidates.map((c) => c.id);
   const { data: chunks, error: chunkError } = await supabase
     .from('transcript_chunks')
     .select('content_id, chunk_text')
     .in('content_id', ids);
 
   if (chunkError) {
-    console.warn('[OnboardingPlan] Failed to fetch transcript chunks:', chunkError.message);
+    console.warn(
+      '[OnboardingPlan] Failed to fetch transcript chunks:',
+      chunkError.message,
+    );
     return candidates;
   }
 
@@ -368,7 +426,7 @@ async function enrichWithWordCounts(
     );
   }
 
-  return candidates.map(c => ({
+  return candidates.map((c) => ({
     ...c,
     wordCount: wordCountMap.get(c.id) ?? 0,
   }));
@@ -394,7 +452,9 @@ async function sequenceContentWithGemini(
     ? `The learner is a new ${sanitizeForPrompt(userRole)}.`
     : 'The learner is a new team member (role unspecified).';
 
-  const nameContext = userName ? ` Their name is ${sanitizeForPrompt(userName)}.` : '';
+  const nameContext = userName
+    ? ` Their name is ${sanitizeForPrompt(userName)}.`
+    : '';
 
   let insightsSection = '';
   if (priorInsights) {
@@ -402,16 +462,24 @@ async function sequenceContentWithGemini(
       const insights = JSON.parse(priorInsights);
       const parts: string[] = [];
       if (insights.skippedTopics?.length) {
-        parts.push(`- Items about these topics are frequently skipped: ${insights.skippedTopics.join(', ')}. Deprioritize or exclude them.`);
+        parts.push(
+          `- Items about these topics are frequently skipped: ${insights.skippedTopics.join(', ')}. Deprioritize or exclude them.`,
+        );
       }
       if (insights.highEngagementTopics?.length) {
-        parts.push(`- These topics get high engagement: ${insights.highEngagementTopics.join(', ')}. Prioritize them.`);
+        parts.push(
+          `- These topics get high engagement: ${insights.highEngagementTopics.join(', ')}. Prioritize them.`,
+        );
       }
       if (insights.missingTopics?.length) {
-        parts.push(`- Previous learners searched for these topics not in the plan: ${insights.missingTopics.join(', ')}. Include related content if available.`);
+        parts.push(
+          `- Previous learners searched for these topics not in the plan: ${insights.missingTopics.join(', ')}. Include related content if available.`,
+        );
       }
       if (insights.orderingInsights?.length) {
-        parts.push(`- Ordering insights: ${insights.orderingInsights.join('; ')}`);
+        parts.push(
+          `- Ordering insights: ${insights.orderingInsights.join('; ')}`,
+        );
       }
       if (parts.length > 0) {
         insightsSection = `\n**Insights from previous onboardings for this role:**\n${parts.join('\n')}\n`;
@@ -462,7 +530,9 @@ Example:
   const items: LearningPathItem[] = [];
   for (const [i, item] of sequenced.entries()) {
     if (item.contentIndex < 1 || item.contentIndex > candidates.length) {
-      console.warn(`[OnboardingPlan] Invalid content index ${item.contentIndex} (valid: 1-${candidates.length})`);
+      console.warn(
+        `[OnboardingPlan] Invalid content index ${item.contentIndex} (valid: 1-${candidates.length})`,
+      );
       continue;
     }
 
@@ -529,21 +599,19 @@ async function insertOnboardingPlan(
     notes: string | null;
   },
 ): Promise<void> {
-  const { error } = await supabase
-    .from('agent_onboarding_plans')
-    .insert({
-      org_id: params.orgId,
-      user_id: params.userId,
-      user_name: params.userName,
-      user_role: params.userRole,
-      plan_status: 'active',
-      learning_path: params.learningPath,
-      total_items: params.learningPath.length,
-      completed_items: 0,
-      engagement_data: {} as Json,
-      generated_by: 'agent',
-      notes: params.notes,
-    });
+  const { error } = await supabase.from('agent_onboarding_plans').insert({
+    org_id: params.orgId,
+    user_id: params.userId,
+    user_name: params.userName,
+    user_role: params.userRole,
+    plan_status: 'active',
+    learning_path: params.learningPath as unknown as Json,
+    total_items: params.learningPath.length,
+    completed_items: 0,
+    engagement_data: {} as Json,
+    generated_by: 'agent',
+    notes: params.notes,
+  });
 
   if (error) {
     throw new Error(`Failed to insert onboarding plan: ${error.message}`);
@@ -558,7 +626,9 @@ function extractJsonArray(responseText: string): unknown[] | null {
   try {
     let cleaned = responseText.trim();
     if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      cleaned = cleaned
+        .replace(/^```(?:json)?\s*\n?/, '')
+        .replace(/\n?```\s*$/, '');
     }
     const match = cleaned.match(/\[[\s\S]*\]/);
     if (!match) return null;
@@ -585,16 +655,18 @@ function parseSequenceResponse(responseText: string): SequenceItem[] {
   if (!arr) return [];
 
   const seen = new Set<number>();
-  return (arr as Partial<SequenceItem>[])
-    .filter(
-      (item): item is SequenceItem =>
-        typeof item?.contentIndex === 'number' &&
-        item.contentIndex > 0 &&
-        typeof item?.reason === 'string',
-    )
-    .filter(item => {
+  return (arr as Partial<SequenceItem>[]).filter(
+    (item): item is SequenceItem => {
+      if (
+        typeof item?.contentIndex !== 'number' ||
+        item.contentIndex <= 0 ||
+        typeof item?.reason !== 'string'
+      ) {
+        return false;
+      }
       if (seen.has(item.contentIndex)) return false;
       seen.add(item.contentIndex);
       return true;
-    });
+    },
+  );
 }

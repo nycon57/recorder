@@ -19,7 +19,13 @@ import {
 import { toast } from '@/app/components/ui/use-toast';
 import EditRecordingModal from '@/app/components/EditRecordingModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import type { ContentType, FileType, Json, RecordingStatus, Tag } from '@/lib/types/database';
+import type {
+  ContentType,
+  FileType,
+  Json,
+  RecordingStatus,
+  Tag,
+} from '@/lib/types/database';
 import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 import ContentSidebar from '../viewers/ContentSidebar';
@@ -77,6 +83,34 @@ interface Recording {
   file_size: number | null;
 }
 
+interface TextNoteDetailViewState {
+  isEditModalOpen: boolean;
+  tags: Tag[];
+  showMoveToTrashDialog: boolean;
+  showPermanentDeleteDialog: boolean;
+  showKeyboardShortcuts: boolean;
+}
+
+const createInitialTextNoteDetailViewState = (
+  initialTags: Array<InitialTag | null>,
+): TextNoteDetailViewState => ({
+  isEditModalOpen: false,
+  tags: initialTags.flatMap((tag): Tag[] =>
+    tag ? [{ ...tag, color: tag.color ?? '#64748b' }] : [],
+  ),
+  showMoveToTrashDialog: false,
+  showPermanentDeleteDialog: false,
+  showKeyboardShortcuts: false,
+});
+
+const textNoteDetailViewReducer = (
+  state: TextNoteDetailViewState,
+  patch: Partial<TextNoteDetailViewState>,
+): TextNoteDetailViewState => ({
+  ...state,
+  ...patch,
+});
+
 export interface TextNoteDetailViewProps {
   recording: Recording;
   transcript: Transcript | null; // For text notes, the content is stored in transcript.text
@@ -89,23 +123,34 @@ export interface TextNoteDetailViewProps {
   initialHighlightId?: string;
 }
 
-export default function TextNoteDetailView({
+export default function TextNoteDetailView(
+  props: Parameters<typeof useTextNoteDetailViewImplementation>[0],
+) {
+  return useTextNoteDetailViewImplementation(props);
+}
+
+function useTextNoteDetailViewImplementation({
   recording,
   transcript,
   document,
   knowledgeStatus,
   initialTags,
 }: TextNoteDetailViewProps) {
-  const router = useRouter();
-  const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
-  const [tags, setTags] = React.useState<Tag[]>(() =>
-    initialTags
-      .filter((tag): tag is InitialTag => Boolean(tag))
-      .map((tag) => ({ ...tag, color: tag.color ?? '#64748b' }))
+  const { back, push, refresh } = useRouter();
+  const [
+    {
+      isEditModalOpen,
+      tags,
+      showMoveToTrashDialog,
+      showPermanentDeleteDialog,
+      showKeyboardShortcuts,
+    },
+    updateViewState,
+  ] = React.useReducer(
+    textNoteDetailViewReducer,
+    initialTags,
+    createInitialTextNoteDetailViewState,
   );
-  const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
-  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
-  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
 
   const isTrashed = !!recording.deleted_at;
 
@@ -131,8 +176,9 @@ export default function TextNoteDetailView({
   // Keyboard shortcuts (no playback controls for text notes)
   useKeyboardShortcuts({
     onDownload: handleDownload,
-    onEdit: () => setIsEditModalOpen(true),
-    onShowShortcuts: () => setShowKeyboardShortcuts((prev) => !prev),
+    onEdit: () => updateViewState({ isEditModalOpen: true }),
+    onShowShortcuts: () =>
+      updateViewState({ showKeyboardShortcuts: !showKeyboardShortcuts }),
   });
 
   const handleRestore = async () => {
@@ -143,7 +189,7 @@ export default function TextNoteDetailView({
 
       if (response.ok) {
         toast({ description: 'Item restored successfully' });
-        router.refresh();
+        refresh();
       } else {
         toast({
           variant: 'destructive',
@@ -167,7 +213,7 @@ export default function TextNoteDetailView({
 
       if (response.ok) {
         toast({ description: 'Item moved to trash' });
-        router.refresh(); // Refresh to show trashed state
+        refresh(); // Refresh to show trashed state
       } else {
         toast({
           variant: 'destructive',
@@ -185,13 +231,16 @@ export default function TextNoteDetailView({
 
   const handlePermanentDelete = async () => {
     try {
-      const response = await fetch(`/api/recordings/${recording.id}?permanent=true`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `/api/recordings/${recording.id}?permanent=true`,
+        {
+          method: 'DELETE',
+        },
+      );
 
       if (response.ok) {
         toast({ description: 'Item permanently deleted' });
-        router.push('/library?status=trash');
+        push('/library?status=trash');
       } else {
         toast({
           variant: 'destructive',
@@ -220,7 +269,7 @@ export default function TextNoteDetailView({
       }
 
       toast({ description: 'Title updated successfully' });
-      router.refresh();
+      refresh();
     } catch (error) {
       console.error('Update title failed:', error);
       throw error;
@@ -240,7 +289,7 @@ export default function TextNoteDetailView({
       }
 
       toast({ description: 'Description updated successfully' });
-      router.refresh();
+      refresh();
     } catch (error) {
       console.error('Update description failed:', error);
       throw error;
@@ -310,9 +359,9 @@ export default function TextNoteDetailView({
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto p-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <Button variant="ghost" size="icon" onClick={() => back()}>
               <ArrowLeft className="size-5" />
             </Button>
 
@@ -340,7 +389,9 @@ export default function TextNoteDetailView({
                   <div className="mt-3">
                     <InlineTagsEditor
                       tags={tags}
-                      onTagsChange={setTags}
+                      onTagsChange={(nextTags) =>
+                        updateViewState({ tags: nextTags })
+                      }
                       onAddTag={handleAddTag}
                       onRemoveTag={handleRemoveTag}
                     />
@@ -348,7 +399,7 @@ export default function TextNoteDetailView({
                 </>
               ) : (
                 <>
-                  <h1 className="text-2xl font-bold truncate">
+                  <h1 className="text-2xl font-semibold truncate">
                     {recording.title || 'Untitled Note'}
                   </h1>
                   {recording.description && (
@@ -365,14 +416,16 @@ export default function TextNoteDetailView({
             {isTrashed && (
               <div className="flex items-center gap-2">
                 <Button onClick={handleRestore} variant="outline">
-                  <RotateCcw className="w-4 h-4 mr-2" />
+                  <RotateCcw className="size-4 mr-2" />
                   Restore Item
                 </Button>
                 <Button
-                  onClick={() => setShowPermanentDeleteDialog(true)}
+                  onClick={() =>
+                    updateViewState({ showPermanentDeleteDialog: true })
+                  }
                   variant="destructive"
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
+                  <Trash2 className="size-4 mr-2" />
                   Delete Forever
                 </Button>
               </div>
@@ -386,18 +439,22 @@ export default function TextNoteDetailView({
         {/* Trash Warning Banner */}
         {isTrashed && recording.deleted_at && (
           <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="size-4" />
             <AlertTitle>This item is in the trash</AlertTitle>
             <AlertDescription>
-              This content was moved to trash on {formatDate(recording.deleted_at)}.
-              You can restore it or permanently delete it.
+              This content was moved to trash on{' '}
+              {formatDate(recording.deleted_at)}. You can restore it or
+              permanently delete it.
             </AlertDescription>
           </Alert>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
-          <div className="lg:col-span-2 space-y-6" style={isTrashed ? { opacity: 0.7 } : undefined}>
+          <div
+            className="lg:col-span-2 space-y-6"
+            style={isTrashed ? { opacity: 0.7 } : undefined}
+          >
             {/* Thumbnail Hero - Only show when thumbnail exists */}
             {recording.thumbnail_url && (
               <ThumbnailHero
@@ -406,7 +463,7 @@ export default function TextNoteDetailView({
                 contentType={recording.content_type}
                 editable={!isTrashed}
                 recordingId={recording.id}
-                onThumbnailChange={() => router.refresh()}
+                onThumbnailChange={() => refresh()}
               />
             )}
 
@@ -424,7 +481,9 @@ export default function TextNoteDetailView({
                 {/* AI Insights - Optional Enhancement (no tabs, just show below) */}
                 {document && (
                   <div className="space-y-2">
-                    <h3 className="text-sm font-medium text-muted-foreground">AI Insights</h3>
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      AI Insights
+                    </h3>
                     <AIDocumentPanel
                       document={document}
                       recordingId={recording.id}
@@ -457,8 +516,12 @@ export default function TextNoteDetailView({
                 tags={tags}
                 document={document}
                 textContent={transcript?.text}
-                onEdit={() => setIsEditModalOpen(true)}
-                onDelete={() => isTrashed ? setShowPermanentDeleteDialog(true) : setShowMoveToTrashDialog(true)}
+                onEdit={() => updateViewState({ isEditModalOpen: true })}
+                onDelete={() =>
+                  isTrashed
+                    ? updateViewState({ showPermanentDeleteDialog: true })
+                    : updateViewState({ showMoveToTrashDialog: true })
+                }
                 onDownload={handleDownload}
               />
             </div>
@@ -469,20 +532,26 @@ export default function TextNoteDetailView({
       {/* Modals */}
       <EditRecordingModal
         open={isEditModalOpen}
-        onOpenChange={setIsEditModalOpen}
+        onOpenChange={(isOpen) => updateViewState({ isEditModalOpen: isOpen })}
         recording={recording}
         initialTags={tags}
-        onTagsChange={setTags}
+        onTagsChange={(nextTags) => updateViewState({ tags: nextTags })}
       />
 
       {/* Move to Trash Confirmation Dialog */}
-      <AlertDialog open={showMoveToTrashDialog} onOpenChange={setShowMoveToTrashDialog}>
+      <AlertDialog
+        open={showMoveToTrashDialog}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showMoveToTrashDialog: isOpen })
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to move &quot;{recording.title || 'this item'}&quot; to trash?
-              You can restore it later from the trash page.
+              Are you sure you want to move &quot;
+              {recording.title || 'this item'}&quot; to trash? You can restore
+              it later from the trash page.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -498,17 +567,24 @@ export default function TextNoteDetailView({
       </AlertDialog>
 
       {/* Permanent Delete Confirmation Dialog */}
-      <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
+      <AlertDialog
+        open={showPermanentDeleteDialog}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showPermanentDeleteDialog: isOpen })
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Permanently Delete?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>
-                  Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
+                  Are you sure you want to permanently delete &quot;
+                  {recording.title || 'this item'}&quot;?
                 </p>
                 <p className="font-semibold text-destructive">
-                  This action cannot be undone. All associated data will be permanently removed:
+                  This action cannot be undone. All associated data will be
+                  permanently removed:
                 </p>
                 <ul className="list-disc list-inside space-y-1">
                   <li>Original file</li>
@@ -534,7 +610,9 @@ export default function TextNoteDetailView({
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog
         open={showKeyboardShortcuts}
-        onOpenChange={setShowKeyboardShortcuts}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showKeyboardShortcuts: isOpen })
+        }
         contentType={recording.content_type as ContentType | null}
       />
     </div>

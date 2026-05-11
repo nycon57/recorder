@@ -5,7 +5,7 @@ export default function BrowserNotSupported() {
     <div className="bg-card rounded-lg border border-border p-12">
       <div className="text-center max-w-2xl mx-auto">
         <div className="text-6xl mb-6">🚫</div>
-        <h2 className="text-2xl font-bold text-foreground mb-4">
+        <h2 className="text-2xl font-semibold text-foreground mb-4">
           Browser Not Supported
         </h2>
         <p className="text-muted-foreground mb-6">

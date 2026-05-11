@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { formatBytes, formatCurrency } from '@/lib/utils/formatting';
@@ -24,63 +30,36 @@ interface TrendsData {
 }
 
 export default function StorageTrends() {
-  const [data, setData] = useState<TrendsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error } = useQuery<TrendsData, Error>({
+    queryKey: ['analytics', 'metrics', 'storage-trends'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        '/api/analytics/metrics?includeTrends=true&trendDays=30',
+        { signal },
+      );
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    const fetchData = async () => {
-      try {
-        const response = await fetch('/api/analytics/metrics?includeTrends=true&trendDays=30', {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch trends data');
-        }
-
-        const { data: metricsData } = await response.json();
-
-        if (!controller.signal.aborted) {
-          setData({
-            storageGrowth: metricsData.trends?.storage || [],
-            costTrends: metricsData.trends?.costs || [],
-            savingsTrends: metricsData.trends?.savings || [],
-            growthRate: metricsData.trends?.growthRate || 0,
-            costChange: metricsData.trends?.costChange || 0,
-          });
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          // Request was aborted, do nothing
-          return;
-        }
-        console.error('Error fetching trends data:', err);
-        if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Failed to load data');
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
+      if (!response.ok) {
+        throw new Error('Failed to fetch trends data');
       }
-    };
 
-    fetchData();
+      const { data: metricsData } = await response.json();
 
-    return () => {
-      controller.abort();
-    };
-  }, []);
+      return {
+        storageGrowth: metricsData.trends?.storage || [],
+        costTrends: metricsData.trends?.costs || [],
+        savingsTrends: metricsData.trends?.savings || [],
+        growthRate: metricsData.trends?.growthRate || 0,
+        costChange: metricsData.trends?.costChange || 0,
+      };
+    },
+  });
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <Card>
@@ -100,7 +79,9 @@ export default function StorageTrends() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading trends data: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading trends data: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -111,15 +92,18 @@ export default function StorageTrends() {
   }
 
   // Simple chart placeholders - can be replaced with recharts later
-  const maxStorage = data.storageGrowth.length > 0
-    ? Math.max(...data.storageGrowth.map((d) => d.storage))
-    : 0;
-  const maxCost = data.costTrends.length > 0
-    ? Math.max(...data.costTrends.map((d) => d.cost))
-    : 0;
-  const maxSavings = data.savingsTrends.length > 0
-    ? Math.max(...data.savingsTrends.map((d) => d.savings))
-    : 0;
+  const maxStorage =
+    data.storageGrowth.length > 0
+      ? Math.max(...data.storageGrowth.map((d) => d.storage))
+      : 0;
+  const maxCost =
+    data.costTrends.length > 0
+      ? Math.max(...data.costTrends.map((d) => d.cost))
+      : 0;
+  const maxSavings =
+    data.savingsTrends.length > 0
+      ? Math.max(...data.savingsTrends.map((d) => d.savings))
+      : 0;
 
   return (
     <div className="space-y-6">
@@ -128,18 +112,19 @@ export default function StorageTrends() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Storage Growth Trend</span>
-            <Badge variant={data.growthRate > 0 ? 'default' : 'secondary'} className="flex items-center gap-1">
+            <Badge
+              variant={data.growthRate > 0 ? 'default' : 'secondary'}
+              className="flex items-center gap-1"
+            >
               {data.growthRate > 0 ? (
-                <TrendingUp className="h-3 w-3" />
+                <TrendingUp className="size-3" />
               ) : (
-                <TrendingDown className="h-3 w-3" />
+                <TrendingDown className="size-3" />
               )}
               {data.growthRate.toFixed(1)}%
             </Badge>
           </CardTitle>
-          <CardDescription>
-            Storage usage over the last 30 days
-          </CardDescription>
+          <CardDescription>Storage usage over the last 30 days</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -149,7 +134,7 @@ export default function StorageTrends() {
                   const height = (point.storage / maxStorage) * 100;
                   return (
                     <div
-                      key={index}
+                      key={JSON.stringify(point)}
                       className="flex-1 flex flex-col items-center gap-2"
                     >
                       <div
@@ -180,18 +165,19 @@ export default function StorageTrends() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Cost Trend Analysis</span>
-            <Badge variant={data.costChange > 0 ? 'destructive' : 'default'} className="flex items-center gap-1">
+            <Badge
+              variant={data.costChange > 0 ? 'destructive' : 'default'}
+              className="flex items-center gap-1"
+            >
               {data.costChange > 0 ? (
-                <TrendingUp className="h-3 w-3" />
+                <TrendingUp className="size-3" />
               ) : (
-                <TrendingDown className="h-3 w-3" />
+                <TrendingDown className="size-3" />
               )}
               {Math.abs(data.costChange).toFixed(1)}%
             </Badge>
           </CardTitle>
-          <CardDescription>
-            Storage costs over the last 30 days
-          </CardDescription>
+          <CardDescription>Storage costs over the last 30 days</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -201,7 +187,7 @@ export default function StorageTrends() {
                   const height = (point.cost / maxCost) * 100;
                   return (
                     <div
-                      key={index}
+                      key={JSON.stringify(point)}
                       className="flex-1 flex flex-col items-center gap-2"
                     >
                       <div
@@ -243,7 +229,7 @@ export default function StorageTrends() {
                   const height = (point.savings / maxSavings) * 100;
                   return (
                     <div
-                      key={index}
+                      key={JSON.stringify(point)}
                       className="flex-1 flex flex-col items-center gap-2"
                     >
                       <div
@@ -272,26 +258,49 @@ export default function StorageTrends() {
               <div>
                 <p className="text-2xl font-bold text-green-600">
                   {data.savingsTrends.length > 0
-                    ? formatCurrency(data.savingsTrends.reduce((sum, p) => sum + p.savings, 0))
+                    ? formatCurrency(
+                        data.savingsTrends.reduce(
+                          (sum, p) => sum + p.savings,
+                          0,
+                        ),
+                      )
                     : '$0.00'}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">Total Savings (30d)</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Total Savings (30d)
+                </p>
               </div>
               <div>
                 <p className="text-2xl font-bold">
                   {data.savingsTrends.length > 0
-                    ? formatCurrency(data.savingsTrends.reduce((sum, p) => sum + p.savings, 0) / data.savingsTrends.length)
+                    ? formatCurrency(
+                        data.savingsTrends.reduce(
+                          (sum, p) => sum + p.savings,
+                          0,
+                        ) / data.savingsTrends.length,
+                      )
                     : '$0.00'}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">Avg. Daily Savings</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Avg. Daily Savings
+                </p>
               </div>
               <div>
                 <p className="text-2xl font-bold">
                   {data.savingsTrends.length > 0
-                    ? formatCurrency((data.savingsTrends.reduce((sum, p) => sum + p.savings, 0) / data.savingsTrends.length) * 365)
+                    ? formatCurrency(
+                        (data.savingsTrends.reduce(
+                          (sum, p) => sum + p.savings,
+                          0,
+                        ) /
+                          data.savingsTrends.length) *
+                          365,
+                      )
                     : '$0.00'}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">Projected Annual Savings</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Projected Annual Savings
+                </p>
               </div>
             </div>
           </div>

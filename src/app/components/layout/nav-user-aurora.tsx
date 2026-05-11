@@ -73,12 +73,6 @@ const containerVariants: Variants = {
 
 export function NavUserAurora() {
   const { data: session, isPending } = useSession();
-  const [mounted, setMounted] = React.useState(false);
-
-  // Prevent hydration mismatch by only rendering motion after mount
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Wait for session to load
   if (isPending || !session?.user) {
@@ -101,19 +95,10 @@ export function NavUserAurora() {
     await signOut();
     window.location.href = '/';
   };
-
-  // Wrapper component - use motion only after mount to prevent hydration mismatch
-  const Wrapper = mounted ? motion.div : 'div';
-  const wrapperProps = mounted
-    ? {
-        initial: 'hidden',
-        animate: 'visible',
-        variants: containerVariants,
-      }
-    : {};
+  const Wrapper = motion.div;
 
   return (
-    <Wrapper {...wrapperProps}>
+    <Wrapper initial="hidden" animate="visible" variants={containerVariants}>
       <SidebarMenu>
         <SidebarMenuItem>
           <DropdownMenu>

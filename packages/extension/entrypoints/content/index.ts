@@ -3,7 +3,7 @@
  *
  * Thin view layer: page context observation, DOM overlay, floating widget,
  * and DOM tool execution on behalf of the offscreen-hosted agent session.
- * The ElevenLabs Conversation itself lives in the offscreen document so
+ * The voice runtime itself lives in the offscreen document so
  * it survives page navigations.
  */
 
@@ -154,7 +154,13 @@ export default defineContentScript({
       const intervalMs = args.intervalMs ?? 120;
       const deadline = Date.now() + timeoutMs;
 
-      while (Date.now() <= deadline) {
+      const waitForNextCheck = () =>
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, intervalMs);
+        });
+
+      const waitUntilChanged = async (): Promise<void> => {
+        if (Date.now() > deadline) return;
         if (!collectionActive || !observer) return;
         const refreshed = await observer.forceRescan();
         latestContext = refreshed;
@@ -167,10 +173,11 @@ export default defineContentScript({
           return;
         }
 
-        await new Promise<void>((resolve) => {
-          window.setTimeout(resolve, intervalMs);
-        });
-      }
+        await waitForNextCheck();
+        return waitUntilChanged();
+      };
+
+      return waitUntilChanged();
     }
 
     // ── DOM overlay ───────────────────────────────────────────────────────────

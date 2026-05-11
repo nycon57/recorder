@@ -7,9 +7,18 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { apiHandler, requireOrg, successResponse, parseBody, errors } from '@/lib/utils/api';
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  parseBody,
+  errors,
+} from '@/lib/utils/api';
 import { visualSearchSchema } from '@/lib/validations/api';
-import { visualSearch, isVisualSearchEnabled } from '@/lib/services/multimodal-search';
+import {
+  visualSearch,
+  isVisualSearchEnabled,
+} from '@/lib/services/multimodal-search';
 import { withRateLimit } from '@/lib/rate-limit/middleware';
 
 type VisualSearchBody = z.infer<typeof visualSearchSchema>;
@@ -20,8 +29,10 @@ type VisualSearchBody = z.infer<typeof visualSearchSchema>;
  */
 export const POST = withRateLimit(
   apiHandler(async (request: NextRequest) => {
-    const { orgId, userId } = await requireOrg();
-    const body = await parseBody(request, visualSearchSchema);
+    const [{ orgId, userId }, body] = await Promise.all([
+      requireOrg(),
+      parseBody(request, visualSearchSchema),
+    ]);
 
     const {
       query,
@@ -47,7 +58,8 @@ export const POST = withRateLimit(
         results: [],
         count: 0,
         query,
-        message: 'Visual search is currently disabled. Enable with ENABLE_VISUAL_SEARCH=true',
+        message:
+          'Visual search is currently disabled. Enable with ENABLE_VISUAL_SEARCH=true',
       });
     }
 
@@ -87,5 +99,5 @@ export const POST = withRateLimit(
       const { userId } = await requireOrg();
       return userId;
     },
-  }
+  },
 );

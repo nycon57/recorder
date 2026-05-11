@@ -39,7 +39,7 @@ export interface BatchDeduplicateJobPayload {
  * Handle single file deduplication
  */
 export async function handleDeduplicateFile(
-  payload: DeduplicateFileJobPayload
+  payload: DeduplicateFileJobPayload,
 ): Promise<{
   success: boolean;
   isDuplicate: boolean;
@@ -68,7 +68,9 @@ export async function handleDeduplicateFile(
     }
 
     const storagePathToUse =
-      recording.storage_path_raw || recording.storage_path_processed || recording.storage_path_r2;
+      recording.storage_path_raw ||
+      recording.storage_path_processed ||
+      recording.storage_path_r2;
 
     if (!storagePathToUse) {
       throw new Error('Recording storage path is missing');
@@ -78,7 +80,7 @@ export async function handleDeduplicateFile(
       storagePathToUse,
       recording.storage_path_r2,
       storageProvider,
-      { asBuffer: true }
+      { asBuffer: true },
     );
 
     if (!downloadResult.success || !downloadResult.data) {
@@ -91,7 +93,7 @@ export async function handleDeduplicateFile(
       orgId,
       downloadResult.data,
       storagePath,
-      storageProvider
+      storageProvider,
     );
 
     if (result.error) {
@@ -130,7 +132,7 @@ export async function handleDeduplicateFile(
  * Handle batch deduplication for organization
  */
 export async function handleBatchDeduplicate(
-  payload: BatchDeduplicateJobPayload
+  payload: BatchDeduplicateJobPayload,
 ): Promise<{
   success: boolean;
   processed: number;
@@ -172,7 +174,9 @@ export async function handleBatchDeduplicate(
       processed: 0,
       duplicatesFound: 0,
       spaceSaved: 0,
-      errors: [error instanceof Error ? error.message : 'Batch deduplication failed'],
+      errors: [
+        error instanceof Error ? error.message : 'Batch deduplication failed',
+      ],
     };
   }
 }
@@ -181,7 +185,7 @@ export async function handleBatchDeduplicate(
  * Schedule deduplication for all organizations
  */
 export async function scheduleDeduplicationForAll(
-  batchSizePerOrg: number = 100
+  batchSizePerOrg: number = 100,
 ): Promise<{
   success: boolean;
   organizations: number;
@@ -224,36 +228,41 @@ export async function scheduleDeduplicationForAll(
     const errors: string[] = [];
 
     // Process each organization
-    for (const org of organizations) {
-      try {
-        const result = await batchDeduplicateOrganization(org.id, batchSizePerOrg);
+    await Promise.all(
+      Array.from(organizations).map(async (org) => {
+        try {
+          const result = await batchDeduplicateOrganization(
+            org.id,
+            batchSizePerOrg,
+          );
 
-        totalProcessed += result.processed;
-        totalDuplicates += result.duplicatesFound;
-        totalSpaceSaved += result.spaceSaved;
+          totalProcessed += result.processed;
+          totalDuplicates += result.duplicatesFound;
+          totalSpaceSaved += result.spaceSaved;
 
-        if (result.errors.length > 0) {
-          errors.push(...result.errors.map((e) => `${org.name}: ${e}`));
+          if (result.errors.length > 0) {
+            errors.push(...result.errors.map((e) => `${org.name}: ${e}`));
+          }
+
+          const spaceSavedMB = result.spaceSaved / 1024 / 1024;
+          logger.info('Organization processing complete', {
+            context: { orgId: org.id, orgName: org.name },
+            data: {
+              processed: result.processed,
+              duplicatesFound: result.duplicatesFound,
+              spaceSavedMB: parseFloat(spaceSavedMB.toFixed(2)),
+            },
+          });
+        } catch (error) {
+          const errorMsg = `${org.name}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          errors.push(errorMsg);
+          logger.error('Organization processing failed', {
+            context: { orgId: org.id, orgName: org.name },
+            error: error as Error,
+          });
         }
-
-        const spaceSavedMB = result.spaceSaved / 1024 / 1024;
-        logger.info('Organization processing complete', {
-          context: { orgId: org.id, orgName: org.name },
-          data: {
-            processed: result.processed,
-            duplicatesFound: result.duplicatesFound,
-            spaceSavedMB: parseFloat(spaceSavedMB.toFixed(2)),
-          },
-        });
-      } catch (error) {
-        const errorMsg = `${org.name}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        errors.push(errorMsg);
-        logger.error('Organization processing failed', {
-          context: { orgId: org.id, orgName: org.name },
-          error: error as Error,
-        });
-      }
-    }
+      }),
+    );
 
     const totalSpaceSavedMB = totalSpaceSaved / 1024 / 1024;
     logger.info('Organization-wide deduplication complete', {
@@ -318,7 +327,8 @@ export async function getDeduplicationAnalytics(orgId: string): Promise<{
       success: true,
       stats: {
         ...stats,
-        potentialSavingsPerMonth: Math.round(potentialSavingsPerMonth * 100) / 100,
+        potentialSavingsPerMonth:
+          Math.round(potentialSavingsPerMonth * 100) / 100,
       },
     };
   } catch (error) {

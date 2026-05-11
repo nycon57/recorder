@@ -4,7 +4,14 @@
  * Tests adaptive threshold logic, hybrid search, query expansion, and embedding cache.
  */
 
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+} from '@jest/globals';
 
 // Create mock functions at module scope so the mocked modules and tests share them.
 type SyncMock = (...args: unknown[]) => unknown;
@@ -43,6 +50,11 @@ jest.mock('../query-preprocessor', () => ({
   expandShortQuery: mockExpandShortQuery,
 }));
 
+jest.mock('../concept-search', () => ({
+  findMatchingConcepts: jest.fn(async () => []),
+  getConceptContentIds: jest.fn(async () => []),
+}));
+
 jest.mock('@/lib/supabase/server', () => ({
   createClient: jest.fn(() => ({
     from: jest.fn(() => ({
@@ -52,11 +64,20 @@ jest.mock('@/lib/supabase/server', () => ({
   })),
 }));
 
-import { vectorSearch, hybridSearch, searchRecording } from '../vector-search-google';
+const {
+  vectorSearch,
+  hybridSearch,
+  searchRecording,
+  __clearVectorSearchCachesForTest,
+} =
+  jest.requireActual<typeof import('../vector-search-google')>(
+    '../vector-search-google',
+  );
 
 describe('Vector Search - Adaptive Threshold Logic', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    __clearVectorSearchCachesForTest();
 
     // Setup default mock chain for from()
     // Create a default query builder chain
@@ -70,7 +91,9 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       gte: jest.fn().mockReturnThis(),
       lte: jest.fn().mockReturnThis(),
       textSearch: jest.fn().mockReturnThis(),
-      single: jest.fn<AsyncMock>().mockResolvedValue({ data: null, error: null }),
+      single: jest
+        .fn<AsyncMock>()
+        .mockResolvedValue({ data: null, error: null }),
     };
 
     // Make limit() return a promise by default
@@ -87,7 +110,9 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       embedding: Array(1536).fill(0.1),
       provider: 'google',
     });
-    mockExpandShortQuery.mockImplementation(async (query: unknown) => String(query));
+    mockExpandShortQuery.mockImplementation(async (query: unknown) =>
+      String(query),
+    );
 
     // Set environment variables for testing
     process.env.SEARCH_DEFAULT_THRESHOLD = '0.5';
@@ -155,9 +180,12 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       await vectorSearch(shortQuery, { orgId });
 
       // Verify match_chunks was called with default threshold (0.5 for short query)
-      expect(mockRpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
-        match_threshold: 0.5,
-      }));
+      expect(mockRpc).toHaveBeenCalledWith(
+        'match_chunks',
+        expect.objectContaining({
+          match_threshold: 0.5,
+        }),
+      );
     });
 
     it('should use 0.55 threshold for medium queries (5-10 words)', async () => {
@@ -212,13 +240,17 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       await vectorSearch(mediumQuery, { orgId });
 
       // Verify match_chunks was called with elevated threshold (0.55)
-      expect(mockRpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
-        match_threshold: 0.55,
-      }));
+      expect(mockRpc).toHaveBeenCalledWith(
+        'match_chunks',
+        expect.objectContaining({
+          match_threshold: 0.55,
+        }),
+      );
     });
 
     it('should use 0.65 threshold for long queries (> 10 words)', async () => {
-      const longQuery = 'can you explain the complete process of logging into the accelerate platform including authentication and authorization';
+      const longQuery =
+        'can you explain the complete process of logging into the accelerate platform including authentication and authorization';
       const orgId = 'test-org-id';
 
       // Mock database response
@@ -269,9 +301,12 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       await vectorSearch(longQuery, { orgId });
 
       // Verify match_chunks was called with high threshold (0.65)
-      expect(mockRpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
-        match_threshold: 0.65,
-      }));
+      expect(mockRpc).toHaveBeenCalledWith(
+        'match_chunks',
+        expect.objectContaining({
+          match_threshold: 0.65,
+        }),
+      );
     });
 
     it('should respect environment variable override for default threshold', async () => {
@@ -303,9 +338,12 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       await vectorSearch(query, { orgId });
 
       // Verify match_chunks was called with custom default threshold (0.6)
-      expect(mockRpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
-        match_threshold: 0.6,
-      }));
+      expect(mockRpc).toHaveBeenCalledWith(
+        'match_chunks',
+        expect.objectContaining({
+          match_threshold: 0.6,
+        }),
+      );
     });
 
     it('should allow manual threshold override via options', async () => {
@@ -335,9 +373,12 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       await vectorSearch(query, { orgId, threshold: manualThreshold });
 
       // Verify match_chunks was called with manual threshold
-      expect(mockRpc).toHaveBeenCalledWith('match_chunks', expect.objectContaining({
-        match_threshold: manualThreshold,
-      }));
+      expect(mockRpc).toHaveBeenCalledWith(
+        'match_chunks',
+        expect.objectContaining({
+          match_threshold: manualThreshold,
+        }),
+      );
     });
   });
 
@@ -489,7 +530,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       const results = await hybridSearch(query, { orgId });
 
       // Verify deduplication - chunk-1 should appear only once with boosted score
-      const chunkIds = results.map(r => r.id);
+      const chunkIds = results.map((r) => r.id);
       const uniqueIds = new Set(chunkIds);
       expect(chunkIds.length).toBe(uniqueIds.size);
     });
@@ -532,7 +573,9 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       const orgId = 'test-org-id';
 
       // Mock expandShortQuery to return expanded query
-      mockExpandShortQuery.mockResolvedValue('accelerate Journey Panel marketing automation');
+      mockExpandShortQuery.mockResolvedValue(
+        'accelerate Journey Panel marketing automation',
+      );
 
       // Mock database response
       mockFrom.mockReturnValue({
@@ -714,7 +757,7 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       // Verify embedding generation was called with correct query
       expect(mockGenerateEmbedding).toHaveBeenCalledWith(
         query,
-        'RETRIEVAL_QUERY'
+        'RETRIEVAL_QUERY',
       );
     });
 
@@ -745,9 +788,14 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
 
       // Perform searches with unique queries
       // Each unique query generates a new embedding (not cached)
-      for (let i = 0; i < 5; i++) {
-        await vectorSearch(`query ${i}`, { orgId });
-      }
+      await Promise.all(
+        Array.from(
+          { length: Math.max(0, Math.ceil((5 - 0) / 1)) },
+          (_, __loopIndex) => 0 + __loopIndex * 1,
+        ).map(async (i) => {
+          await vectorSearch(`query ${i}`, { orgId });
+        }),
+      );
 
       // Verify embeddings were generated for each unique query
       // Since each query is different, caching doesn't help - all 5 calls go through
@@ -766,20 +814,14 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
       const query = 'test query';
       const orgId = 'test-org-id';
 
-      // Mock database error
-      mockFrom.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        is: jest.fn().mockReturnThis(),
-        in: jest.fn().mockReturnThis(),
-        order: jest.fn().mockReturnThis(),
-        limit: jest.fn<AsyncMock>().mockResolvedValue({
-          data: null,
-          error: { message: 'Database connection failed' },
-        }),
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: { message: 'Database connection failed' },
       });
 
-      await expect(vectorSearch(query, { orgId })).rejects.toThrow('Vector search failed');
+      await expect(vectorSearch(query, { orgId })).rejects.toThrow(
+        'Vector search failed',
+      );
     });
 
     it('should handle embedding generation errors gracefully', async () => {
@@ -788,56 +830,26 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
 
       // Mock embedding error
       mockGenerateEmbedding.mockRejectedValue(
-        new Error('Embedding service unavailable')
+        new Error('Embedding service unavailable'),
       );
 
-      await expect(vectorSearch(query, { orgId })).rejects.toThrow('Embedding service unavailable');
+      await expect(vectorSearch(query, { orgId })).rejects.toThrow(
+        'Embedding service unavailable',
+      );
     });
 
-    it('should return null similarity when RPC fails but continue processing', async () => {
+    it('should reject when the match_chunks RPC fails', async () => {
       const query = 'test query';
       const orgId = 'test-org-id';
 
-      // Mock successful chunk fetch
-      mockFrom.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        is: jest.fn().mockReturnThis(),
-        in: jest.fn().mockReturnThis(),
-        order: jest.fn().mockReturnThis(),
-        limit: jest.fn<AsyncMock>().mockResolvedValue({
-          data: [
-            {
-              id: 'chunk-1',
-              recording_id: 'rec-1',
-              chunk_text: 'Test content',
-              metadata: { source: 'transcript' },
-              created_at: new Date().toISOString(),
-              org_id: orgId,
-              recordings: {
-                title: 'Test Recording',
-                created_at: new Date().toISOString(),
-                org_id: orgId,
-                content_type: 'recording',
-                deleted_at: null,
-              },
-            },
-          ],
-          error: null,
-        }),
-      });
-
-      // Mock RPC error
       mockRpc.mockResolvedValue({
         data: null,
         error: { message: 'RPC function failed' },
       });
 
-      const results = await vectorSearch(query, { orgId });
-
-      // Should return chunks with placeholder similarity (0.8)
-      expect(results).toHaveLength(1);
-      expect(results[0].similarity).toBe(0.8);
+      await expect(vectorSearch(query, { orgId })).rejects.toThrow(
+        'Vector search failed',
+      );
     });
   });
 
@@ -867,11 +879,12 @@ describe('Vector Search - Adaptive Threshold Logic', () => {
 
       await searchRecording(recordingId, query, orgId);
 
-      // Verify in() was called with the recording ID
-      // The from() mock returns a chained object, so we check if it was set up correctly
-      expect(mockFrom).toHaveBeenCalledWith('transcript_chunks');
-      // In a real implementation, the recordingIds option would be passed to vectorSearch
-      // which internally calls .in('recording_id', [recordingId])
+      expect(mockRpc).toHaveBeenCalledWith(
+        'match_chunks',
+        expect.objectContaining({
+          filter_content_ids: [recordingId],
+        }),
+      );
     });
   });
 });

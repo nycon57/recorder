@@ -4,7 +4,7 @@
 
 import { ConnectorType } from '@/lib/connectors/base';
 
-export interface ConnectorConfig {
+interface ConnectorConfig {
   id: string;
   orgId: string;
   connectorType: ConnectorType;
@@ -31,7 +31,7 @@ export interface ConnectorConfig {
   updatedAt: Date;
 }
 
-export interface ImportedDocument {
+interface ImportedDocument {
   id: string;
   connectorId: string;
   orgId: string;
@@ -57,7 +57,7 @@ export interface ImportedDocument {
   updatedAt: Date;
 }
 
-export interface ConnectorSyncLog {
+interface ConnectorSyncLog {
   id: string;
   connectorId: string;
   orgId: string;
@@ -77,7 +77,7 @@ export interface ConnectorSyncLog {
   bytesTransferred: number;
 }
 
-export interface WebhookEvent {
+interface WebhookEvent {
   id: string;
   connectorId: string;
   orgId: string;
@@ -93,7 +93,7 @@ export interface WebhookEvent {
   receivedAt: Date;
 }
 
-export interface FileUploadBatch {
+interface FileUploadBatch {
   id: string;
   orgId: string;
   userId?: string;

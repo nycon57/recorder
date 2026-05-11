@@ -72,6 +72,7 @@ export function MemberRowActions({ member }: MemberRowActionsProps) {
       return response.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-members'] });
       toast.success('Password reset email sent');
     },
     onError: (error: Error) => {
@@ -102,28 +103,28 @@ export function MemberRowActions({ member }: MemberRowActionsProps) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-            <MoreVertical className="h-4 w-4" />
+          <Button variant="ghost" size="sm" className="size-8 p-0">
+            <MoreVertical className="size-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => setShowEditRole(true)}>
-            <Shield className="mr-2 h-4 w-4" />
+            <Shield className="mr-2 size-4" />
             Edit Role
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setShowAssignDepts(true)}>
-            <Edit className="mr-2 h-4 w-4" />
+            <Edit className="mr-2 size-4" />
             Assign Departments
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => passwordResetMutation.mutate()}>
-            <Mail className="mr-2 h-4 w-4" />
+            <Mail className="mr-2 size-4" />
             Send Password Reset
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           {member.status === 'suspended' ? (
             <DropdownMenuItem onClick={() => suspendMutation.mutate(false)}>
-              <ShieldAlert className="mr-2 h-4 w-4" />
+              <ShieldAlert className="mr-2 size-4" />
               Reactivate Account
             </DropdownMenuItem>
           ) : (
@@ -131,7 +132,7 @@ export function MemberRowActions({ member }: MemberRowActionsProps) {
               onClick={() => suspendMutation.mutate(true)}
               className="text-yellow-600"
             >
-              <Ban className="mr-2 h-4 w-4" />
+              <Ban className="mr-2 size-4" />
               Suspend Account
             </DropdownMenuItem>
           )}
@@ -139,7 +140,7 @@ export function MemberRowActions({ member }: MemberRowActionsProps) {
             onClick={() => setShowDeleteConfirm(true)}
             className="text-red-600"
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="mr-2 size-4" />
             Remove from Organization
           </DropdownMenuItem>
         </DropdownMenuContent>

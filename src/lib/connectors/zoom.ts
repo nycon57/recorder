@@ -19,6 +19,7 @@ import axios, { AxiosError } from 'axios';
 
 import { createClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/types/database';
+import { mapSequentially } from '@/lib/utils/async';
 
 import {
   Connector,
@@ -194,29 +195,43 @@ export class ZoomConnector implements Connector {
 
       const toDate = this.formatDate(new Date());
 
-      console.log(`[Zoom Sync] Fetching recordings from ${fromDate} to ${toDate}`);
+      console.log(
+        `[Zoom Sync] Fetching recordings from ${fromDate} to ${toDate}`,
+      );
 
       // List recordings (paginated)
-      const meetings = await this.listRecordings(userId, fromDate, toDate, options?.limit);
+      const meetings = await this.listRecordings(
+        userId,
+        fromDate,
+        toDate,
+        options?.limit,
+      );
 
-      console.log(`[Zoom Sync] Found ${meetings.length} meetings with recordings`);
+      console.log(
+        `[Zoom Sync] Found ${meetings.length} meetings with recordings`,
+      );
 
       // Process each meeting
-      for (const meeting of meetings) {
-        try {
-          await this.processMeeting(meeting);
-          results.filesProcessed++;
-        } catch (error: unknown) {
-          console.error(`[Zoom Sync] Failed to process meeting ${meeting.uuid}:`, error);
-          results.filesFailed++;
-          results.errors.push({
-            fileId: meeting.uuid,
-            fileName: meeting.topic,
-            error: this.extractErrorMessage(error),
-            retryable: true,
-          });
-        }
-      }
+      await Promise.all(
+        Array.from(meetings).map(async (meeting) => {
+          try {
+            await this.processMeeting(meeting);
+            results.filesProcessed++;
+          } catch (error: unknown) {
+            console.error(
+              `[Zoom Sync] Failed to process meeting ${meeting.uuid}:`,
+              error,
+            );
+            results.filesFailed++;
+            results.errors.push({
+              fileId: meeting.uuid,
+              fileName: meeting.topic,
+              error: this.extractErrorMessage(error),
+              retryable: true,
+            });
+          }
+        }),
+      );
 
       results.success = results.filesFailed === 0;
     } catch (error: unknown) {
@@ -247,10 +262,17 @@ export class ZoomConnector implements Connector {
     const userId = userResponse.data.id;
 
     // Default to last 30 days
-    const fromDate = this.formatDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+    const fromDate = this.formatDate(
+      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    );
     const toDate = this.formatDate(new Date());
 
-    const meetings = await this.listRecordings(userId, fromDate, toDate, options?.limit);
+    const meetings = await this.listRecordings(
+      userId,
+      fromDate,
+      toDate,
+      options?.limit,
+    );
 
     const files: ConnectorFile[] = [];
 
@@ -299,7 +321,9 @@ export class ZoomConnector implements Connector {
     });
 
     const buffer = Buffer.from(response.data);
-    const contentType = String(response.headers['content-type'] || 'application/octet-stream');
+    const contentType = String(
+      response.headers['content-type'] || 'application/octet-stream',
+    );
 
     return {
       id: fileId,
@@ -338,7 +362,9 @@ export class ZoomConnector implements Connector {
   /**
    * Refresh expired credentials
    */
-  async refreshCredentials(credentials: ConnectorCredentials): Promise<ConnectorCredentials> {
+  async refreshCredentials(
+    credentials: ConnectorCredentials,
+  ): Promise<ConnectorCredentials> {
     this.refreshToken = credentials.refreshToken || this.refreshToken;
     const refreshed = await this.refreshAccessToken();
 
@@ -364,36 +390,44 @@ export class ZoomConnector implements Connector {
     userId: string,
     fromDate: string,
     toDate: string,
-    limit?: number
+    limit?: number,
   ): Promise<ZoomMeeting[]> {
-    const meetings: ZoomMeeting[] = [];
-    let nextPageToken: string | undefined;
     const pageSize = Math.min(limit || 300, 300); // Zoom max is 300
 
-    do {
-      const response = await axios.get(`https://api.zoom.us/v2/users/${userId}/recordings`, {
-        headers: { Authorization: `Bearer ${this.accessToken}` },
-        params: {
-          from: fromDate,
-          to: toDate,
-          page_size: pageSize,
-          next_page_token: nextPageToken,
+    const fetchPage = async (
+      nextPageToken?: string,
+      meetings: ZoomMeeting[] = [],
+    ): Promise<ZoomMeeting[]> => {
+      const response = await axios.get(
+        `https://api.zoom.us/v2/users/${userId}/recordings`,
+        {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+          params: {
+            from: fromDate,
+            to: toDate,
+            page_size: pageSize,
+            next_page_token: nextPageToken,
+          },
         },
-      });
+      );
 
-      if (response.data.meetings) {
-        meetings.push(...response.data.meetings);
-      }
+      const nextMeetings = response.data.meetings
+        ? meetings.concat(response.data.meetings)
+        : meetings;
 
-      nextPageToken = response.data.next_page_token;
+      const followingPageToken = response.data.next_page_token;
 
       // Stop if we've reached the limit
-      if (limit && meetings.length >= limit) {
-        break;
+      if (limit && nextMeetings.length >= limit) {
+        return nextMeetings.slice(0, limit);
       }
-    } while (nextPageToken);
 
-    return limit ? meetings.slice(0, limit) : meetings;
+      return followingPageToken
+        ? fetchPage(followingPageToken, nextMeetings)
+        : nextMeetings;
+    };
+
+    return fetchPage();
   }
 
   /**
@@ -405,10 +439,12 @@ export class ZoomConnector implements Connector {
     console.log(`[Zoom] Processing meeting: ${topic}`);
 
     // Process each recording file (video, audio, chat)
-    for (const file of recording_files) {
+    await mapSequentially(recording_files, async (file) => {
       if (file.status !== 'completed') {
-        console.log(`[Zoom] Skipping incomplete recording: ${file.recording_type}`);
-        continue;
+        console.log(
+          `[Zoom] Skipping incomplete recording: ${file.recording_type}`,
+        );
+        return;
       }
 
       try {
@@ -436,16 +472,19 @@ export class ZoomConnector implements Connector {
 
         console.log(`[Zoom] Stored recording: ${file.recording_type}`);
       } catch (error) {
-        console.error(`[Zoom] Failed to download recording file ${file.id}:`, error);
+        console.error(
+          `[Zoom] Failed to download recording file ${file.id}:`,
+          error,
+        );
         throw error;
       }
-    }
+    });
 
     // Download transcript if available
     if (meeting.recording_transcript_file) {
       try {
         const transcript = await this.downloadTranscript(
-          meeting.recording_transcript_file.download_url
+          meeting.recording_transcript_file.download_url,
         );
 
         await this.storeImportedDocument({
@@ -473,7 +512,9 @@ export class ZoomConnector implements Connector {
   /**
    * Download recording file as buffer
    */
-  private async downloadRecordingFile(file: ZoomRecordingFile): Promise<Buffer> {
+  private async downloadRecordingFile(
+    file: ZoomRecordingFile,
+  ): Promise<Buffer> {
     const response = await axios.get(file.download_url, {
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
@@ -496,7 +537,9 @@ export class ZoomConnector implements Connector {
       },
     });
 
-    return typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    return typeof response.data === 'string'
+      ? response.data
+      : JSON.stringify(response.data);
   }
 
   /**
@@ -525,7 +568,7 @@ export class ZoomConnector implements Connector {
             Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
             'Content-Type': 'application/x-www-form-urlencoded',
           },
-        }
+        },
       );
 
       this.accessToken = response.data.access_token;
@@ -556,14 +599,18 @@ export class ZoomConnector implements Connector {
     sourceMetadata: Json;
   }): Promise<void> {
     if (!this.connectorId) {
-      throw new Error('Zoom connector ID is required to store imported documents');
+      throw new Error(
+        'Zoom connector ID is required to store imported documents',
+      );
     }
 
     const supabase = createClient();
 
     // Convert buffer to base64 if needed
     const content =
-      doc.content instanceof Buffer ? doc.content.toString('base64') : doc.content;
+      doc.content instanceof Buffer
+        ? doc.content.toString('base64')
+        : doc.content;
 
     // Generate content hash for deduplication
     const contentHash = createHash('sha256').update(content).digest('hex');
@@ -610,7 +657,7 @@ export class ZoomConnector implements Connector {
       },
       {
         onConflict: 'connector_id,external_id',
-      }
+      },
     );
 
     if (error) {
@@ -664,7 +711,9 @@ export class ZoomConnector implements Connector {
    * Handle transcript completed webhook
    */
   private async handleTranscriptCompleted(payload: unknown): Promise<void> {
-    console.log('[Zoom Webhook] Processing recording.transcript_completed event');
+    console.log(
+      '[Zoom Webhook] Processing recording.transcript_completed event',
+    );
 
     if (!this.isRecord(payload) || !this.isRecord(payload.object)) {
       console.error('[Zoom Webhook] Invalid transcript payload');
@@ -702,10 +751,14 @@ export class ZoomConnector implements Connector {
    */
   private async handleMeetingEnded(payload: unknown): Promise<void> {
     // Optional: Track meeting metadata for future recording
-    const topic = this.isRecord(payload) && this.isRecord(payload.object)
-      ? payload.object.topic
-      : undefined;
-    console.log('[Zoom] Meeting ended:', typeof topic === 'string' ? topic : 'Unknown meeting');
+    const topic =
+      this.isRecord(payload) && this.isRecord(payload.object)
+        ? payload.object.topic
+        : undefined;
+    console.log(
+      '[Zoom] Meeting ended:',
+      typeof topic === 'string' ? topic : 'Unknown meeting',
+    );
     // Could queue a delayed sync job to check for recordings
   }
 

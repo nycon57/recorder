@@ -20,7 +20,7 @@ export interface ExperimentConfig {
   description: string;
 }
 
-export interface ExperimentResult {
+interface ExperimentResult {
   variant: SearchVariant;
   query: string;
   orgId: string;
@@ -255,7 +255,7 @@ export function calculateSampleSize(
 /**
  * Example usage and guidelines
  */
-export const EXPERIMENT_GUIDELINES = {
+const EXPERIMENT_GUIDELINES = {
   /**
    * How to run an A/B test:
    *

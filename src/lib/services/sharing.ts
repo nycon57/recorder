@@ -54,7 +54,7 @@ async function hashPassword(password: string): Promise<string> {
 /**
  * Verify password against hash
  */
-export async function verifySharePassword(
+async function verifySharePassword(
   password: string,
   hash: string
 ): Promise<boolean> {

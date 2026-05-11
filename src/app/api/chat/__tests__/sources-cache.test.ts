@@ -26,10 +26,6 @@ jest.mock('next/server', () => ({
   after: jest.fn(),
 }));
 
-jest.mock('@/lib/services/rag-google', () => ({
-  retrieveContext: jest.fn(),
-}));
-
 jest.mock('@/lib/services/compiled-memory-answer-context', () => ({
   resolveCompiledMemoryAnswerContext: jest.fn(),
   summarizeCompiledMemoryAnswerObservability: jest.fn(),
@@ -41,12 +37,6 @@ jest.mock('@/lib/services/query-preprocessor', () => ({
 
 jest.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: { from: jest.fn() },
-}));
-
-jest.mock('@/lib/services/query-router', () => ({
-  routeQuery: jest.fn(),
-  getRetrievalConfig: jest.fn(),
-  explainRoute: jest.fn(),
 }));
 
 jest.mock('@/lib/services/reranking', () => ({

@@ -70,7 +70,7 @@ export interface VendorSourceOpsItem {
   syncBlockReason: string | null;
 }
 
-export interface VendorSourceOpsSummary {
+interface VendorSourceOpsSummary {
   totalSources: number;
   appsCovered: number;
   healthySources: number;

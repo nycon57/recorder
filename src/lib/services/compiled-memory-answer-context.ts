@@ -173,9 +173,9 @@ function resolveVendorRetrievalMode(
   sources: CompiledMemoryAnswerSource[],
 ): SharedVendorRetrievalMode {
   const vendorMatchTypes = new Set(
-    sources
-      .filter((source) => source.layer === 'vendor' && source.matchType)
-      .map((source) => source.matchType),
+    sources.flatMap((__item, __index, __array) =>
+      __item.layer === 'vendor' && __item.matchType ? [__item.matchType] : [],
+    ),
   );
 
   if (vendorMatchTypes.size === 0) {
@@ -231,35 +231,39 @@ export function buildCompiledMemoryAnswerContext(
   compiledMemory: CompiledMemoryContext,
   citationLimit?: number,
 ): CompiledMemoryAnswerContext {
-  const orgSources = compiledMemory.orgKnowledge.pages
-    .map((page) =>
-      toSource({
-        sourceId: page.id,
-        title: compiledMemory.citationsBySourceId[page.id]?.title ?? page.topic,
+  const orgSources = compiledMemory.orgKnowledge.pages.flatMap(
+    (__item, __index, __array) => {
+      const __mapped = toSource({
+        sourceId: __item.id,
+        title:
+          compiledMemory.citationsBySourceId[__item.id]?.title ?? __item.topic,
         layer: 'org',
-        content: page.content,
-        confidence: page.confidence,
-        url: compiledMemory.citationsBySourceId[page.id]?.linkUrl,
-        freshness: compiledMemory.citationsBySourceId[page.id]?.freshness,
-        provenance: compiledMemory.citationsBySourceId[page.id]?.provenance,
-      }),
-    )
-    .filter((source): source is CompiledMemoryAnswerSource => source != null);
+        content: __item.content,
+        confidence: __item.confidence,
+        url: compiledMemory.citationsBySourceId[__item.id]?.linkUrl,
+        freshness: compiledMemory.citationsBySourceId[__item.id]?.freshness,
+        provenance: compiledMemory.citationsBySourceId[__item.id]?.provenance,
+      });
+      return __mapped != null ? [__mapped] : [];
+    },
+  );
 
-  const vendorTrainingSources = compiledMemory.vendorTraining.pages
-    .map((page) =>
-      toSource({
-        sourceId: page.id,
-        title: compiledMemory.citationsBySourceId[page.id]?.title ?? page.topic,
+  const vendorTrainingSources = compiledMemory.vendorTraining.pages.flatMap(
+    (__item, __index, __array) => {
+      const __mapped = toSource({
+        sourceId: __item.id,
+        title:
+          compiledMemory.citationsBySourceId[__item.id]?.title ?? __item.topic,
         layer: 'vendor_training',
-        content: page.content,
-        confidence: page.confidence,
-        url: compiledMemory.citationsBySourceId[page.id]?.linkUrl,
-        freshness: compiledMemory.citationsBySourceId[page.id]?.freshness,
-        provenance: compiledMemory.citationsBySourceId[page.id]?.provenance,
-      }),
-    )
-    .filter((source): source is CompiledMemoryAnswerSource => source != null);
+        content: __item.content,
+        confidence: __item.confidence,
+        url: compiledMemory.citationsBySourceId[__item.id]?.linkUrl,
+        freshness: compiledMemory.citationsBySourceId[__item.id]?.freshness,
+        provenance: compiledMemory.citationsBySourceId[__item.id]?.provenance,
+      });
+      return __mapped != null ? [__mapped] : [];
+    },
+  );
 
   const vendorKnowledgePages =
     compiledMemory.vendorKnowledge.pages.length > 0
@@ -287,24 +291,26 @@ export function buildCompiledMemoryAnswerContext(
           ]
         : [];
 
-  const vendorSources = vendorKnowledgePages
-    .map((page) =>
-      toSource({
-        sourceId: page.id,
-        title: compiledMemory.citationsBySourceId[page.id]?.title ?? page.title,
+  const vendorSources = vendorKnowledgePages.flatMap(
+    (__item, __index, __array) => {
+      const __mapped = toSource({
+        sourceId: __item.id,
+        title:
+          compiledMemory.citationsBySourceId[__item.id]?.title ?? __item.title,
         layer: 'vendor',
-        content: page.content,
-        confidence: page.confidence,
+        content: __item.content,
+        confidence: __item.confidence,
         url:
-          compiledMemory.citationsBySourceId[page.id]?.linkUrl ??
-          page.sourceUrl ??
+          compiledMemory.citationsBySourceId[__item.id]?.linkUrl ??
+          __item.sourceUrl ??
           undefined,
-        freshness: compiledMemory.citationsBySourceId[page.id]?.freshness,
-        provenance: compiledMemory.citationsBySourceId[page.id]?.provenance,
-        matchType: page.matchType,
-      }),
-    )
-    .filter((source): source is CompiledMemoryAnswerSource => source != null);
+        freshness: compiledMemory.citationsBySourceId[__item.id]?.freshness,
+        provenance: compiledMemory.citationsBySourceId[__item.id]?.provenance,
+        matchType: __item.matchType,
+      });
+      return __mapped != null ? [__mapped] : [];
+    },
+  );
 
   const remainingBudget =
     citationLimit == null
@@ -423,7 +429,12 @@ export async function resolveScopedCompiledMemoryAnswerContext(
   deps: ResolveScopedCompiledMemoryAnswerContextDeps = {},
 ): Promise<CompiledMemoryAnswerContext> {
   const sourceIds = Array.from(
-    new Set(args.sourceIds.map((sourceId) => sourceId.trim()).filter(Boolean)),
+    new Set(
+      args.sourceIds.flatMap((__item, __index, __array) => {
+        const __mapped = __item.trim();
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   );
   const trimmedQuestion = args.question.trim();
 
@@ -448,9 +459,11 @@ export async function resolveScopedCompiledMemoryAnswerContext(
   }
 
   const rows =
-    (sourceRows as
-      | Array<{ page_id: string; source_id: string; source_type: string }>
-      | null) ?? [];
+    (sourceRows as Array<{
+      page_id: string;
+      source_id: string;
+      source_type: string;
+    }> | null) ?? [];
   const pageIds = Array.from(new Set(rows.map((row) => row.page_id))).slice(
     0,
     sourceLimit,
@@ -474,17 +487,17 @@ export async function resolveScopedCompiledMemoryAnswerContext(
   }
 
   const pagesById = new Map(
-    ((pageRows as
-      | Array<{
-          id: string;
-          app: string | null;
-          screen: string | null;
-          topic: string;
-          content: string;
-          confidence: number;
-          updated_at: string | null;
-        }>
-      | null) ?? []).map((page) => [page.id, page]),
+    (
+      (pageRows as Array<{
+        id: string;
+        app: string | null;
+        screen: string | null;
+        topic: string;
+        content: string;
+        confidence: number;
+        updated_at: string | null;
+      }> | null) ?? []
+    ).map((page) => [page.id, page]),
   );
 
   const pageSourcesById = new Map<string, (typeof rows)[number]>();
@@ -494,18 +507,22 @@ export async function resolveScopedCompiledMemoryAnswerContext(
     }
   }
 
-  const orgPages = pageIds
-    .map((pageId) => pagesById.get(pageId))
-    .filter((page): page is NonNullable<typeof page> => page != null)
-    .map((page) => ({
-      id: page.id,
-      app: page.app,
-      screen: page.screen,
-      topic: page.topic,
-      content: page.content,
-      confidence: page.confidence,
-      distance: 0,
-    }));
+  const orgPages = pageIds.flatMap((__item, __index, __array) => {
+    const __mapped = pagesById.get(__item);
+    return __mapped != null
+      ? [
+          {
+            id: __mapped.id,
+            app: __mapped.app,
+            screen: __mapped.screen,
+            topic: __mapped.topic,
+            content: __mapped.content,
+            confidence: __mapped.confidence,
+            distance: 0,
+          },
+        ]
+      : [];
+  });
 
   const citationsBySourceId = Object.fromEntries(
     orgPages.map((page) => {
@@ -583,9 +600,10 @@ export function summarizeCompiledMemoryAnswerObservability(
 
   const vendorSourceIds = Array.from(
     new Set(
-      sources
-        .map((source) => source.provenance.vendorSourceId)
-        .filter((value): value is string => Boolean(value)),
+      sources.flatMap((__item, __index, __array) => {
+        const __mapped = __item.provenance.vendorSourceId;
+        return __mapped ? [__mapped] : [];
+      }),
     ),
   );
 

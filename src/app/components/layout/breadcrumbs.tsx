@@ -1,9 +1,9 @@
-"use client"
+'use client';
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { ChevronRight } from "lucide-react"
+import * as React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { ChevronRight } from 'lucide-react';
 
 import {
   Breadcrumb,
@@ -12,34 +12,34 @@ import {
   BreadcrumbLink,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/app/components/ui/breadcrumb"
+} from '@/app/components/ui/breadcrumb';
 
 /**
  * Route segment labels for breadcrumb display
  * Maps URL segments to human-readable labels
  */
 const routeLabels: Record<string, string> = {
-  dashboard: "Dashboard",
-  record: "Record",
-  library: "Library",
-  recordings: "Library", // Legacy redirect support
-  search: "Search",
-  assistant: "Assistant",
-  connectors: "Connectors",
-  "google-drive": "Google Drive",
-  notion: "Notion",
-  upload: "Upload",
-  analytics: "Analytics",
-  settings: "Settings",
-  profile: "Profile",
-  organization: "Organization",
-  billing: "Billing",
-  admin: "Admin",
-  metrics: "Metrics",
-  jobs: "Jobs",
-  alerts: "Alerts",
-  quotas: "Quotas",
-}
+  dashboard: 'Dashboard',
+  record: 'Record',
+  library: 'Library',
+  recordings: 'Library', // Legacy redirect support
+  search: 'Search',
+  assistant: 'Assistant',
+  connectors: 'Connectors',
+  'google-drive': 'Google Drive',
+  notion: 'Notion',
+  upload: 'Upload',
+  analytics: 'Analytics',
+  settings: 'Settings',
+  profile: 'Profile',
+  organization: 'Organization',
+  billing: 'Billing',
+  admin: 'Admin',
+  metrics: 'Metrics',
+  jobs: 'Jobs',
+  alerts: 'Alerts',
+  quotas: 'Quotas',
+};
 
 /**
  * Breadcrumbs Component
@@ -53,24 +53,23 @@ const routeLabels: Record<string, string> = {
  * - Responsive design
  */
 export function Breadcrumbs() {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   // Parse pathname into segments
   const segments = React.useMemo(() => {
-    return pathname
-      .split("/")
-      .filter(Boolean)
-      .filter((segment) => {
-        // Filter out dynamic route IDs (UUIDs)
-        return !segment.match(
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    return pathname.split('/').filter((segment) => {
+      return (
+        Boolean(segment) &&
+        !segment.match(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
         )
-      })
-  }, [pathname])
+      );
+    });
+  }, [pathname]);
 
   // Don't render breadcrumbs on home page
   if (segments.length === 0) {
-    return null
+    return null;
   }
 
   return (
@@ -85,9 +84,9 @@ export function Breadcrumbs() {
 
         {/* Dynamic segments */}
         {segments.map((segment, index) => {
-          const href = `/${segments.slice(0, index + 1).join("/")}`
-          const label = routeLabels[segment] || segment
-          const isLast = index === segments.length - 1
+          const href = `/${segments.slice(0, index + 1).join('/')}`;
+          const label = routeLabels[segment] || segment;
+          const isLast = index === segments.length - 1;
 
           return (
             <React.Fragment key={segment}>
@@ -104,9 +103,9 @@ export function Breadcrumbs() {
                 )}
               </BreadcrumbItem>
             </React.Fragment>
-          )
+          );
         })}
       </BreadcrumbList>
     </Breadcrumb>
-  )
+  );
 }

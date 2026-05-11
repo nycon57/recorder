@@ -39,11 +39,14 @@ export default function DashboardLoading() {
 
       {/* Grid View Skeleton */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[...Array(9)].map((_, i) => (
+        {Array.from({ length: 9 }, (_, index) => ({
+          id: `dashboard-card-${index + 1}`,
+          delay: index * 50,
+        })).map((skeleton) => (
           <div
-            key={i}
+            key={skeleton.id}
             className="bg-card rounded-lg border border-border overflow-hidden"
-            style={{ animationDelay: `${i * 50}ms` }}
+            style={{ animationDelay: `${skeleton.delay}ms` }}
           >
             {/* Thumbnail */}
             <Skeleton className="aspect-video w-full" />
@@ -72,7 +75,7 @@ export default function DashboardLoading() {
               </div>
 
               {/* Actions */}
-              <div className="flex space-x-2 pt-2">
+              <div className="flex gap-x-2 pt-2">
                 <Skeleton className="flex-1 h-10" />
                 <Skeleton className="h-10 w-20" />
               </div>

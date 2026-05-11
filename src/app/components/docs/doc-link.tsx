@@ -29,7 +29,7 @@ export function DocLink({ href, children, className }: DocLinkProps) {
       )}
     >
       {children}
-      <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />
     </Link>
   );
 }

@@ -46,7 +46,9 @@ const SCHEDULED_JOBS = [
 /**
  * Creates a scheduled job if one doesn't already exist (pending or running)
  */
-async function createScheduledJob(jobConfig: typeof SCHEDULED_JOBS[number]): Promise<boolean> {
+async function createScheduledJob(
+  jobConfig: (typeof SCHEDULED_JOBS)[number],
+): Promise<boolean> {
   const supabase = createAdminClient();
 
   // Check if a job with this dedupe_key already exists and is pending/running
@@ -62,18 +64,19 @@ async function createScheduledJob(jobConfig: typeof SCHEDULED_JOBS[number]): Pro
   }
 
   // Create the job
-  const { error } = await supabase
-    .from('jobs')
-    .insert({
-      type: jobConfig.type,
-      payload: jobConfig.payload,
-      dedupe_key: jobConfig.dedupe_key,
-      status: 'pending',
-      priority: 3, // Low priority for maintenance jobs
-    });
+  const { error } = await supabase.from('jobs').insert({
+    type: jobConfig.type,
+    payload: jobConfig.payload,
+    dedupe_key: jobConfig.dedupe_key,
+    status: 'pending',
+    priority: 3, // Low priority for maintenance jobs
+  });
 
   if (error) {
-    console.error(`[Scheduler] Failed to create ${jobConfig.type} job:`, error.message);
+    console.error(
+      `[Scheduler] Failed to create ${jobConfig.type} job:`,
+      error.message,
+    );
     return false;
   }
 
@@ -86,24 +89,30 @@ async function createScheduledJob(jobConfig: typeof SCHEDULED_JOBS[number]): Pro
  */
 async function startScheduler(): Promise<void> {
   console.log('[Scheduler] Starting job scheduler...');
-  console.log(`[Scheduler] Configured jobs: ${SCHEDULED_JOBS.map(j => `${j.type} (every ${j.interval / 1000 / 60} min)`).join(', ')}`);
+  console.log(
+    `[Scheduler] Configured jobs: ${SCHEDULED_JOBS.map((j) => `${j.type} (every ${j.interval / 1000 / 60} min)`).join(', ')}`,
+  );
 
   // Create initial jobs immediately
-  for (const jobConfig of SCHEDULED_JOBS) {
-    await createScheduledJob(jobConfig);
-  }
+  await Promise.all(
+    Array.from(SCHEDULED_JOBS).map(async (jobConfig) => {
+      await createScheduledJob(jobConfig);
+    }),
+  );
 
   // Set up intervals for each job type
-  for (const jobConfig of SCHEDULED_JOBS) {
-    setInterval(async () => {
-      await createScheduledJob(jobConfig);
-    }, jobConfig.interval);
-  }
+  await Promise.all(
+    Array.from(SCHEDULED_JOBS).map(async (jobConfig) => {
+      setInterval(async () => {
+        await createScheduledJob(jobConfig);
+      }, jobConfig.interval);
+    }),
+  );
 
   // Schedule daily curate_knowledge jobs for all enabled orgs.
   // Runs immediately on startup, then at the configured interval (default: daily).
   console.log(
-    `[Scheduler] Curator scheduler: curate_knowledge per enabled org (every ${CURATOR_SCHEDULE_INTERVAL_MS / 1000 / 60} min)`
+    `[Scheduler] Curator scheduler: curate_knowledge per enabled org (every ${CURATOR_SCHEDULE_INTERVAL_MS / 1000 / 60} min)`,
   );
   await scheduleCurateKnowledgeJobs();
   setInterval(async () => {
@@ -113,7 +122,7 @@ async function startScheduler(): Promise<void> {
   // Schedule weekly analyze_knowledge_gaps jobs for all orgs with gap_intelligence enabled.
   // Runs immediately on startup, then at the configured interval (default: weekly).
   console.log(
-    `[Scheduler] Gap scheduler: analyze_knowledge_gaps per enabled org (every ${GAP_ANALYSIS_SCHEDULE_INTERVAL_MS / 1000 / 60} min)`
+    `[Scheduler] Gap scheduler: analyze_knowledge_gaps per enabled org (every ${GAP_ANALYSIS_SCHEDULE_INTERVAL_MS / 1000 / 60} min)`,
   );
   await scheduleAnalyzeKnowledgeGapsJobs();
   setInterval(async () => {
@@ -141,7 +150,10 @@ async function main() {
   }
 
   // Check for Google Cloud credentials (either file path or base64)
-  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && !process.env.GOOGLE_CREDENTIALS_BASE64) {
+  if (
+    !process.env.GOOGLE_APPLICATION_CREDENTIALS &&
+    !process.env.GOOGLE_CREDENTIALS_BASE64
+  ) {
     console.error('❌ Missing Google Cloud credentials');
     console.error('   Set either GOOGLE_APPLICATION_CREDENTIALS (file path)');
     console.error('   or GOOGLE_CREDENTIALS_BASE64 (base64 encoded JSON)');
@@ -150,9 +162,14 @@ async function main() {
 
   console.log('✅ Environment variables validated');
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    console.log('✅ Using Google Cloud credentials from file:', process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    console.log(
+      '✅ Using Google Cloud credentials from file:',
+      process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    );
   } else {
-    console.log('✅ Using Google Cloud credentials from base64 environment variable');
+    console.log(
+      '✅ Using Google Cloud credentials from base64 environment variable',
+    );
   }
   console.log();
 
@@ -219,14 +236,14 @@ async function main() {
     // Start processing jobs (main loop)
     await processJobs({
       batchSize: 10,
-      pollInterval: 2000,        // Poll every 2 seconds (reduced from 5s)
-      maxPollInterval: 10000,    // Max backoff: 10 seconds (reduced from 60s)
+      pollInterval: 2000, // Poll every 2 seconds (reduced from 5s)
+      maxPollInterval: 10000, // Max backoff: 10 seconds (reduced from 60s)
       maxRetries: 3,
     });
   }
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error('💥 Fatal error:', error);
   process.exit(1);
 });

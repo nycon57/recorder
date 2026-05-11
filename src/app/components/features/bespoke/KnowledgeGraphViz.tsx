@@ -32,16 +32,79 @@ interface Edge {
 }
 
 const DEMO_NODES: Node[] = [
-  { id: 'deploy', label: 'Deployment', x: 50, y: 35, size: 'large', category: 'topic' },
-  { id: 'cicd', label: 'CI/CD', x: 35, y: 50, size: 'medium', category: 'topic' },
-  { id: 'github', label: 'GitHub', x: 25, y: 35, size: 'small', category: 'tool' },
-  { id: 'docker', label: 'Docker', x: 65, y: 55, size: 'medium', category: 'tool' },
-  { id: 'sarah', label: 'Sarah K.', x: 20, y: 65, size: 'small', category: 'person' },
-  { id: 'testing', label: 'Testing', x: 75, y: 40, size: 'medium', category: 'topic' },
-  { id: 'api', label: 'API Design', x: 55, y: 70, size: 'large', category: 'topic' },
+  {
+    id: 'deploy',
+    label: 'Deployment',
+    x: 50,
+    y: 35,
+    size: 'large',
+    category: 'topic',
+  },
+  {
+    id: 'cicd',
+    label: 'CI/CD',
+    x: 35,
+    y: 50,
+    size: 'medium',
+    category: 'topic',
+  },
+  {
+    id: 'github',
+    label: 'GitHub',
+    x: 25,
+    y: 35,
+    size: 'small',
+    category: 'tool',
+  },
+  {
+    id: 'docker',
+    label: 'Docker',
+    x: 65,
+    y: 55,
+    size: 'medium',
+    category: 'tool',
+  },
+  {
+    id: 'sarah',
+    label: 'Sarah K.',
+    x: 20,
+    y: 65,
+    size: 'small',
+    category: 'person',
+  },
+  {
+    id: 'testing',
+    label: 'Testing',
+    x: 75,
+    y: 40,
+    size: 'medium',
+    category: 'topic',
+  },
+  {
+    id: 'api',
+    label: 'API Design',
+    x: 55,
+    y: 70,
+    size: 'large',
+    category: 'topic',
+  },
   { id: 'rest', label: 'REST', x: 70, y: 75, size: 'small', category: 'topic' },
-  { id: 'alex', label: 'Alex M.', x: 40, y: 80, size: 'small', category: 'person' },
-  { id: 'security', label: 'Security', x: 85, y: 60, size: 'medium', category: 'topic' },
+  {
+    id: 'alex',
+    label: 'Alex M.',
+    x: 40,
+    y: 80,
+    size: 'small',
+    category: 'person',
+  },
+  {
+    id: 'security',
+    label: 'Security',
+    x: 85,
+    y: 60,
+    size: 'medium',
+    category: 'topic',
+  },
 ];
 
 const DEMO_EDGES: Edge[] = [
@@ -58,6 +121,17 @@ const DEMO_EDGES: Edge[] = [
   { from: 'docker', to: 'api', strength: 0.4 },
 ];
 
+const FLOATING_PARTICLES = Array.from({ length: 12 }, (_, index) => {
+  const seed = index + 1;
+  return {
+    id: `particle-${seed}`,
+    left: `${15 + ((seed * 17) % 70)}%`,
+    top: `${15 + ((seed * 29) % 70)}%`,
+    duration: 3 + ((seed * 7) % 20) / 10,
+    delay: ((seed * 11) % 20) / 10,
+  };
+});
+
 const springTransition = {
   type: 'spring' as const,
   stiffness: 400,
@@ -67,13 +141,33 @@ const springTransition = {
 const getCategoryColor = (category: Node['category']) => {
   switch (category) {
     case 'topic':
-      return { bg: 'bg-accent/20', border: 'border-accent/40', text: 'text-accent', glow: 'rgba(0,223,130,0.3)' };
+      return {
+        bg: 'bg-accent/20',
+        border: 'border-accent/40',
+        text: 'text-accent',
+        glow: 'rgba(0,223,130,0.3)',
+      };
     case 'person':
-      return { bg: 'bg-secondary/20', border: 'border-secondary/40', text: 'text-secondary', glow: 'rgba(44,194,149,0.3)' };
+      return {
+        bg: 'bg-secondary/20',
+        border: 'border-secondary/40',
+        text: 'text-secondary',
+        glow: 'rgba(44,194,149,0.3)',
+      };
     case 'tool':
-      return { bg: 'bg-primary/20', border: 'border-primary/40', text: 'text-primary', glow: 'rgba(3,98,76,0.3)' };
+      return {
+        bg: 'bg-primary/20',
+        border: 'border-primary/40',
+        text: 'text-primary',
+        glow: 'rgba(3,98,76,0.3)',
+      };
     default:
-      return { bg: 'bg-accent/20', border: 'border-accent/40', text: 'text-accent', glow: 'rgba(0,223,130,0.3)' };
+      return {
+        bg: 'bg-accent/20',
+        border: 'border-accent/40',
+        text: 'text-accent',
+        glow: 'rgba(0,223,130,0.3)',
+      };
   }
 };
 
@@ -91,6 +185,10 @@ const getNodeSize = (size: Node['size']) => {
 };
 
 export function KnowledgeGraphViz() {
+  return useKnowledgeGraphVizImplementation();
+}
+
+function useKnowledgeGraphVizImplementation() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
@@ -129,7 +227,7 @@ export function KnowledgeGraphViz() {
     return DEMO_EDGES.some(
       (edge) =>
         (edge.from === hoveredNode && edge.to === nodeId) ||
-        (edge.to === hoveredNode && edge.from === nodeId)
+        (edge.to === hoveredNode && edge.from === nodeId),
     );
   };
 
@@ -159,14 +257,13 @@ export function KnowledgeGraphViz() {
               className="inline-flex items-center gap-2 mb-4 px-4 py-2 rounded-full
                 bg-accent/10 border border-accent/30"
             >
-              <Network className="h-4 w-4 text-accent" />
-              <span className="text-sm font-medium text-accent">Knowledge Graph</span>
+              <Network className="size-4 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                Knowledge Graph
+              </span>
             </div>
             <h3 className="font-outfit text-2xl sm:text-3xl font-light mb-2">
-              Concepts{' '}
-              <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                connected
-              </span>
+              Concepts <span className=" text-primary">connected</span>
             </h3>
             <p className="text-muted-foreground">
               Watch knowledge compound as relationships form automatically
@@ -184,7 +281,7 @@ export function KnowledgeGraphViz() {
               'bg-gradient-to-b from-card/50 to-background/80',
               'backdrop-blur-xl',
               'border border-accent/20',
-              'shadow-[0_0_80px_rgba(0,223,130,0.1)]'
+              'shadow-[0_0_80px_rgba(0,223,130,0.1)]',
             )}
           >
             {/* SVG Container for edges */}
@@ -194,16 +291,28 @@ export function KnowledgeGraphViz() {
             >
               {/* Edges */}
               <svg
-                className="absolute inset-0 w-full h-full pointer-events-none"
+                className="absolute inset-0 size-full pointer-events-none"
                 style={{ zIndex: 1 }}
               >
                 <defs>
-                  <linearGradient id="edgeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <linearGradient
+                    id="edgeGradient"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="0%"
+                  >
                     <stop offset="0%" stopColor="rgba(0,223,130,0.3)" />
                     <stop offset="50%" stopColor="rgba(44,194,149,0.5)" />
                     <stop offset="100%" stopColor="rgba(0,223,130,0.3)" />
                   </linearGradient>
-                  <linearGradient id="edgeGradientHighlight" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <linearGradient
+                    id="edgeGradientHighlight"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="0%"
+                  >
                     <stop offset="0%" stopColor="rgba(0,223,130,0.6)" />
                     <stop offset="50%" stopColor="rgba(44,194,149,0.8)" />
                     <stop offset="100%" stopColor="rgba(0,223,130,0.6)" />
@@ -226,9 +335,19 @@ export function KnowledgeGraphViz() {
                       y1={from.y}
                       x2={to.x}
                       y2={to.y}
-                      stroke={highlighted ? 'url(#edgeGradientHighlight)' : 'url(#edgeGradient)'}
+                      stroke={
+                        highlighted
+                          ? 'url(#edgeGradientHighlight)'
+                          : 'url(#edgeGradient)'
+                      }
                       strokeWidth={highlighted ? 2 : 1}
-                      strokeOpacity={highlighted ? 1 : hoveredNode ? 0.2 : edge.strength * 0.6}
+                      strokeOpacity={
+                        highlighted
+                          ? 1
+                          : hoveredNode
+                            ? 0.2
+                            : edge.strength * 0.6
+                      }
                       initial={{ pathLength: 0 }}
                       animate={{ pathLength: 1 }}
                       transition={{
@@ -259,7 +378,7 @@ export function KnowledgeGraphViz() {
                       transform: 'translate(-50%, -50%)',
                       zIndex: isHovered ? 10 : 2,
                     }}
-                    initial={{ opacity: 0, scale: 0 }}
+                    initial={{ opacity: 0, scale: 0.95 }}
                     animate={{
                       opacity: highlighted ? 1 : 0.3,
                       scale: isHovered ? 1.1 : 1,
@@ -291,13 +410,13 @@ export function KnowledgeGraphViz() {
                         sizeClass,
                         colors.bg,
                         colors.border,
-                        isHovered && 'shadow-lg'
+                        isHovered && 'shadow-lg',
                       )}
                     >
                       <span
                         className={cn(
                           'text-xs font-medium truncate px-2',
-                          colors.text
+                          colors.text,
                         )}
                       >
                         {node.label}
@@ -308,9 +427,9 @@ export function KnowledgeGraphViz() {
                         <div
                           className={cn(
                             'absolute inset-0 rounded-full animate-ping',
-                            colors.bg
+                            colors.bg,
                           )}
-                          style={{ animationDuration: '3s' }}
+                          style={{ animationDuration: '900ms' }}
                         />
                       )}
                     </div>
@@ -319,13 +438,13 @@ export function KnowledgeGraphViz() {
               })}
 
               {/* Floating particles */}
-              {[...Array(12)].map((_, i) => (
+              {FLOATING_PARTICLES.map((particle) => (
                 <motion.div
-                  key={i}
-                  className="absolute w-1 h-1 rounded-full bg-accent/40"
+                  key={particle.id}
+                  className="absolute size-1 rounded-full bg-accent/40"
                   style={{
-                    left: `${15 + Math.random() * 70}%`,
-                    top: `${15 + Math.random() * 70}%`,
+                    left: particle.left,
+                    top: particle.top,
                   }}
                   animate={{
                     y: [0, -20, 0],
@@ -333,8 +452,8 @@ export function KnowledgeGraphViz() {
                   }}
                   transition={{
                     repeat: Infinity,
-                    duration: 3 + Math.random() * 2,
-                    delay: Math.random() * 2,
+                    duration: particle.duration,
+                    delay: particle.delay,
                     ease: 'easeInOut',
                   }}
                 />
@@ -346,23 +465,23 @@ export function KnowledgeGraphViz() {
               className={cn(
                 'flex items-center justify-center gap-8 sm:gap-12 px-6 py-4',
                 'border-t border-border/30',
-                'bg-gradient-to-r from-accent/5 via-transparent to-secondary/5'
+                'bg-gradient-to-r from-accent/5 via-transparent to-secondary/5',
               )}
             >
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-accent/40" />
+                <div className="size-3 rounded-full bg-accent/40" />
                 <span className="text-sm text-muted-foreground">Topics</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-secondary/40" />
+                <div className="size-3 rounded-full bg-secondary/40" />
                 <span className="text-sm text-muted-foreground">People</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-primary/40" />
+                <div className="size-3 rounded-full bg-primary/40" />
                 <span className="text-sm text-muted-foreground">Tools</span>
               </div>
               <div className="hidden sm:flex items-center gap-2 ml-4 px-3 py-1 rounded-full bg-accent/10">
-                <Zap className="h-3 w-3 text-accent" />
+                <Zap className="size-3 text-accent" />
                 <span className="text-xs font-medium text-accent">
                   {DEMO_EDGES.length} connections
                 </span>
@@ -378,7 +497,8 @@ export function KnowledgeGraphViz() {
             transition={{ delay: 0.8 }}
             className="text-center text-sm text-muted-foreground mt-6"
           >
-            Hover over nodes to explore connections · Real graphs grow with your content
+            Hover over nodes to explore connections · Real graphs grow with your
+            content
           </motion.p>
         </div>
       </div>

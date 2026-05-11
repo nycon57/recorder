@@ -129,15 +129,21 @@ export function createVendorSourceSyncService(
 
   async function ensureAllowedSources(): Promise<VendorSourceRow[]> {
     const allowlist = getTier1VendorAllowlist();
+    const allowedApps = new Set(allowlist);
 
-    const ensured = await registry.buildLegacyBackfill();
-    for (const source of ensured.candidates) {
-      if (!allowlist.includes(source.app)) continue;
-      await registry.upsertSource(source);
-    }
+    await registry
+      .buildLegacyBackfill()
+      .then((ensured) =>
+        Promise.all(
+          ensured.candidates.flatMap((source) =>
+            allowedApps.has(source.app) ? [registry.upsertSource(source)] : [],
+          ),
+        ),
+      );
 
-    const { data, error } = await (supabase
-      .from('vendor_doc_sources') as unknown as VendorSourceListQuery)
+    const { data, error } = await (
+      supabase.from('vendor_doc_sources') as unknown as VendorSourceListQuery
+    )
       .select('*')
       .in('app', allowlist)
       .eq('official_source', true)
@@ -156,8 +162,9 @@ export function createVendorSourceSyncService(
   async function loadSourceById(
     sourceId: string,
   ): Promise<VendorSourceRow | null> {
-    const { data, error } = await (supabase
-      .from('vendor_doc_sources') as unknown as VendorSourceLookupQuery)
+    const { data, error } = await (
+      supabase.from('vendor_doc_sources') as unknown as VendorSourceLookupQuery
+    )
       .select('*')
       .eq('id', sourceId)
       .maybeSingle();
@@ -192,100 +199,95 @@ export function createVendorSourceSyncService(
         ? [await loadSourceById(options.sourceId)]
         : await ensureAllowedSources();
 
-      const results: VendorSourceSyncResult[] = [];
+      return Promise.all(
+        sources.map(async (source): Promise<VendorSourceSyncResult> => {
+          if (!source) {
+            return {
+              sourceId: options?.sourceId ?? 'unknown',
+              app: 'unknown',
+              status: 'missing',
+              reason: 'Vendor source was not found',
+            };
+          }
 
-      for (const source of sources) {
-        if (!source) {
-          results.push({
-            sourceId: options?.sourceId ?? 'unknown',
-            app: 'unknown',
-            status: 'missing',
-            reason: 'Vendor source was not found',
-          });
-          continue;
-        }
+          const syncBlockReason = getVendorSourceSyncBlockReason(source);
+          if (syncBlockReason) {
+            return {
+              sourceId: source.id,
+              app: source.app,
+              status: 'unsupported',
+              reason: syncBlockReason,
+            };
+          }
 
-        const syncBlockReason = getVendorSourceSyncBlockReason(source);
-        if (syncBlockReason) {
-          results.push({
-            sourceId: source.id,
-            app: source.app,
-            status: 'unsupported',
-            reason: syncBlockReason,
-          });
-          continue;
-        }
+          const adapter = resolveVendorSourceAdapter(source);
+          if (!adapter.supported) {
+            await registry.recordFailure(source.id, {
+              attemptedAt,
+              failedAt: attemptedAt,
+              errorMessage:
+                adapter.reason ??
+                `Vendor source ${source.id} cannot be scheduled by the current adapter pack`,
+            });
 
-        const adapter = resolveVendorSourceAdapter(source);
-        if (!adapter.supported) {
-          await registry.recordFailure(source.id, {
-            attemptedAt,
-            failedAt: attemptedAt,
-            errorMessage:
-              adapter.reason ??
-              `Vendor source ${source.id} cannot be scheduled by the current adapter pack`,
-          });
+            return {
+              sourceId: source.id,
+              app: source.app,
+              status: 'unsupported',
+              reason: adapter.reason,
+            };
+          }
 
-          results.push({
-            sourceId: source.id,
-            app: source.app,
-            status: 'unsupported',
-            reason: adapter.reason,
-          });
-          continue;
-        }
-
-        if (!force && !isVendorSourceDueForSync(source, now)) {
-          results.push({
-            sourceId: source.id,
-            app: source.app,
-            status: 'skipped',
-            reason: 'Source is still fresh and does not need a new sync yet',
-          });
-          continue;
-        }
-
-        const payload = adapter.buildPayload(mode);
-        // Plumb audit provenance from the API caller (back-compat: null for scheduled jobs)
-        if (triggeredByUserId) {
-          payload.triggered_by_user_id = triggeredByUserId;
-        }
-        if (options?.maxPages) {
-          payload.maxPages = options.maxPages;
-        }
-        const insert = buildVendorSourceSyncJobInsert(source, payload);
-
-        const { data, error } = await (supabase
-          .from('jobs') as unknown as JobInsertQuery)
-          .insert(insert)
-          .select('id')
-          .single();
-
-        if (error) {
-          if (error.code === '23505') {
-            results.push({
+          if (!force && !isVendorSourceDueForSync(source, now)) {
+            return {
               sourceId: source.id,
               app: source.app,
               status: 'skipped',
-              reason: 'A vendor sync job is already pending or processing for this source',
-            });
-            continue;
+              reason: 'Source is still fresh and does not need a new sync yet',
+            };
           }
 
-          throw new Error(
-            `[vendor-source-sync] Failed to enqueue sync job for ${source.id}: ${error.message}`,
-          );
-        }
+          const payload = adapter.buildPayload(mode);
+          // Plumb audit provenance from the API caller (back-compat: null for scheduled jobs)
+          if (triggeredByUserId) {
+            payload.triggered_by_user_id = triggeredByUserId;
+          }
+          if (options?.maxPages) {
+            payload.maxPages = options.maxPages;
+          }
+          const insert = buildVendorSourceSyncJobInsert(source, payload);
 
-        results.push({
-          sourceId: source.id,
-          app: source.app,
-          status: 'queued',
-          jobId: data?.id as string | undefined,
-        });
-      }
+          const { data, error } = await (
+            supabase.from('jobs') as unknown as JobInsertQuery
+          )
+            .insert(insert)
+            .select('id')
+            .single();
 
-      return results;
+          if (error) {
+            if (error.code === '23505') {
+              return {
+                sourceId: source.id,
+                app: source.app,
+                status: 'skipped',
+                reason:
+                  'A vendor sync job is already pending or processing for this source',
+              };
+            }
+
+            throw new Error(
+              `[vendor-source-sync] Failed to enqueue sync job for ${source.id}: ${error.message}`,
+            );
+          }
+
+          return {
+            sourceId: source.id,
+            app: source.app,
+            status: 'queued',
+            jobId: data?.id as string | undefined,
+          };
+        }),
+      );
     },
   };
 }

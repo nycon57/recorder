@@ -1,7 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const fromMock = jest.fn();
-const rpcMock = jest.fn();
+const rpcMock = jest.fn<
+  (...args: unknown[]) => Promise<{ data: unknown; error: unknown }>
+>();
 const generateContentMock = jest.fn();
 const runRelationshipExtractionMock = jest.fn();
 const runCrossPageContradictionDetectionMock = jest.fn();
@@ -499,7 +501,10 @@ describe('compile-wiki embedding freshness', () => {
       payload: { recordingId: 'rec-1', orgId: 'org-1' },
     } as never);
 
-    const [rpcName, rpcArgs] = rpcMock.mock.calls[0];
+    const [rpcName, rpcArgs] = rpcMock.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
     expect(rpcName).toBe('supersede_org_wiki_page');
     expect(rpcArgs).toMatchObject({
       p_existing_page_id: 'page-existing',
@@ -518,7 +523,7 @@ describe('compile-wiki embedding freshness', () => {
       ],
       p_valid_until: expect.any(String),
     });
-    expect(rpcArgs.p_confidence).toBeCloseTo(0.9);
+    expect(rpcArgs.p_confidence as number).toBeCloseTo(0.9);
     expect(sourceInsertQuery.insert).toHaveBeenCalledWith({
       page_id: 'page-new',
       source_type: 'text',

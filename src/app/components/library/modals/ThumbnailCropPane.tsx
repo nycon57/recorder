@@ -123,7 +123,7 @@ export function ThumbnailCropPane({
   return (
     <div className="flex flex-col">
       {/* Cropper container */}
-      <div className="relative h-[350px] bg-black">
+      <div className="relative h-[350px] bg-zinc-950">
         <Cropper
           image={thumbnailUrl}
           crop={crop}
@@ -144,7 +144,7 @@ export function ThumbnailCropPane({
       {/* Zoom control */}
       <div className="px-6 py-4 border-t border-border/50 bg-muted/30">
         <div className="flex items-center gap-4">
-          <ZoomOut className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <ZoomOut className="size-4 text-muted-foreground flex-shrink-0" />
           <Slider
             value={[zoom]}
             min={1}
@@ -153,7 +153,7 @@ export function ThumbnailCropPane({
             onValueChange={([value]) => setZoom(value)}
             className="flex-1"
           />
-          <ZoomIn className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <ZoomIn className="size-4 text-muted-foreground flex-shrink-0" />
           <span className="text-xs text-muted-foreground w-12 text-right">
             {Math.round(zoom * 100)}%
           </span>
@@ -175,12 +175,12 @@ export function ThumbnailCropPane({
         >
           {isLoading ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Saving…
             </>
           ) : (
             <>
-              <Crop className="mr-2 h-4 w-4" />
+              <Crop className="mr-2 size-4" />
               Save Crop
             </>
           )}
@@ -189,5 +189,3 @@ export function ThumbnailCropPane({
     </div>
   );
 }
-
-export default ThumbnailCropPane;

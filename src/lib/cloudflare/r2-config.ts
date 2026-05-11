@@ -27,7 +27,7 @@ export interface StorageTierConfig {
 /**
  * Storage tier configuration
  */
-export const STORAGE_TIERS: StorageTierConfig[] = [
+const STORAGE_TIERS: StorageTierConfig[] = [
   {
     name: 'hot',
     provider: 'supabase',
@@ -93,7 +93,7 @@ export function getStorageTier(ageInDays: number): StorageTierConfig {
 /**
  * Get storage tier by name
  */
-export function getStorageTierByName(
+function getStorageTierByName(
   name: 'hot' | 'warm' | 'cold'
 ): StorageTierConfig | undefined {
   return STORAGE_TIERS.find((t) => t.name === name);
@@ -145,7 +145,7 @@ export function getR2Endpoint(accountId: string): string {
 /**
  * Validate R2 configuration
  */
-export function validateR2Config(): {
+function validateR2Config(): {
   valid: boolean;
   error?: string;
   config?: R2Config;
@@ -163,7 +163,7 @@ export function validateR2Config(): {
 /**
  * Cost calculation for storage tiers
  */
-export function calculateStorageCost(
+function calculateStorageCost(
   sizeBytes: number,
   tier: 'hot' | 'warm' | 'cold'
 ): number {
@@ -175,7 +175,7 @@ export function calculateStorageCost(
 /**
  * Estimate savings from tier migration
  */
-export function estimateMigrationSavings(
+function estimateMigrationSavings(
   sizeBytes: number,
   fromTier: 'hot' | 'warm' | 'cold',
   toTier: 'warm' | 'cold'

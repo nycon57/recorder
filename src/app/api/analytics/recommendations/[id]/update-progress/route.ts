@@ -6,7 +6,14 @@
  */
 
 import { NextRequest } from 'next/server';
-import { apiHandler, requireAuth, successResponse, parseBody, errors } from '@/lib/utils/api';
+
+import {
+  apiHandler,
+  requireAuth,
+  successResponse,
+  parseBody,
+  errors,
+} from '@/lib/utils/api';
 import { recommendationProgressSchema } from '@/lib/validations/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { transformRecommendation } from '@/lib/utils/recommendations';
@@ -29,42 +36,46 @@ interface RouteContext {
  * POST /api/analytics/recommendations/abc-123/update-progress
  * { "progress": 75 }
  */
-export const POST = apiHandler(async (request: NextRequest, context: RouteContext) => {
-  await requireAuth();
+export const POST = apiHandler(
+  async (request: NextRequest, context: RouteContext) => {
+    await requireAuth();
 
-  const { id: recommendationId } = await context.params;
-  const body = await parseBody(request, recommendationProgressSchema);
-  // Type assertion for parsed body
-  const { progress } = body as { progress: number };
+    const [{ id: recommendationId }, body] = await Promise.all([
+      context.params,
+      parseBody(request, recommendationProgressSchema),
+    ]);
+    // Type assertion for parsed body
+    const { progress } = body as { progress: number };
 
-  // Update recommendation progress
-  const { data: recommendation, error } = await supabaseAdmin
-    .from('recommendations')
-    .update({
-      progress,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', recommendationId)
-    .eq('status', 'in-progress') // Only allow if in progress
-    .select()
-    .single();
+    // Update recommendation progress
+    const { data: recommendation, error } = await supabaseAdmin
+      .from('recommendations')
+      .update({
+        progress,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', recommendationId)
+      .eq('status', 'in-progress') // Only allow if in progress
+      .select()
+      .single();
 
-  if (error) {
-    console.error('[Update Progress] Error:', error);
+    if (error) {
+      console.error('[Update Progress] Error:', error);
 
-    if (error.code === 'PGRST116') {
-      throw errors.notFound('Recommendation', undefined);
+      if (error.code === 'PGRST116') {
+        throw errors.notFound('Recommendation', undefined);
+      }
+
+      throw new Error('Failed to update progress');
     }
 
-    throw new Error('Failed to update progress');
-  }
+    if (!recommendation) {
+      throw new Error('Recommendation not found or not in progress');
+    }
 
-  if (!recommendation) {
-    throw new Error('Recommendation not found or not in progress');
-  }
-
-  return successResponse({
-    recommendation: transformRecommendation(recommendation),
-    message: `Progress updated to ${progress}%`,
-  });
-});
+    return successResponse({
+      recommendation: transformRecommendation(recommendation),
+      message: `Progress updated to ${progress}%`,
+    });
+  },
+);

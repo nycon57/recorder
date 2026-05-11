@@ -73,11 +73,16 @@ type ContentUpdateRow = Pick<
  *   - 500: Internal server error
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const requestId = generateRequestId();
-    const { orgId } = await requireOrg();
-    const { id } = await params;
-    const supabase = await createClient();
+    const [{ orgId }, { id }, supabase] = await Promise.all([
+      requireOrg(),
+      params,
+      createClient(),
+    ]);
 
     try {
       // Check if viewing deleted items is allowed (for trash view)
@@ -92,7 +97,7 @@ export const GET = apiHandler(
           *,
           transcripts (*),
           documents (*)
-        `
+        `,
         )
         .eq('id', id)
         .eq('org_id', orgId);
@@ -140,13 +145,13 @@ export const GET = apiHandler(
           fileUrl,
           downloadUrl,
         },
-        requestId
+        requestId,
       );
     } catch (error: any) {
       console.error('[Library Item Get] Request error:', error);
       return errors.internalError(requestId);
     }
-  }
+  },
 );
 
 /**
@@ -189,11 +194,16 @@ export const GET = apiHandler(
  *   - 500: Internal server error
  */
 export const PATCH = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const requestId = generateRequestId();
-    const { orgId } = await requireOrg();
-    const { id } = await params;
-    const supabase = await createClient();
+    const [{ orgId }, { id }, supabase] = await Promise.all([
+      requireOrg(),
+      params,
+      createClient(),
+    ]);
 
     try {
       // Parse and validate request body
@@ -240,7 +250,7 @@ export const PATCH = apiHandler(
           metadata: updatedItem.metadata,
           updated_at: updatedItem.updated_at,
         },
-        requestId
+        requestId,
       );
     } catch (error: any) {
       console.error('[Library Item Update] Request error:', error);
@@ -252,7 +262,7 @@ export const PATCH = apiHandler(
 
       return errors.internalError(requestId);
     }
-  }
+  },
 );
 
 /**
@@ -292,16 +302,23 @@ export const PATCH = apiHandler(
  *   - 500: Internal server error
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const requestId = generateRequestId();
 
     console.log(`[Library Item Delete] Request received`);
 
-    const { orgId } = await requireOrg();
-    const resolvedParams = await params;
+    const [{ orgId }, resolvedParams] = await Promise.all([
+      requireOrg(),
+      params,
+    ]);
     const { id } = resolvedParams;
 
-    console.log(`[Library Item Delete] Starting delete for recording ${id}, org ${orgId}`);
+    console.log(
+      `[Library Item Delete] Starting delete for recording ${id}, org ${orgId}`,
+    );
 
     try {
       // Check for permanent delete query param
@@ -353,7 +370,7 @@ export const DELETE = apiHandler(
             success: true,
             message: 'Content item permanently deleted',
           },
-          requestId
+          requestId,
         );
       } else {
         // Soft delete - use admin client to bypass RLS
@@ -370,7 +387,10 @@ export const DELETE = apiHandler(
           .single();
 
         if (fetchError || !existingItem) {
-          console.log(`[Library Item Delete] Item not found: ${id}`, fetchError);
+          console.log(
+            `[Library Item Delete] Item not found: ${id}`,
+            fetchError,
+          );
           return errors.notFound('Content item', requestId);
         }
 
@@ -383,7 +403,7 @@ export const DELETE = apiHandler(
               message: 'Content item already deleted',
               deleted_at: existingItem.deleted_at,
             },
-            requestId
+            requestId,
           );
         }
 
@@ -409,12 +429,12 @@ export const DELETE = apiHandler(
             message: 'Content item moved to trash',
             deleted_at: deletedAt,
           },
-          requestId
+          requestId,
         );
       }
     } catch (error: any) {
       console.error('[Library Item Delete] Request error:', error);
       return errors.internalError(requestId);
     }
-  }
+  },
 );

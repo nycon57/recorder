@@ -10,7 +10,7 @@ import { Variants } from 'motion/react';
 /**
  * Check if user prefers reduced motion
  */
-export const prefersReducedMotion = (): boolean => {
+const prefersReducedMotion = (): boolean => {
   if (typeof window === 'undefined') return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 };
@@ -33,7 +33,7 @@ export const staggerContainer: Variants = {
 /**
  * Faster stagger for large lists
  */
-export const staggerContainerFast: Variants = {
+const staggerContainerFast: Variants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
@@ -93,7 +93,7 @@ export const fadeIn: Variants = {
 /**
  * Fade in with slide from bottom
  */
-export const fadeInUp: Variants = {
+const fadeInUp: Variants = {
   hidden: {
     opacity: 0,
     y: 24,
@@ -112,7 +112,7 @@ export const fadeInUp: Variants = {
 /**
  * Fade in with slide from top
  */
-export const fadeInDown: Variants = {
+const fadeInDown: Variants = {
   hidden: {
     opacity: 0,
     y: -24,
@@ -131,7 +131,7 @@ export const fadeInDown: Variants = {
 /**
  * Scale animation (for modals, popovers)
  */
-export const scaleIn: Variants = {
+const scaleIn: Variants = {
   hidden: {
     opacity: 0,
     scale: 0.95,
@@ -157,7 +157,7 @@ export const scaleIn: Variants = {
 /**
  * Card hover animation config
  */
-export const cardHover = {
+const cardHover = {
   rest: {
     scale: 1,
     y: 0,
@@ -179,7 +179,7 @@ export const cardHover = {
 /**
  * Button press animation config
  */
-export const buttonPress = {
+const buttonPress = {
   rest: { scale: 1 },
   tap: {
     scale: 0.97,
@@ -193,7 +193,7 @@ export const buttonPress = {
 /**
  * Page transition variants
  */
-export const pageTransition: Variants = {
+const pageTransition: Variants = {
   hidden: {
     opacity: 0,
     x: -20,
@@ -219,7 +219,7 @@ export const pageTransition: Variants = {
 /**
  * Layout transition config (for view mode switches)
  */
-export const layoutTransition = {
+const layoutTransition = {
   type: 'spring',
   stiffness: 350,
   damping: 30,
@@ -228,7 +228,7 @@ export const layoutTransition = {
 /**
  * Smooth height animation config
  */
-export const heightTransition = {
+const heightTransition = {
   type: 'spring',
   stiffness: 300,
   damping: 30,
@@ -261,7 +261,7 @@ export const withReducedMotion = (variants: Variants): Variants => {
 /**
  * Hover lift effect with shadow (for cards)
  */
-export const hoverLift = {
+const hoverLift = {
   whileHover: {
     y: -4,
     transition: {
@@ -274,7 +274,7 @@ export const hoverLift = {
 /**
  * Thumbnail zoom effect
  */
-export const thumbnailZoom = {
+const thumbnailZoom = {
   rest: { scale: 1 },
   hover: {
     scale: 1.05,
@@ -291,6 +291,6 @@ export const thumbnailZoom = {
  * @param baseDelay - Base delay in seconds
  * @returns Calculated delay
  */
-export const calculateStaggerDelay = (index: number, baseDelay = 0.05): number => {
+const calculateStaggerDelay = (index: number, baseDelay = 0.05): number => {
   return index * baseDelay;
 };

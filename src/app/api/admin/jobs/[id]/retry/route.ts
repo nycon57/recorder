@@ -24,49 +24,50 @@ interface RouteParams {
  * POST /api/admin/jobs/[id]/retry
  * Retry a failed or pending job
  */
-export const POST = apiHandler(async (request: NextRequest, context: RouteParams) => {
-  // SECURITY: Require system admin privileges
-  await requireSystemAdmin();
+export const POST = apiHandler(
+  async (request: NextRequest, context: RouteParams) => {
+    const [, { id }] = await Promise.all([
+      requireSystemAdmin(),
+      context.params,
+    ]);
 
-  const { id } = await context.params;
+    const { data: job, error: fetchError } = await supabaseAdmin
+      .from('jobs')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-  // Fetch the job
-  const { data: job, error: fetchError } = await supabaseAdmin
-    .from('jobs')
-    .select('*')
-    .eq('id', id)
-    .single();
+    if (fetchError || !job) {
+      throw errors.notFound('Job not found');
+    }
 
-  if (fetchError || !job) {
-    throw errors.notFound('Job not found');
-  }
+    // Only allow retrying failed or pending jobs
+    if (job.status !== 'failed' && job.status !== 'pending') {
+      throw errors.badRequest(
+        `Cannot retry job with status: ${job.status}. Only failed or pending jobs can be retried.`,
+      );
+    }
 
-  // Only allow retrying failed or pending jobs
-  if (job.status !== 'failed' && job.status !== 'pending') {
-    throw errors.badRequest(
-      `Cannot retry job with status: ${job.status}. Only failed or pending jobs can be retried.`
-    );
-  }
+    // Reset the job to pending status and schedule for immediate execution
+    const { error: updateError } = await supabaseAdmin
+      .from('jobs')
+      .update({
+        status: 'pending',
+        run_at: new Date().toISOString(),
+        error: null,
+        started_at: null,
+        completed_at: null,
+      })
+      .eq('id', id);
 
-  // Reset the job to pending status and schedule for immediate execution
-  const { error: updateError } = await supabaseAdmin
-    .from('jobs')
-    .update({
-      status: 'pending',
-      run_at: new Date().toISOString(),
-      error: null,
-      started_at: null,
-      completed_at: null,
-    })
-    .eq('id', id);
+    if (updateError) {
+      console.error('[AdminJobRetry] Error updating job:', updateError);
+      throw new Error('Failed to retry job');
+    }
 
-  if (updateError) {
-    console.error('[AdminJobRetry] Error updating job:', updateError);
-    throw new Error('Failed to retry job');
-  }
-
-  return successResponse({
-    message: 'Job retry scheduled successfully',
-    jobId: id,
-  });
-});
+    return successResponse({
+      message: 'Job retry scheduled successfully',
+      jobId: id,
+    });
+  },
+);

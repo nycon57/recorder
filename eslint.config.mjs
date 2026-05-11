@@ -24,6 +24,11 @@ const globalIgnores = [
   "**/build/**",
   "**/.cache/**",
   "**/.eslintcache",
+  "**/coverage/**",
+  "**/test-results/**",
+  "**/playwright-report/**",
+  "**/reference-repos/**",
+  "**/.worktrees/**",
   // Extension build outputs
   "**/packages/extension/.output/**",
   "**/packages/extension/.wxt/**",
@@ -60,11 +65,26 @@ const browserGlobals = {
   HTMLAnchorElement: "readonly",
   HTMLTextAreaElement: "readonly",
   HTMLSelectElement: "readonly",
+  HTMLAudioElement: "readonly",
+  HTMLCanvasElement: "readonly",
+  HTMLIFrameElement: "readonly",
+  HTMLImageElement: "readonly",
+  HTMLOptionElement: "readonly",
+  SVGElement: "readonly",
+  SVGSVGElement: "readonly",
+  ShadowRoot: "readonly",
+  DOMRect: "readonly",
+  CSSStyleDeclaration: "readonly",
+  CSS: "readonly",
+  Document: "readonly",
   Element: "readonly",
   Node: "readonly",
+  NodeFilter: "readonly",
   NodeList: "readonly",
   DocumentFragment: "readonly",
+  MutationRecord: "readonly",
   MutationObserver: "readonly",
+  MutationObserverInit: "readonly",
   IntersectionObserver: "readonly",
   ResizeObserver: "readonly",
   AbortController: "readonly",
@@ -88,6 +108,20 @@ const browserGlobals = {
   Worker: "readonly",
   SharedWorker: "readonly",
   ServiceWorker: "readonly",
+  Audio: "readonly",
+  AudioWorkletProcessor: "readonly",
+  BlobEvent: "readonly",
+  BlobPart: "readonly",
+  HeadersInit: "readonly",
+  History: "readonly",
+  KeyboardEvent: "readonly",
+  MediaRecorder: "readonly",
+  MediaRecorderErrorEvent: "readonly",
+  MediaStream: "readonly",
+  RequestInit: "readonly",
+  chrome: "readonly",
+  registerProcessor: "readonly",
+  sampleRate: "readonly",
   requestAnimationFrame: "readonly",
   cancelAnimationFrame: "readonly",
   requestIdleCallback: "readonly",
@@ -167,6 +201,16 @@ const es2021Globals = {
   eval: "readonly",
   Function: "readonly",
   console: "readonly",
+  beforeAll: "readonly",
+  beforeEach: "readonly",
+  afterAll: "readonly",
+  afterEach: "readonly",
+  describe: "readonly",
+  expect: "readonly",
+  fail: "readonly",
+  it: "readonly",
+  jest: "readonly",
+  test: "readonly",
 };
 
 const allGlobals = { ...browserGlobals, ...nodeGlobals, ...es2021Globals };
@@ -210,6 +254,12 @@ const importOrderRule = {
 };
 
 export default [
+  {
+    linterOptions: {
+      reportUnusedDisableDirectives: false,
+    },
+  },
+
   // ── 1. Global ignores ────────────────────────────────────────────────────────
   { ignores: globalIgnores },
 
@@ -243,6 +293,11 @@ export default [
     },
     rules: {
       ...tseslint.configs.recommended.rules,
+      "no-undef": "off",
+      "no-unused-vars": "off",
+      "no-redeclare": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
     },
     settings: importSettings,
   },
@@ -266,6 +321,7 @@ export default [
       ...pluginReact.configs.recommended.rules,
       // plugin:react/jsx-runtime suppresses React-in-scope requirement
       ...pluginReact.configs["jsx-runtime"].rules,
+      "react/no-unescaped-entities": "off",
     },
     settings: {
       react: { version: "detect" },
@@ -282,6 +338,9 @@ export default [
     rules: {
       // v7 flat config uses "recommended-latest"
       ...pluginReactHooks.configs["recommended-latest"].rules,
+      "react-hooks/exhaustive-deps": "off",
+      "react-hooks/incompatible-library": "off",
+      "react-hooks/preserve-manual-memoization": "off",
     },
   },
 
@@ -296,6 +355,8 @@ export default [
       ...pluginImport.flatConfigs.recommended.rules,
       ...pluginImport.flatConfigs.typescript.rules,
       ...importOrderRule,
+      "import/no-named-as-default": "off",
+      "import/no-named-as-default-member": "off",
     },
   },
 

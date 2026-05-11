@@ -70,13 +70,13 @@ export interface KnowledgeDocsListItem {
   detailHref: string;
 }
 
-export interface KnowledgeDocsFacetOption {
+interface KnowledgeDocsFacetOption {
   value: string;
   label: string;
   count: number;
 }
 
-export interface KnowledgeDocsClusterFacetOption {
+interface KnowledgeDocsClusterFacetOption {
   value: string;
   label: string;
   count: number;

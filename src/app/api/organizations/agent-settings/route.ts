@@ -34,7 +34,9 @@ const BOOLEAN_FIELDS = [
 ] as const;
 
 /** Reverse map: settings column -> agent type (excludes global_agent_enabled and wiki_auto_publish) */
-const COLUMN_TO_AGENT: Partial<Record<(typeof BOOLEAN_FIELDS)[number], string>> = {
+const COLUMN_TO_AGENT: Partial<
+  Record<(typeof BOOLEAN_FIELDS)[number], string>
+> = {
   curator_enabled: 'curator',
   gap_intelligence_enabled: 'gap_intelligence',
   onboarding_enabled: 'onboarding',
@@ -102,7 +104,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       value > WIKI_STALE_THRESHOLD_MAX
     ) {
       return errors.badRequest(
-        `Field "wiki_stale_threshold_days" must be an integer between ${WIKI_STALE_THRESHOLD_MIN} and ${WIKI_STALE_THRESHOLD_MAX}`
+        `Field "wiki_stale_threshold_days" must be an integer between ${WIKI_STALE_THRESHOLD_MIN} and ${WIKI_STALE_THRESHOLD_MAX}`,
       );
     }
     updates.wiki_stale_threshold_days = value;
@@ -112,7 +114,9 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   if ('wiki_hybrid_auto_publish_enabled' in body) {
     const value = body.wiki_hybrid_auto_publish_enabled;
     if (typeof value !== 'boolean') {
-      return errors.badRequest('Field "wiki_hybrid_auto_publish_enabled" must be a boolean');
+      return errors.badRequest(
+        'Field "wiki_hybrid_auto_publish_enabled" must be a boolean',
+      );
     }
     policyPatch = {
       ...(policyPatch ?? {}),
@@ -129,7 +133,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       value > HYBRID_MAX_CONTRADICTIONS_MAX
     ) {
       return errors.badRequest(
-        `Field "wiki_hybrid_max_contradictions" must be an integer between ${HYBRID_MAX_CONTRADICTIONS_MIN} and ${HYBRID_MAX_CONTRADICTIONS_MAX}`
+        `Field "wiki_hybrid_max_contradictions" must be an integer between ${HYBRID_MAX_CONTRADICTIONS_MIN} and ${HYBRID_MAX_CONTRADICTIONS_MAX}`,
       );
     }
     policyPatch = {
@@ -147,7 +151,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       value > HYBRID_MIN_CONFIDENCE_DELTA_MAX
     ) {
       return errors.badRequest(
-        `Field "wiki_hybrid_min_confidence_delta" must be a number between ${HYBRID_MIN_CONFIDENCE_DELTA_MIN} and ${HYBRID_MIN_CONFIDENCE_DELTA_MAX}`
+        `Field "wiki_hybrid_min_confidence_delta" must be a number between ${HYBRID_MIN_CONFIDENCE_DELTA_MIN} and ${HYBRID_MIN_CONFIDENCE_DELTA_MAX}`,
       );
     }
     policyPatch = {
@@ -157,7 +161,9 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   }
 
   const requestedWikiAutoPublish =
-    'wiki_auto_publish' in body ? (updates.wiki_auto_publish as boolean) : undefined;
+    'wiki_auto_publish' in body
+      ? (updates.wiki_auto_publish as boolean)
+      : undefined;
   const requestedHybridEnabled =
     'wiki_hybrid_auto_publish_enabled' in body
       ? policyPatch?.hybrid_auto_publish_enabled
@@ -165,7 +171,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
   if (requestedWikiAutoPublish === false && requestedHybridEnabled === true) {
     return errors.badRequest(
-      'Field "wiki_hybrid_auto_publish_enabled" cannot be true when "wiki_auto_publish" is false'
+      'Field "wiki_hybrid_auto_publish_enabled" cannot be true when "wiki_auto_publish" is false',
     );
   }
 
@@ -176,7 +182,10 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     };
   }
 
-  if (requestedWikiAutoPublish === true && requestedHybridEnabled === undefined) {
+  if (
+    requestedWikiAutoPublish === true &&
+    requestedHybridEnabled === undefined
+  ) {
     policyPatch = {
       ...(policyPatch ?? {}),
       hybrid_auto_publish_enabled: false,
@@ -190,7 +199,9 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   if (policyPatch) {
     const existingSettings = await getAgentSettings(orgId);
     const rootMetadata = asObject(existingSettings.metadata);
-    const existingPolicy = asObject(rootMetadata[WIKI_COMPILATION_POLICY_METADATA_KEY]);
+    const existingPolicy = asObject(
+      rootMetadata[WIKI_COMPILATION_POLICY_METADATA_KEY],
+    );
 
     updates.metadata = {
       ...rootMetadata,
@@ -206,13 +217,18 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   }
 
   // Reject if enabling an agent the plan does not allow (disabling is always permitted)
-  const agentsBeingEnabled = Object.entries(updates)
-    .filter(([, value]) => value === true)
-    .map(([field]) => COLUMN_TO_AGENT[field as (typeof BOOLEAN_FIELDS)[number]])
-    .filter((agentType): agentType is string => !!agentType);
+  const agentsBeingEnabled = Object.entries(updates).flatMap(
+    ([field, value]) => {
+      if (value !== true) return [];
+      const agent = COLUMN_TO_AGENT[field as (typeof BOOLEAN_FIELDS)[number]];
+      return agent ? [agent] : [];
+    },
+  );
 
   const accessResults = await Promise.all(
-    agentsBeingEnabled.map((agentType) => checkAgentPlanAccess(orgId, agentType))
+    agentsBeingEnabled.map((agentType) =>
+      checkAgentPlanAccess(orgId, agentType),
+    ),
   );
   if (accessResults.some((r) => !r.allowed)) {
     return NextResponse.json(upgradePlanError(), { status: 403 });
@@ -220,10 +236,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
   const { data, error } = await supabaseAdmin
     .from('org_agent_settings')
-    .upsert(
-      { org_id: orgId, ...updates },
-      { onConflict: 'org_id' }
-    )
+    .upsert({ org_id: orgId, ...updates }, { onConflict: 'org_id' })
     .select()
     .single();
 

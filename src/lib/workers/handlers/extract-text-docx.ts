@@ -99,7 +99,7 @@ export async function handleExtractTextDocx(
     // Save DOCX to temp file
     tempDocxPath = join(tmpdir(), `${randomUUID()}.docx`);
     const buffer = await docxBlob.arrayBuffer();
-    await writeFile(tempDocxPath, Buffer.from(buffer));
+    await writeFile(tempDocxPath, new Uint8Array(buffer));
 
     logger.info('DOCX saved to temp file', {
       context: { tempDocxPath, sizeBytes: buffer.byteLength },

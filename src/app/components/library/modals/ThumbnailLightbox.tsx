@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 import { X } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
@@ -40,16 +40,14 @@ export function ThumbnailLightbox({
   thumbnailUrl,
   title,
 }: ThumbnailLightboxProps) {
-  const [imageLoaded, setImageLoaded] = React.useState(false);
-  const [imageError, setImageError] = React.useState(false);
-
-  // Reset state when modal opens
-  React.useEffect(() => {
-    if (open) {
-      setImageLoaded(false);
-      setImageError(false);
-    }
-  }, [open]);
+  const [imageState, setImageState] = React.useState<{
+    src: string;
+    status: 'loading' | 'loaded' | 'error';
+  }>({ src: thumbnailUrl, status: 'loading' });
+  const imageStatus =
+    imageState.src === thumbnailUrl ? imageState.status : 'loading';
+  const imageLoaded = imageStatus === 'loaded';
+  const imageError = imageStatus === 'error';
 
   return (
     <ContentModal
@@ -64,9 +62,7 @@ export function ThumbnailLightbox({
       {/* Visually hidden title for accessibility */}
       <VisuallyHidden>
         <ContentModalHeader>
-          <ContentModalTitle>
-            {title || 'Image Preview'}
-          </ContentModalTitle>
+          <ContentModalTitle>{title || 'Image Preview'}</ContentModalTitle>
         </ContentModalHeader>
       </VisuallyHidden>
 
@@ -78,40 +74,40 @@ export function ThumbnailLightbox({
           onClick={() => onOpenChange(false)}
           className="absolute top-4 right-4 z-50 text-white/70 hover:text-white hover:bg-white/10 rounded-full"
         >
-          <X className="h-6 w-6" />
+          <X className="size-6" />
           <span className="sr-only">Close</span>
         </Button>
 
         {/* Image container */}
-        <div className="relative flex items-center justify-center w-full h-full min-h-[80vh] p-8">
+        <div className="relative flex items-center justify-center size-full min-h-[80vh] p-8">
           <AnimatePresence mode="wait">
             {/* Loading state */}
             {!imageLoaded && !imageError && (
-              <motion.div
+              <m.div
                 key="loading"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="absolute inset-0 flex items-center justify-center"
               >
-                <div className="w-8 h-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
-              </motion.div>
+                <div className="size-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
+              </m.div>
             )}
 
             {/* Error state */}
             {imageError && (
-              <motion.div
+              <m.div
                 key="error"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="text-center text-white/60"
               >
                 <p>Failed to load image</p>
-              </motion.div>
+              </m.div>
             )}
 
             {/* Image */}
-            <motion.img
+            <m.img
               key="image"
               src={thumbnailUrl}
               alt={title || 'Thumbnail preview'}
@@ -122,8 +118,12 @@ export function ThumbnailLightbox({
               }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
               className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
-              onLoad={() => setImageLoaded(true)}
-              onError={() => setImageError(true)}
+              onLoad={() =>
+                setImageState({ src: thumbnailUrl, status: 'loaded' })
+              }
+              onError={() =>
+                setImageState({ src: thumbnailUrl, status: 'error' })
+              }
             />
           </AnimatePresence>
         </div>
@@ -138,5 +138,3 @@ export function ThumbnailLightbox({
     </ContentModal>
   );
 }
-
-export default ThumbnailLightbox;

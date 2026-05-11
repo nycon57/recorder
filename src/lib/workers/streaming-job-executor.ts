@@ -91,13 +91,17 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Compression handlers
   compress_video: async (job: Job) => {
-    const result = await handleCompressVideo(job.payload as unknown as CompressVideoJobPayload);
+    const result = await handleCompressVideo(
+      job.payload as unknown as CompressVideoJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'Video compression failed');
     }
   },
   compress_audio: async (job: Job) => {
-    const result = await handleCompressAudio(job.payload as unknown as CompressAudioJobPayload);
+    const result = await handleCompressAudio(
+      job.payload as unknown as CompressAudioJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'Audio compression failed');
     }
@@ -105,7 +109,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Storage tier migration
   migrate_storage_tier: async (job: Job) => {
-    const result = await handleMigrateStorageTier(job.payload as unknown as MigrateStorageTierJobPayload);
+    const result = await handleMigrateStorageTier(
+      job.payload as unknown as MigrateStorageTierJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'Storage tier migration failed');
     }
@@ -113,13 +119,17 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Deduplication handlers
   deduplicate_file: async (job: Job) => {
-    const result = await handleDeduplicateFile(job.payload as unknown as DeduplicateFileJobPayload);
+    const result = await handleDeduplicateFile(
+      job.payload as unknown as DeduplicateFileJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'File deduplication failed');
     }
   },
   batch_deduplicate: async (job: Job) => {
-    const result = await handleBatchDeduplicate(job.payload as unknown as BatchDeduplicateJobPayload);
+    const result = await handleBatchDeduplicate(
+      job.payload as unknown as BatchDeduplicateJobPayload,
+    );
     if (!result.success) {
       throw new Error('Batch deduplication failed');
     }
@@ -127,13 +137,17 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Similarity detection handlers
   detect_similarity: async (job: Job) => {
-    const result = await handleDetectSimilarity(job.payload as unknown as DetectSimilarityJobPayload);
+    const result = await handleDetectSimilarity(
+      job.payload as unknown as DetectSimilarityJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'Similarity detection failed');
     }
   },
   batch_detect_similarity: async (job: Job) => {
-    const result = await handleBatchDetectSimilarity(job.payload as unknown as BatchDetectSimilarityJobPayload);
+    const result = await handleBatchDetectSimilarity(
+      job.payload as unknown as BatchDetectSimilarityJobPayload,
+    );
     if (!result.success) {
       throw new Error('Batch similarity detection failed');
     }
@@ -192,10 +206,7 @@ function getPayload(job: Pick<Job, 'payload'>): JobPayload {
     : null;
 }
 
-function hasStringPayloadValue(
-  payload: JobPayload,
-  key: string,
-): boolean {
+function hasStringPayloadValue(payload: JobPayload, key: string): boolean {
   return typeof payload?.[key] === 'string' && payload[key].length > 0;
 }
 
@@ -310,16 +321,17 @@ export async function findRunnableDependentJobs(
     return [];
   }
 
-  const runnableJobs: Job[] = [];
-  for (const job of jobs as Job[]) {
-    if (seenJobIds.has(job.id)) continue;
-    if (!PIPELINE_JOB_TYPES.has(job.type)) continue;
+  const runnableJobs = (
+    await Promise.all(
+      (jobs as Job[]).map(async (job): Promise<Job | null> => {
+        if (seenJobIds.has(job.id)) return null;
+        if (!PIPELINE_JOB_TYPES.has(job.type)) return null;
 
-    const preparedJob = await maybeFillEmbeddingsDocumentId(job);
-    if (hasPrerequisites(preparedJob)) {
-      runnableJobs.push(preparedJob);
-    }
-  }
+        const preparedJob = await maybeFillEmbeddingsDocumentId(job);
+        return hasPrerequisites(preparedJob) ? preparedJob : null;
+      }),
+    )
+  ).filter((job): job is Job => Boolean(job));
 
   return runnableJobs.sort(sortPipelineJobs);
 }
@@ -332,7 +344,7 @@ export async function findRunnableDependentJobs(
 export async function executeJobWithStreaming(
   jobId: string,
   contentId: string,
-  maxRetries: number = 3
+  maxRetries: number = 3,
 ): Promise<void> {
   const supabase = createAdminClient();
 
@@ -396,10 +408,16 @@ export async function executeJobWithStreaming(
     const processingJob = claimedJob as Job;
 
     // Stream initial progress
-    streamingManager.sendProgress(contentId, 'all', 0, `Starting ${currentJob.type}...`, {
-      jobId,
-      jobType: processingJob.type,
-    });
+    streamingManager.sendProgress(
+      contentId,
+      'all',
+      0,
+      `Starting ${currentJob.type}...`,
+      {
+        jobId,
+        jobType: processingJob.type,
+      },
+    );
 
     // Get handler for job type
     const handler = JOB_HANDLERS[processingJob.type as JobType];
@@ -442,17 +460,23 @@ export async function executeJobWithStreaming(
       .eq('status', 'processing' as JobStatus);
 
     // Stream completion
-    streamingManager.sendProgress(contentId, 'all', 100, `${currentJob.type} completed successfully`, {
-      jobId,
-      jobType: processingJob.type,
-    });
+    streamingManager.sendProgress(
+      contentId,
+      'all',
+      100,
+      `${currentJob.type} completed successfully`,
+      {
+        jobId,
+        jobType: processingJob.type,
+      },
+    );
 
     logger.info('Job completed successfully', {
       context: { jobId, contentId, jobType: processingJob.type },
     });
-
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
 
     logger.error('Job execution failed', {
       context: { jobId, contentId },
@@ -484,7 +508,7 @@ export async function executeJobWithStreaming(
       streamingManager.sendLog(
         contentId,
         `Job failed, scheduling retry ${attemptCount}/${maxRetries} in ${retryDelay}ms`,
-        { error: errorMessage }
+        { error: errorMessage },
       );
 
       logger.info('Job retry scheduled', {
@@ -507,7 +531,7 @@ export async function executeJobWithStreaming(
       // Stream error
       streamingManager.sendError(
         contentId,
-        `Job failed after ${maxRetries} attempts: ${errorMessage}`
+        `Job failed after ${maxRetries} attempts: ${errorMessage}`,
       );
 
       logger.error('Job failed permanently', {
@@ -528,7 +552,7 @@ export async function executeJobWithStreaming(
 export async function executeJobPipelineWithStreaming(
   jobIds: string[],
   contentId: string,
-  maxRetries: number = 3
+  maxRetries: number = 3,
 ): Promise<void> {
   logger.info('Starting job pipeline execution', {
     context: { contentId, jobCount: jobIds.length },
@@ -538,61 +562,65 @@ export async function executeJobPipelineWithStreaming(
   streamingManager.sendLog(
     contentId,
     `Starting pipeline with ${jobIds.length} jobs`,
-    { jobIds }
+    { jobIds },
   );
 
   const queuedJobIds = [...jobIds];
   const seenJobIds = new Set<string>();
 
-  for (let i = 0; i < queuedJobIds.length; i++) {
-    const totalSteps = queuedJobIds.length;
-    const jobId = queuedJobIds[i];
-    seenJobIds.add(jobId);
+  await Promise.all(
+    Array.from(
+      { length: Math.max(0, Math.ceil((queuedJobIds.length - 0) / 1)) },
+      (_, __loopIndex) => 0 + __loopIndex * 1,
+    ).map(async (i) => {
+      const totalSteps = queuedJobIds.length;
+      const jobId = queuedJobIds[i];
+      seenJobIds.add(jobId);
 
-    logger.info(`Executing pipeline job ${i + 1}/${totalSteps}`, {
-      context: { contentId, jobId },
-    });
-
-    streamingManager.sendLog(
-      contentId,
-      `Processing step ${i + 1}/${totalSteps}`,
-      { jobId }
-    );
-
-    try {
-      await executeJobWithStreaming(jobId, contentId, maxRetries);
-
-      const dependentJobs = await findRunnableDependentJobs(
-        contentId,
-        seenJobIds,
-      );
-      for (const dependentJob of dependentJobs) {
-        seenJobIds.add(dependentJob.id);
-        queuedJobIds.push(dependentJob.id);
-      }
-    } catch (error) {
-      logger.error('Pipeline job failed', {
-        context: { contentId, jobId, step: i + 1 },
-        error: error as Error,
+      logger.info(`Executing pipeline job ${i + 1}/${totalSteps}`, {
+        context: { contentId, jobId },
       });
 
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      streamingManager.sendError(
+      streamingManager.sendLog(
         contentId,
-        `Step ${i + 1} failed: ${errorMsg}`,
-        { jobId, error: errorMsg },
+        `Processing step ${i + 1}/${totalSteps}`,
+        { jobId },
       );
-      throw error;
-    }
-  }
+
+      try {
+        await executeJobWithStreaming(jobId, contentId, maxRetries);
+
+        const dependentJobs = await findRunnableDependentJobs(
+          contentId,
+          seenJobIds,
+        );
+        for (const dependentJob of dependentJobs) {
+          seenJobIds.add(dependentJob.id);
+          queuedJobIds.push(dependentJob.id);
+        }
+      } catch (error) {
+        logger.error('Pipeline job failed', {
+          context: { contentId, jobId, step: i + 1 },
+          error: error as Error,
+        });
+
+        const errorMsg =
+          error instanceof Error ? error.message : 'Unknown error';
+        streamingManager.sendError(
+          contentId,
+          `Step ${i + 1} failed: ${errorMsg}`,
+          { jobId, error: errorMsg },
+        );
+        throw error;
+      }
+    }),
+  );
 
   logger.info('Job pipeline execution completed', {
     context: { contentId, jobCount: queuedJobIds.length },
   });
 
-  streamingManager.sendComplete(
-    contentId,
-    'Pipeline completed',
-    { totalJobs: queuedJobIds.length }
-  );
+  streamingManager.sendComplete(contentId, 'Pipeline completed', {
+    totalJobs: queuedJobIds.length,
+  });
 }

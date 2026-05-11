@@ -67,6 +67,28 @@ type InteractiveDescriptor = InteractiveElement & {
   surface: SurfaceKind;
 };
 
+function compactMap<T, U>(
+  items: Iterable<T>,
+  transform: (item: T, index: number) => U | null | undefined | false,
+): U[] {
+  const mapped: U[] = [];
+  let index = 0;
+  for (const item of items) {
+    const value = transform(item, index);
+    index += 1;
+    if (value) mapped.push(value);
+  }
+  return mapped;
+}
+
+function countVisibleElements(items: Iterable<Element>): number {
+  let count = 0;
+  for (const item of items) {
+    if (isVisible(item)) count += 1;
+  }
+  return count;
+}
+
 const APP_REGISTRY: AppRegistryEntry[] = [
   {
     name: 'salesforce',
@@ -182,6 +204,7 @@ const NAVIGATION_CONTAINERS =
   'nav, aside, [role="navigation"], [data-testid*="sidebar"], [class*="sidebar"], [class*="nav"], [role="tablist"]';
 
 const DIALOG_SELECTORS = '[role="dialog"], [aria-modal="true"], dialog[open]';
+const NON_TEXT_INPUT_TYPES = new Set(['checkbox', 'radio', 'button']);
 
 const MAX_FORM_SURFACES = 6;
 const MAX_FORM_FIELDS_PER_SURFACE = 20;
@@ -534,7 +557,7 @@ function derivePrimaryRowLabel(row: Element): string {
     if (!isVisible(candidate)) continue;
     if (
       candidate instanceof HTMLInputElement &&
-      ['checkbox', 'radio', 'button'].includes(candidate.type)
+      NON_TEXT_INPUT_TYPES.has(candidate.type)
     ) {
       continue;
     }
@@ -653,11 +676,9 @@ export function extractBreadcrumbs(doc: Document): string[] | undefined {
   if (!nav) return undefined;
 
   const items = uniqueBy(
-    Array.from(nav.querySelectorAll('li, [aria-current], a, span'))
-      .map((el) =>
-        normalizeText((el as HTMLElement).innerText || el.textContent),
-      )
-      .filter(Boolean),
+    compactMap(nav.querySelectorAll('li, [aria-current], a, span'), (el) =>
+      normalizeText((el as HTMLElement).innerText || el.textContent),
+    ),
     (label) => label,
   );
 
@@ -816,19 +837,17 @@ export function detectApp(url: string, doc: Document): DetectedApp {
 
 function extractHeadings(doc: Document): ContextHeading[] {
   return uniqueBy(
-    Array.from(doc.querySelectorAll('h1, h2, h3'))
-      .filter(isVisible)
-      .map((el) => {
-        const text = getElementSemanticText(el);
-        if (!text) return null;
-        const level = Number(el.tagName.slice(1));
-        return {
-          level,
-          text,
-          selector: getStableSelector(el),
-        } satisfies ContextHeading;
-      })
-      .filter(Boolean) as ContextHeading[],
+    compactMap(doc.querySelectorAll('h1, h2, h3'), (el) => {
+      if (!isVisible(el)) return null;
+      const text = getElementSemanticText(el);
+      if (!text) return null;
+      const level = Number(el.tagName.slice(1));
+      return {
+        level,
+        text,
+        selector: getStableSelector(el),
+      } satisfies ContextHeading;
+    }),
     (heading) => `${heading.level}:${heading.text}`,
   ).slice(0, 8);
 }
@@ -871,13 +890,12 @@ function extractNavigation(doc: Document): NavigationItem[] {
     doc.querySelectorAll(NAVIGATION_CONTAINERS),
   ).flatMap((container) => {
     const kind = classifyNavigationKind(container);
-    return Array.from(
+    return compactMap(
       container.querySelectorAll(
         'a[href], button, [role="link"], [role="button"], [role="tab"]',
       ),
-    )
-      .filter(isVisible)
-      .map((el) => {
+      (el) => {
+        if (!isVisible(el)) return null;
         const label = deriveLabel(el);
         if (!label || label.length > 80) return null;
         return {
@@ -886,8 +904,8 @@ function extractNavigation(doc: Document): NavigationItem[] {
           current: isCurrentNavItem(el),
           kind,
         } satisfies NavigationItem;
-      })
-      .filter(Boolean) as NavigationItem[];
+      },
+    );
   });
 
   return uniqueBy(
@@ -969,35 +987,34 @@ function extractWorkspaceContext(doc: Document): WorkspaceContext | undefined {
 
 function extractDialogs(doc: Document): DialogSurface[] {
   return uniqueBy(
-    Array.from(doc.querySelectorAll(DIALOG_SELECTORS))
-      .filter(isVisible)
-      .map((el) => {
-        const titleEl = el.querySelector('h1, h2, h3');
-        const title =
-          normalizeText(
-            (titleEl as HTMLElement | null)?.textContent ??
-              el.getAttribute('aria-label'),
-          ) || undefined;
-        const description =
-          normalizeText(
-            (el.querySelector('p, [data-description]') as HTMLElement | null)
-              ?.textContent,
-          ) || undefined;
-        const actionLabels = uniqueBy(
-          Array.from(el.querySelectorAll('button, a[href], [role="button"]'))
-            .filter(isVisible)
-            .map((action) => deriveLabel(action))
-            .filter(Boolean),
-          (label) => label,
-        );
+    compactMap(doc.querySelectorAll(DIALOG_SELECTORS), (el) => {
+      if (!isVisible(el)) return null;
+      const titleEl = el.querySelector('h1, h2, h3');
+      const title =
+        normalizeText(
+          (titleEl as HTMLElement | null)?.textContent ??
+            el.getAttribute('aria-label'),
+        ) || undefined;
+      const description =
+        normalizeText(
+          (el.querySelector('p, [data-description]') as HTMLElement | null)
+            ?.textContent,
+        ) || undefined;
+      const actionLabels = uniqueBy(
+        compactMap(
+          el.querySelectorAll('button, a[href], [role="button"]'),
+          (action) => (isVisible(action) ? deriveLabel(action) : null),
+        ),
+        (label) => label,
+      );
 
-        return {
-          title,
-          selector: getStableSelector(el),
-          description,
-          actionLabels,
-        } satisfies DialogSurface;
-      }),
+      return {
+        title,
+        selector: getStableSelector(el),
+        description,
+        actionLabels,
+      } satisfies DialogSurface;
+    }),
     (dialog) => dialog.selector,
   );
 }
@@ -1065,71 +1082,69 @@ function extractForms(doc: Document): FormSurface[] {
   }
 
   return uniqueBy(
-    containers
-      .map((container) => {
-        const fields = uniqueBy(
-          Array.from(
-            container.querySelectorAll(
-              'input:not([type="hidden"]), select, textarea',
-            ),
-          )
-            .filter(isVisible)
-            .map((field) => {
-              const label = deriveFieldLabel(field);
-              if (!label) return null;
-              return {
-                label,
-                selector: getStableSelector(field),
-                type: deriveType(field),
-                required:
-                  field.hasAttribute('required') ||
-                  field.getAttribute('aria-required') === 'true',
-                ...getInputState(field),
-                disabled: isDisabled(field),
-              } satisfies FormField;
-            })
-            .filter(Boolean) as FormField[],
-          (field) => field.selector,
-        ).slice(0, MAX_FORM_FIELDS_PER_SURFACE);
+    compactMap(containers, (container) => {
+      const fields = uniqueBy(
+        compactMap(
+          container.querySelectorAll(
+            'input:not([type="hidden"]), select, textarea',
+          ),
+          (field) => {
+            if (!isVisible(field)) return null;
+            const label = deriveFieldLabel(field);
+            if (!label) return null;
+            return {
+              label,
+              selector: getStableSelector(field),
+              type: deriveType(field),
+              required:
+                field.hasAttribute('required') ||
+                field.getAttribute('aria-required') === 'true',
+              ...getInputState(field),
+              disabled: isDisabled(field),
+            } satisfies FormField;
+          },
+        ),
+        (field) => field.selector,
+      ).slice(0, MAX_FORM_FIELDS_PER_SURFACE);
 
-        if (fields.length === 0) return null;
+      if (fields.length === 0) return null;
 
-        const label =
-          normalizeText(container.getAttribute('aria-label')) ||
-          normalizeText(
-            (
-              container.querySelector(
-                'legend, h2, h3, label',
-              ) as HTMLElement | null
-            )?.innerText,
-          ) ||
-          undefined;
+      const label =
+        normalizeText(container.getAttribute('aria-label')) ||
+        normalizeText(
+          (
+            container.querySelector(
+              'legend, h2, h3, label',
+            ) as HTMLElement | null
+          )?.innerText,
+        ) ||
+        undefined;
 
-        return {
-          label,
-          selector:
-            container === doc.body ? undefined : getStableSelector(container),
-          fields,
-        } satisfies FormSurface;
-      })
-      .filter(Boolean) as FormSurface[],
+      return {
+        label,
+        selector:
+          container === doc.body ? undefined : getStableSelector(container),
+        fields,
+      } satisfies FormSurface;
+    }),
     (form) => `${form.selector ?? 'body'}:${form.label ?? ''}`,
   ).slice(0, MAX_FORM_SURFACES);
 }
 
 function extractTables(doc: Document): TableSurface[] {
   return uniqueBy(
-    Array.from(doc.querySelectorAll('table, [role="table"], [role="grid"]'))
-      .filter(isVisible)
-      .map((table) => {
+    compactMap(
+      doc.querySelectorAll('table, [role="table"], [role="grid"]'),
+      (table) => {
+        if (!isVisible(table)) return null;
         const columns = uniqueBy(
-          Array.from(table.querySelectorAll('th, [role="columnheader"]'))
-            .map((header) =>
+          compactMap(
+            table.querySelectorAll('th, [role="columnheader"]'),
+            (header) =>
               normalizeText(
                 (header as HTMLElement).innerText || header.textContent,
               ),
-            )
-            .filter(Boolean),
+          ),
           (value) => value,
         ).slice(0, MAX_TABLE_COLUMNS);
         const rowCount = table.querySelectorAll(
@@ -1137,25 +1152,24 @@ function extractTables(doc: Document): TableSurface[] {
         ).length;
         if (columns.length === 0 && rowCount === 0) return null;
         const actionLabels = uniqueBy(
-          Array.from(table.querySelectorAll('button, a[href], [role="button"]'))
-            .filter(isVisible)
-            .map((action) => deriveLabel(action))
-            .filter(Boolean),
+          compactMap(
+            table.querySelectorAll('button, a[href], [role="button"]'),
+            (action) => (isVisible(action) ? deriveLabel(action) : null),
+          ),
           (value) => value,
         ).slice(0, MAX_TABLE_ACTION_LABELS);
 
         const selectionControls = uniqueBy(
-          Array.from(
+          compactMap(
             table.querySelectorAll('input[type="checkbox"], [role="checkbox"]'),
-          )
-            .filter(isVisible)
-            .map((control) => {
+            (control) => {
+              if (!isVisible(control)) return null;
               if (control instanceof HTMLInputElement) {
                 return deriveCheckboxLabel(control);
               }
               return deriveLabel(control);
-            })
-            .filter(Boolean),
+            },
+          ),
           (value) => value,
         ).slice(0, MAX_TABLE_SELECTION_LABELS);
 
@@ -1174,8 +1188,8 @@ function extractTables(doc: Document): TableSurface[] {
           bulkSelectable,
           selectionLabels: selectionControls,
         } satisfies TableSurface;
-      })
-      .filter(Boolean) as TableSurface[],
+      },
+    ),
     (table) => table.selector ?? table.label ?? '',
   ).slice(0, MAX_TABLE_SURFACES);
 }
@@ -1217,58 +1231,48 @@ function findRegionIdForElement(
   regions: PageRegion[],
   el: Element,
 ): string | undefined {
-  const candidates = regions
-    .map((region) => ({
-      region,
-      node: el.ownerDocument.querySelector(region.selector),
-    }))
-    .filter((entry): entry is { region: PageRegion; node: Element } =>
-      Boolean(entry.node),
-    )
-    .filter((entry) => entry.node.contains(el))
-    .sort((left, right) => {
-      const leftRect = left.node.getBoundingClientRect();
-      const rightRect = right.node.getBoundingClientRect();
-      return (
-        leftRect.width * leftRect.height - rightRect.width * rightRect.height
-      );
-    });
+  const candidates = compactMap(regions, (region) => {
+    const node = el.ownerDocument.querySelector(region.selector);
+    return node?.contains(el) ? { region, node } : null;
+  }).sort((left, right) => {
+    const leftRect = left.node.getBoundingClientRect();
+    const rightRect = right.node.getBoundingClientRect();
+    return (
+      leftRect.width * leftRect.height - rightRect.width * rightRect.height
+    );
+  });
   return candidates[0]?.region.id;
 }
 
 function extractRegions(doc: Document, win: Window): PageRegion[] {
   const regions = uniqueBy(
-    Array.from(doc.querySelectorAll(REGION_SELECTORS))
-      .filter(isVisible)
-      .filter((el) => {
-        if (el === doc.body) return false;
-        const text = normalizeText(
-          (el as HTMLElement).innerText || el.textContent,
-        );
-        const interactiveCount = el.querySelectorAll(
-          INTERACTIVE_SELECTORS,
-        ).length;
-        return text.length > 0 || interactiveCount > 0;
-      })
-      .map((el, index) => {
-        const rect = getElementRect(el);
-        const snippetCount = Array.from(
-          el.querySelectorAll('h1, h2, h3, p, li, label, th, [role="status"]'),
-        ).filter(isVisible).length;
-        return {
-          id: `region-${index + 1}`,
-          selector: getStableSelector(el),
-          kind: classifyRegion(el),
-          label: deriveRegionLabel(el),
-          summary: clipText(getElementSemanticText(el), 240),
-          rect,
-          inViewport: isInViewport(rect, win),
-          interactiveCount: Array.from(
-            el.querySelectorAll(INTERACTIVE_SELECTORS),
-          ).filter(isVisible).length,
-          snippetCount,
-        } satisfies PageRegion;
-      }),
+    compactMap(doc.querySelectorAll(REGION_SELECTORS), (el, index) => {
+      if (!isVisible(el) || el === doc.body) return null;
+      const text = normalizeText(
+        (el as HTMLElement).innerText || el.textContent,
+      );
+      const interactiveCount = el.querySelectorAll(
+        INTERACTIVE_SELECTORS,
+      ).length;
+      if (text.length === 0 && interactiveCount === 0) return null;
+      const rect = getElementRect(el);
+      const snippetCount = countVisibleElements(
+        el.querySelectorAll('h1, h2, h3, p, li, label, th, [role="status"]'),
+      );
+      return {
+        id: `region-${index + 1}`,
+        selector: getStableSelector(el),
+        kind: classifyRegion(el),
+        label: deriveRegionLabel(el),
+        summary: clipText(getElementSemanticText(el), 240),
+        rect,
+        inViewport: isInViewport(rect, win),
+        interactiveCount: countVisibleElements(
+          el.querySelectorAll(INTERACTIVE_SELECTORS),
+        ),
+        snippetCount,
+      } satisfies PageRegion;
+    }),
     (region) => region.selector,
   );
 
@@ -1314,21 +1318,19 @@ function extractSnippets(
   );
 
   return uniqueBy(
-    candidates
-      .filter(isVisible)
-      .map((el, index) => {
-        const text = clipText(getElementSemanticText(el), 220);
-        if (!text || text.length < 3) return null;
-        return {
-          id: `snippet-${index + 1}`,
-          selector: getStableSelector(el),
-          regionId: findRegionIdForElement(regions, el),
-          kind: classifySnippet(el),
-          text,
-          rect: getElementRect(el),
-        } satisfies ContextSnippet;
-      })
-      .filter(Boolean) as ContextSnippet[],
+    compactMap(candidates, (el, index) => {
+      if (!isVisible(el)) return null;
+      const text = clipText(getElementSemanticText(el), 220);
+      if (!text || text.length < 3) return null;
+      return {
+        id: `snippet-${index + 1}`,
+        selector: getStableSelector(el),
+        regionId: findRegionIdForElement(regions, el),
+        kind: classifySnippet(el),
+        text,
+        rect: getElementRect(el),
+      } satisfies ContextSnippet;
+    }),
     (snippet) => `${snippet.kind}:${snippet.text}`,
   ).slice(0, 30);
 }
@@ -1474,7 +1476,8 @@ export function buildInteractiveElementInventory(
   const elements = Array.from(doc.querySelectorAll(INTERACTIVE_SELECTORS));
 
   const ranked = uniqueBy(
-    elements.filter(isVisible).map((el) => {
+    compactMap(elements, (el) => {
+      if (!isVisible(el)) return null;
       const label = deriveLabel(el);
       const selector = getStableSelector(el);
       const rect = el.getBoundingClientRect();
@@ -1692,16 +1695,16 @@ export function searchPageElementsFromDom(
   const selectors = uniqueBy(
     [
       ...context.interactiveElements.map((item) => item.selector),
-      ...Array.from(doc.querySelectorAll(INTERACTIVE_SELECTORS))
-        .filter(isVisible)
-        .map((el) => getStableSelector(el)),
+      ...compactMap(doc.querySelectorAll(INTERACTIVE_SELECTORS), (el) =>
+        isVisible(el) ? getStableSelector(el) : null,
+      ),
     ],
     (selector) => selector,
   );
 
-  return selectors
-    .map((selector) => inspectElementFromDom(selector, context, doc))
-    .filter((item): item is ElementInspection => item !== null)
+  return compactMap(selectors, (selector) =>
+    inspectElementFromDom(selector, context, doc),
+  )
     .filter((item) =>
       [
         item.label,
@@ -1753,19 +1756,23 @@ export function inspectPageRegionFromDom(
     .slice(0, 12);
 
   const elements = sanitizedContext.interactiveElements
-    .filter((item) => {
-      if (item.frameOwner) return item.selector === selectorOrId;
-      if (!el) {
-        return region
-          ? findRegionIdForSelector(doc, sanitizedContext, item.selector) ===
+    .flatMap((item) => {
+      const inRegion = item.frameOwner
+        ? item.selector === selectorOrId
+        : !el
+          ? region
+            ? findRegionIdForSelector(doc, sanitizedContext, item.selector) ===
               region.id
-          : false;
-      }
-      const node = doc.querySelector(item.selector);
-      return node ? el.contains(node) : false;
+            : false
+          : Boolean(el.contains(doc.querySelector(item.selector)));
+      if (!inRegion) return [];
+      const inspected = inspectElementFromDom(
+        item.selector,
+        sanitizedContext,
+        doc,
+      );
+      return inspected ? [inspected] : [];
     })
-    .map((item) => inspectElementFromDom(item.selector, sanitizedContext, doc))
-    .filter((item): item is ElementInspection => item !== null)
     .slice(0, 12);
 
   return { region, snippets, elements };

@@ -163,9 +163,7 @@ export function resolveTranscribeMediaMetadata(
   fileType: FileType | null,
 ): TranscribeMediaMetadata {
   const safeFileType =
-    fileType && GEMINI_MEDIA_FILE_TYPES.includes(fileType)
-      ? fileType
-      : 'webm';
+    fileType && GEMINI_MEDIA_FILE_TYPES.includes(fileType) ? fileType : 'webm';
   const mimeType = FILE_TYPE_TO_MIME_TYPE[safeFileType] || 'video/webm';
 
   return {
@@ -330,25 +328,23 @@ async function transcribeWithWhisperFallback(
   const openai = getOpenAIClient();
 
   // Call Whisper API
-  const transcription = await openai.audio.transcriptions.create({
+  const transcription = (await openai.audio.transcriptions.create({
     file: createReadStream(tempFilePath) as Uploadable,
     model: 'whisper-1',
     language: 'en',
     response_format: 'verbose_json',
     timestamp_granularities: ['word', 'segment'],
-  }) as WhisperVerboseResponse;
+  })) as WhisperVerboseResponse;
 
   // Convert Whisper response to GeminiVideoResponse format
   const segments = transcription.segments ?? [];
-  const audioTranscript: AudioSegment[] = segments.map(
-    (seg) => ({
-      timestamp: formatTimestamp(seg.start ?? 0),
-      startTime: seg.start ?? 0,
-      endTime: seg.end ?? seg.start ?? 0,
-      speaker: 'narrator',
-      text: (seg.text ?? '').trim(),
-    }),
-  );
+  const audioTranscript: AudioSegment[] = segments.map((seg) => ({
+    timestamp: formatTimestamp(seg.start ?? 0),
+    startTime: seg.start ?? 0,
+    endTime: seg.end ?? seg.start ?? 0,
+    speaker: 'narrator',
+    text: (seg.text ?? '').trim(),
+  }));
 
   const fullText =
     transcription.text || audioTranscript.map((s) => s.text).join(' ');
@@ -1044,25 +1040,30 @@ export async function transcribeRecording(job: Job): Promise<void> {
       });
 
       // Wait for file to be processed (Gemini needs to process video before use)
-      let file = uploadResult.file;
-      let pollCount = 0;
       const maxPolls = 120; // 10 minutes max wait (120 * 5 seconds)
 
-      while (file.state === FileState.PROCESSING) {
-        pollCount++;
-        if (pollCount > maxPolls) {
+      const waitForProcessedFile = async (
+        file: typeof uploadResult.file,
+        pollCount = 0,
+      ): Promise<{ file: typeof uploadResult.file; pollCount: number }> => {
+        if (file.state !== FileState.PROCESSING) {
+          return { file, pollCount };
+        }
+
+        const nextPollCount = pollCount + 1;
+        if (nextPollCount > maxPolls) {
           throw new Error(
             'Gemini file processing timeout - video may be too long or complex',
           );
         }
 
-        if (pollCount % 6 === 0) {
+        if (nextPollCount % 6 === 0) {
           // Log every 30 seconds
           logger.info('Waiting for Gemini file processing', {
             context: {
               fileName: file.name,
-              pollCount,
-              elapsedSeconds: pollCount * 5,
+              pollCount: nextPollCount,
+              elapsedSeconds: nextPollCount * 5,
             },
           });
 
@@ -1070,15 +1071,20 @@ export async function transcribeRecording(job: Job): Promise<void> {
             streamingManager.sendProgress(
               recordingId,
               'transcribe',
-              35 + Math.min(pollCount / 2, 10), // Progress from 35-45%
-              `Processing video in Gemini (${Math.round((pollCount * 5) / 60)}m)...`,
+              35 + Math.min(nextPollCount / 2, 10), // Progress from 35-45%
+              `Processing video in Gemini (${Math.round((nextPollCount * 5) / 60)}m)...`,
             );
           }
         }
 
         await sleep(5000); // Poll every 5 seconds
-        file = await fileManager.getFile(file.name);
-      }
+        const nextFile = await fileManager.getFile(file.name);
+        return waitForProcessedFile(nextFile, nextPollCount);
+      };
+
+      const { file, pollCount } = await waitForProcessedFile(
+        uploadResult.file,
+      );
 
       if (file.state === FileState.FAILED) {
         throw new Error(`Gemini file processing failed: ${file.name}`);

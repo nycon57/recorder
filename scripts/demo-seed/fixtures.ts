@@ -30,7 +30,7 @@ import {
 // ─── Organization ────────────────────────────────────────────────────────────
 
 // DO NOT ROTATE DEMO_SEED_NAMESPACE — see scripts/demo-seed/ids.ts
-export const DEMO_ORG_SLUG = 'acme-support-demo';
+const DEMO_ORG_SLUG = 'acme-support-demo';
 
 export const DEMO_ORG_ID = deriveOrgId(DEMO_ORG_SLUG);
 
@@ -47,7 +47,7 @@ export const DEMO_ORG = {
 
 // ─── Departments ─────────────────────────────────────────────────────────────
 
-export const DEMO_DEPARTMENT_SLUGS = {
+const DEMO_DEPARTMENT_SLUGS = {
   executive: 'executive',
   supportOps: 'support-ops',
   support: 'support',

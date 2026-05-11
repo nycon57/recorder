@@ -68,25 +68,23 @@ export interface ColoredBadgeProps
   maxWidth?: number | string;
   /** Render as a different element via Radix Slot */
   asChild?: boolean;
+  ref?: React.Ref<HTMLSpanElement>;
 }
 
-export const ColoredBadge = React.forwardRef<HTMLSpanElement, ColoredBadgeProps>(
-  (
-    {
-      className,
-      color,
-      icon,
-      size = 'md',
-      removable = false,
-      onRemove,
-      onClick,
-      maxWidth = 150,
-      asChild = false,
-      children,
-      ...props
-    },
-    ref
-  ) => {
+export function ColoredBadge({
+  className,
+  color,
+  icon,
+  size = 'md',
+  removable = false,
+  onRemove,
+  onClick,
+  maxWidth = 150,
+  asChild = false,
+  children,
+  ref,
+  ...props
+}: ColoredBadgeProps) {
     const Comp = asChild ? Slot : 'span';
 
     // Determine if badge should be interactive (clickable but not removable)
@@ -105,23 +103,23 @@ export const ColoredBadge = React.forwardRef<HTMLSpanElement, ColoredBadgeProps>
     const iconSize = iconSizeMap[size || 'md'];
     const maxWidthValue = typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth;
 
-    return (
-      <Comp
-        ref={ref}
-        data-slot="colored-badge"
-        data-interactive={isInteractive || undefined}
-        className={cn(
-          coloredBadgeVariants({ size }),
-          // Focus ring styles are handled by CSS via data-slot
-          className
-        )}
-        style={generateColorVars(color)}
-        onClick={isInteractive ? onClick : undefined}
-        onKeyDown={isInteractive ? handleKeyDown : undefined}
-        role={isInteractive ? 'button' : undefined}
-        tabIndex={isInteractive ? 0 : undefined}
-        {...props}
-      >
+  return (
+    <Comp
+      ref={ref}
+      data-slot="colored-badge"
+      data-interactive={isInteractive || undefined}
+      className={cn(
+        coloredBadgeVariants({ size }),
+        // Focus ring styles are handled by CSS via data-slot
+        className
+      )}
+      style={generateColorVars(color)}
+      onClick={isInteractive ? onClick : undefined}
+      onKeyDown={isInteractive ? handleKeyDown : undefined}
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+      {...props}
+    >
         {icon && (
           <span className={cn(iconSize, 'shrink-0 flex items-center justify-center')}>
             {icon}
@@ -148,10 +146,9 @@ export const ColoredBadge = React.forwardRef<HTMLSpanElement, ColoredBadgeProps>
             <X className={iconSize} />
           </button>
         )}
-      </Comp>
-    );
-  }
-);
+    </Comp>
+  );
+}
 
 ColoredBadge.displayName = 'ColoredBadge';
 

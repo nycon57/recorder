@@ -57,7 +57,7 @@ export async function extractFrames(
   videoPath: string,
   recordingId: string,
   orgId: string,
-  options: FrameExtractionOptions = {}
+  options: FrameExtractionOptions = {},
 ): Promise<FrameExtractionResult> {
   // SECURITY: Validate video path to prevent path traversal
   if (!validateFilePath(videoPath, ['mp4', 'webm', 'mov'])) {
@@ -66,13 +66,14 @@ export async function extractFrames(
 
   // SECURITY: Sanitize all numeric parameters to prevent injection
   const fps = sanitizeFFmpegFPS(
-    options.fps ?? parseFloat(process.env.FRAME_EXTRACTION_FPS || '0.5')
+    options.fps ?? parseFloat(process.env.FRAME_EXTRACTION_FPS || '0.5'),
   );
   const maxFrames = sanitizeMaxFrames(
-    options.maxFrames ?? parseInt(process.env.FRAME_EXTRACTION_MAX_FRAMES || '300')
+    options.maxFrames ??
+      parseInt(process.env.FRAME_EXTRACTION_MAX_FRAMES || '300'),
   );
   const quality = sanitizeFFmpegQuality(
-    options.quality ?? parseInt(process.env.FRAME_QUALITY || '85')
+    options.quality ?? parseInt(process.env.FRAME_QUALITY || '85'),
   );
   const detectSceneChanges = options.detectSceneChanges ?? false;
 
@@ -110,7 +111,7 @@ export async function extractFrames(
         videoPath,
         tempDir,
         actualFrameCount,
-        quality
+        quality,
       );
     } else {
       await extractUniformFrames(
@@ -118,7 +119,7 @@ export async function extractFrames(
         tempDir,
         fps,
         actualFrameCount,
-        quality
+        quality,
       );
     }
 
@@ -133,55 +134,59 @@ export async function extractFrames(
 
     // Upload frames to Supabase Storage
     const supabase = createClient();
-    const extractedFrames: ExtractedFrame[] = [];
+    const extractedFrames = (
+      await Promise.all(
+        framePaths.map(
+          async (filename, index): Promise<ExtractedFrame | null> => {
+            const localPath = path.join(tempDir, filename);
+            const frameNumber = index + 1;
+            const timeSec = frameNumber * frameInterval;
 
-    for (const [index, filename] of framePaths.entries()) {
-      const localPath = path.join(tempDir, filename);
-      const frameNumber = index + 1;
-      const timeSec = frameNumber * frameInterval;
+            // Optimize image with Sharp
+            const imageBuffer = await sharp(localPath)
+              .jpeg({ quality, mozjpeg: true })
+              .toBuffer();
 
-      // Optimize image with Sharp
-      const imageBuffer = await sharp(localPath)
-        .jpeg({ quality, mozjpeg: true })
-        .toBuffer();
+            const imageMetadata = await sharp(imageBuffer).metadata();
 
-      const imageMetadata = await sharp(imageBuffer).metadata();
+            // Upload to storage with validated path
+            const storagePath = `${orgId}/${recordingId}/frames/frame_${frameNumber.toString().padStart(4, '0')}.jpg`;
 
-      // Upload to storage with validated path
-      const storagePath = `${orgId}/${recordingId}/frames/frame_${frameNumber.toString().padStart(4, '0')}.jpg`;
+            // SECURITY: Validate storage path before upload
+            try {
+              validateStoragePath(storagePath, orgId);
+            } catch (error) {
+              console.error('[Frame Extraction] Invalid storage path:', error);
+              return null;
+            }
 
-      // SECURITY: Validate storage path before upload
-      try {
-        validateStoragePath(storagePath, orgId);
-      } catch (error) {
-        console.error('[Frame Extraction] Invalid storage path:', error);
-        continue;
-      }
+            const { error: uploadError } = await supabase.storage
+              .from(process.env.FRAMES_STORAGE_BUCKET || 'video-frames')
+              .upload(storagePath, imageBuffer, {
+                contentType: 'image/jpeg',
+                cacheControl: '3600',
+                upsert: true,
+              });
 
-      const { error: uploadError } = await supabase.storage
-        .from(process.env.FRAMES_STORAGE_BUCKET || 'video-frames')
-        .upload(storagePath, imageBuffer, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-          upsert: true,
-        });
+            if (uploadError) {
+              console.error('[Frame Extraction] Upload error:', uploadError);
+              return null;
+            }
 
-      if (uploadError) {
-        console.error('[Frame Extraction] Upload error:', uploadError);
-        continue;
-      }
-
-      extractedFrames.push({
-        frameNumber,
-        timeSec,
-        localPath,
-        storagePath,
-        width: imageMetadata.width || 0,
-        height: imageMetadata.height || 0,
-        sizeBytes: imageBuffer.length,
-        mimeType: 'image/jpeg',
-      });
-    }
+            return {
+              frameNumber,
+              timeSec,
+              localPath,
+              storagePath,
+              width: imageMetadata.width || 0,
+              height: imageMetadata.height || 0,
+              sizeBytes: imageBuffer.length,
+              mimeType: 'image/jpeg',
+            };
+          },
+        ),
+      )
+    ).filter((frame): frame is ExtractedFrame => Boolean(frame));
 
     const extractionDuration = Date.now() - startTime;
 
@@ -215,7 +220,7 @@ function extractUniformFrames(
   outputDir: string,
   fps: number,
   maxFrames: number,
-  quality: number
+  quality: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     ffmpeg(videoPath)
@@ -238,7 +243,7 @@ function extractSceneChangeFrames(
   videoPath: string,
   outputDir: string,
   maxFrames: number,
-  quality: number
+  quality: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     ffmpeg(videoPath)
@@ -268,13 +273,15 @@ function extractSceneChangeFrames(
  * Get video metadata
  */
 function getVideoMetadata(
-  videoPath: string
+  videoPath: string,
 ): Promise<{ duration: number; width: number; height: number }> {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(videoPath, (err, metadata) => {
       if (err) return reject(err);
 
-      const videoStream = metadata.streams.find((s) => s.codec_type === 'video');
+      const videoStream = metadata.streams.find(
+        (s) => s.codec_type === 'video',
+      );
 
       resolve({
         duration: metadata.format.duration || 0,

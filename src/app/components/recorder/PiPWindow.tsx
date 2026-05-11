@@ -2,7 +2,7 @@
 
 /* global HTMLCanvasElement, HTMLVideoElement */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useCallback, useEffectEvent, useRef } from 'react';
 
 import { useRecording } from '@/app/(dashboard)/record/contexts/RecordingContext';
 import {
@@ -14,6 +14,10 @@ import {
 } from '@/app/(dashboard)/record/services/composer';
 
 export function PiPWindow() {
+  return usePiPWindowImplementation();
+}
+
+function usePiPWindowImplementation() {
   const {
     pipWindow,
     setPipWindow,
@@ -31,8 +35,9 @@ export function PiPWindow() {
     resumeRecording,
     recordingBlob,
   } = useRecording();
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [completedDuration, setCompletedDuration] = useState(0);
+  const elapsedTimeRef = useRef(0);
+  const completedDurationRef = useRef(0);
+  const previousIsRecordingRef = useRef(isRecording);
 
   // Format time as MM:SS
   const formatTime = useCallback((seconds: number) => {
@@ -41,32 +46,56 @@ export function PiPWindow() {
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }, []);
 
+  const updateTimerDisplay = useEffectEvent(() => {
+    if (!pipWindow) return;
+
+    const pipDocument = pipWindow.document;
+    const timerElement = pipDocument.querySelector('.pip-timer');
+    const completedDuration = completedDurationRef.current;
+    if (timerElement) {
+      if (recordingBlob && completedDuration > 0) {
+        // Show completed duration
+        timerElement.textContent = formatTime(completedDuration);
+      } else if (countdown !== null) {
+        // Show countdown
+        timerElement.textContent = String(countdown);
+      } else {
+        // Show elapsed time
+        timerElement.textContent = formatTime(elapsedTimeRef.current);
+      }
+    }
+  });
+
+  // Keep timer refs in sync with recording lifecycle without scheduling renders.
+  useEffect(() => {
+    const wasRecording = previousIsRecordingRef.current;
+    previousIsRecordingRef.current = isRecording;
+
+    if (isRecording && !wasRecording) {
+      completedDurationRef.current = 0;
+      elapsedTimeRef.current = 0;
+      updateTimerDisplay();
+      return;
+    }
+
+    if (!isRecording && wasRecording && elapsedTimeRef.current > 0) {
+      completedDurationRef.current = elapsedTimeRef.current;
+      elapsedTimeRef.current = 0;
+      updateTimerDisplay();
+    }
+  }, [isRecording]);
+
   // Stopwatch timer
   useEffect(() => {
     if (!isRecording || isPaused) return;
 
     const interval = setInterval(() => {
-      setElapsedTime((prev) => prev + 1);
+      elapsedTimeRef.current += 1;
+      updateTimerDisplay();
     }, 1000);
 
     return () => clearInterval(interval);
   }, [isRecording, isPaused]);
-
-  // Save completed duration and reset timer when recording stops
-  useEffect(() => {
-    if (!isRecording && elapsedTime > 0) {
-      // Save the duration before resetting
-      setCompletedDuration(elapsedTime);
-      setElapsedTime(0);
-    }
-  }, [isRecording, elapsedTime]);
-
-  // Reset completed duration when new recording starts
-  useEffect(() => {
-    if (isRecording) {
-      setCompletedDuration(0);
-    }
-  }, [isRecording]);
 
   // Create composited preview (screenshare + camera overlay)
   // Skip compositing when entire screen is shared - just show camera
@@ -85,8 +114,15 @@ export function PiPWindow() {
     // 1. No pipWindow or screenshare
     // 2. Screen-only mode
     // 3. Entire screen is shared (camera-only in PiP to avoid recursive capture)
-    if (!pipWindow || !screenshareStream || layout === 'screenOnly' || isEntireScreenShared) {
-      console.log('[PiPWindow] Compositing effect skipped - missing requirements or entire screen mode');
+    if (
+      !pipWindow ||
+      !screenshareStream ||
+      layout === 'screenOnly' ||
+      isEntireScreenShared
+    ) {
+      console.log(
+        '[PiPWindow] Compositing effect skipped - missing requirements or entire screen mode',
+      );
       return;
     }
 
@@ -96,10 +132,14 @@ export function PiPWindow() {
     let renderAnimationId: number | undefined;
     let screenVideo: HTMLVideoElement | undefined;
     let cameraVideo: HTMLVideoElement | null = null;
+    let handleScreenLoadedMetadata: (() => void) | undefined;
+    let handleCameraLoadedMetadata: (() => void) | undefined;
 
     // Wait for canvas element to be created by the rendering effect
     const waitForCanvas = () => {
-      const canvas = pipDocument.getElementById('preview-canvas') as HTMLCanvasElement;
+      const canvas = pipDocument.getElementById(
+        'preview-canvas',
+      ) as HTMLCanvasElement;
       if (!canvas) {
         console.log('[PiPWindow] Canvas not found yet, waiting...');
         // Try again on next frame
@@ -126,7 +166,10 @@ export function PiPWindow() {
 
       cameraVideo = cameraStream ? pipDocument.createElement('video') : null;
       if (cameraVideo && cameraStream) {
-        console.log('[PiPWindow] Creating camera video element with stream:', cameraStream.id);
+        console.log(
+          '[PiPWindow] Creating camera video element with stream:',
+          cameraStream.id,
+        );
         cameraVideo.srcObject = cameraStream;
         cameraVideo.autoplay = true;
         cameraVideo.muted = true;
@@ -136,7 +179,7 @@ export function PiPWindow() {
         pipDocument.body.appendChild(cameraVideo);
 
         // Explicitly start playback
-        cameraVideo.play().catch(err => {
+        cameraVideo.play().catch((err) => {
           console.error('[PiPWindow] Failed to play camera video:', err);
         });
       } else {
@@ -144,7 +187,7 @@ export function PiPWindow() {
       }
 
       // Explicitly start screenshare playback
-      screenVideo.play().catch(err => {
+      screenVideo.play().catch((err) => {
         console.error('[PiPWindow] Failed to play screen video:', err);
       });
 
@@ -154,7 +197,8 @@ export function PiPWindow() {
 
       const checkAndStartRendering = () => {
         // If we have camera, wait for both. If no camera, just wait for screen
-        const readyToRender = screenVideoReady && (!cameraVideo || cameraVideoReady);
+        const readyToRender =
+          screenVideoReady && (!cameraVideo || cameraVideoReady);
         if (readyToRender && !renderAnimationId) {
           console.log('[PiPWindow] Both videos ready, starting render loop');
           renderAnimationId = requestAnimationFrame(render);
@@ -163,7 +207,11 @@ export function PiPWindow() {
 
       let frameCount = 0;
       const render = () => {
-        if (!screenVideo || !screenVideo.videoWidth || !screenVideo.videoHeight) {
+        if (
+          !screenVideo ||
+          !screenVideo.videoWidth ||
+          !screenVideo.videoHeight
+        ) {
           renderAnimationId = requestAnimationFrame(render);
           return;
         }
@@ -181,7 +229,8 @@ export function PiPWindow() {
 
         // Draw camera overlay if available (always show in PiP, regardless of isEntireScreenShared)
         if (cameraVideo && layout === 'screenAndCamera') {
-          const borderRadius = cameraShape === 'circle' ? CAMERA_WIDTH / 2 : CAMERA_BORDER_RADIUS;
+          const borderRadius =
+            cameraShape === 'circle' ? CAMERA_WIDTH / 2 : CAMERA_BORDER_RADIUS;
 
           if (shouldLog) {
             console.log('[PiPWindow] Render frame:', {
@@ -205,7 +254,7 @@ export function PiPWindow() {
             canvas.height - CAMERA_HEIGHT - CAMERA_MARGIN_BOTTOM,
             CAMERA_WIDTH,
             CAMERA_HEIGHT,
-            borderRadius
+            borderRadius,
           );
           ctx.clip();
 
@@ -220,7 +269,7 @@ export function PiPWindow() {
               canvas.width - CAMERA_WIDTH - CAMERA_MARGIN_RIGHT,
               canvas.height - CAMERA_HEIGHT - CAMERA_MARGIN_BOTTOM,
               CAMERA_WIDTH,
-              CAMERA_HEIGHT
+              CAMERA_HEIGHT,
             );
           } else if (shouldLog) {
             console.log('[PiPWindow] ⚠️ Camera video dimensions not ready');
@@ -238,18 +287,26 @@ export function PiPWindow() {
       };
 
       // Wait for both videos to be ready before starting render loop
-      screenVideo.addEventListener('loadedmetadata', () => {
+      handleScreenLoadedMetadata = () => {
         console.log('[PiPWindow] Screen video metadata loaded');
         screenVideoReady = true;
         checkAndStartRendering();
-      });
+      };
+      screenVideo.addEventListener(
+        'loadedmetadata',
+        handleScreenLoadedMetadata,
+      );
 
       if (cameraVideo) {
-        cameraVideo.addEventListener('loadedmetadata', () => {
+        handleCameraLoadedMetadata = () => {
           console.log('[PiPWindow] Camera video metadata loaded');
           cameraVideoReady = true;
           checkAndStartRendering();
-        });
+        };
+        cameraVideo.addEventListener(
+          'loadedmetadata',
+          handleCameraLoadedMetadata,
+        );
       }
     };
 
@@ -264,15 +321,34 @@ export function PiPWindow() {
         cancelAnimationFrame(renderAnimationId);
       }
       if (screenVideo) {
+        if (handleScreenLoadedMetadata) {
+          screenVideo.removeEventListener(
+            'loadedmetadata',
+            handleScreenLoadedMetadata,
+          );
+        }
         screenVideo.srcObject = null;
         screenVideo.remove();
       }
       if (cameraVideo) {
+        if (handleCameraLoadedMetadata) {
+          cameraVideo.removeEventListener(
+            'loadedmetadata',
+            handleCameraLoadedMetadata,
+          );
+        }
         cameraVideo.srcObject = null;
         cameraVideo.remove();
       }
     };
-  }, [pipWindow, screenshareStream, cameraStream, layout, cameraShape, isEntireScreenShared]);
+  }, [
+    pipWindow,
+    screenshareStream,
+    cameraStream,
+    layout,
+    cameraShape,
+    isEntireScreenShared,
+  ]);
 
   // Initial PiP content setup (only when window/layout/streams change, NOT when recording state changes)
   useEffect(() => {
@@ -367,18 +443,29 @@ export function PiPWindow() {
     // Determine what to show in the preview area
     let previewContent = '';
     if (layout === 'screenOnly') {
-      previewContent = '<div style="color: white; font-size: 18px;">Screen Only Mode</div>';
-    } else if (layout === 'screenAndCamera' && screenshareStream && !isEntireScreenShared) {
+      previewContent =
+        '<div style="color: white; font-size: 18px;">Screen Only Mode</div>';
+    } else if (
+      layout === 'screenAndCamera' &&
+      screenshareStream &&
+      !isEntireScreenShared
+    ) {
       // Show composited preview (screenshare + camera overlay) - only when NOT entire screen
-      previewContent = '<canvas id="preview-canvas" class="pip-preview-canvas"></canvas>';
-    } else if (layout === 'cameraOnly' || (layout === 'screenAndCamera' && isEntireScreenShared)) {
+      previewContent =
+        '<canvas id="preview-canvas" class="pip-preview-canvas"></canvas>';
+    } else if (
+      layout === 'cameraOnly' ||
+      (layout === 'screenAndCamera' && isEntireScreenShared)
+    ) {
       // Show raw camera feed for:
       // 1. Camera-only mode
       // 2. Screen+camera mode with entire screen shared (to avoid recursive capture)
-      previewContent = '<video id="pip-camera" class="pip-camera" autoplay playsinline muted></video>';
+      previewContent =
+        '<video id="pip-camera" class="pip-camera" autoplay playsinline muted></video>';
     } else {
       // Fallback: waiting for streams
-      previewContent = '<div style="color: white; font-size: 18px;">Waiting for streams...</div>';
+      previewContent =
+        '<div style="color: white; font-size: 18px;">Waiting for streams...</div>';
     }
 
     pipDocument.body.innerHTML = `
@@ -399,13 +486,25 @@ export function PiPWindow() {
     // Set camera stream to video element for:
     // 1. Camera-only mode
     // 2. Screen+camera mode with entire screen shared (to avoid recursive capture)
-    if (cameraStream && (layout === 'cameraOnly' || (layout === 'screenAndCamera' && isEntireScreenShared))) {
-      const videoElement = pipDocument.getElementById('pip-camera') as HTMLVideoElement;
+    if (
+      cameraStream &&
+      (layout === 'cameraOnly' ||
+        (layout === 'screenAndCamera' && isEntireScreenShared))
+    ) {
+      const videoElement = pipDocument.getElementById(
+        'pip-camera',
+      ) as HTMLVideoElement;
       if (videoElement) {
         videoElement.srcObject = cameraStream;
       }
     }
-  }, [pipWindow, layout, cameraStream, screenshareStream, isEntireScreenShared]);
+  }, [
+    pipWindow,
+    layout,
+    cameraStream,
+    screenshareStream,
+    isEntireScreenShared,
+  ]);
 
   // Auto-close timer for completed state
   useEffect(() => {
@@ -458,6 +557,11 @@ export function PiPWindow() {
       setPipWindow(null);
       pipWindow.close();
     };
+    let viewBtn: HTMLElement | null = null;
+    let closeBtn: HTMLElement | null = null;
+    let pauseBtn: HTMLElement | null = null;
+    let stopBtn: HTMLElement | null = null;
+    let recordBtn: HTMLElement | null = null;
 
     // Update status badge
     const statusElement = pipDocument.getElementById('pip-status');
@@ -581,8 +685,8 @@ export function PiPWindow() {
         `;
 
         // Attach event listeners
-        const viewBtn = pipDocument.getElementById('view-recording-btn');
-        const closeBtn = pipDocument.getElementById('close-pip-btn');
+        viewBtn = pipDocument.getElementById('view-recording-btn');
+        closeBtn = pipDocument.getElementById('close-pip-btn');
 
         if (viewBtn) viewBtn.addEventListener('click', handleViewRecording);
         if (closeBtn) closeBtn.addEventListener('click', handleClosePip);
@@ -619,8 +723,8 @@ export function PiPWindow() {
         `;
 
         // Attach event listeners
-        const pauseBtn = pipDocument.getElementById('pause-btn');
-        const stopBtn = pipDocument.getElementById('stop-btn');
+        pauseBtn = pipDocument.getElementById('pause-btn');
+        stopBtn = pipDocument.getElementById('stop-btn');
 
         if (pauseBtn) pauseBtn.addEventListener('click', handlePause);
         if (stopBtn) stopBtn.addEventListener('click', handleStop);
@@ -652,33 +756,37 @@ export function PiPWindow() {
         `;
 
         // Attach event listener
-        const recordBtn = pipDocument.getElementById('record-btn');
+        recordBtn = pipDocument.getElementById('record-btn');
         if (recordBtn && countdown === null) {
           recordBtn.addEventListener('click', handleRecord);
         }
       }
     }
-  }, [pipWindow, isRecording, isPaused, countdown, recordingBlob, beginRecordingWithCountdown, pauseRecording, resumeRecording, stopRecording, setPipWindow]);
+
+    return () => {
+      viewBtn?.removeEventListener('click', handleViewRecording);
+      closeBtn?.removeEventListener('click', handleClosePip);
+      pauseBtn?.removeEventListener('click', handlePause);
+      stopBtn?.removeEventListener('click', handleStop);
+      recordBtn?.removeEventListener('click', handleRecord);
+    };
+  }, [
+    pipWindow,
+    isRecording,
+    isPaused,
+    countdown,
+    recordingBlob,
+    beginRecordingWithCountdown,
+    pauseRecording,
+    resumeRecording,
+    stopRecording,
+    setPipWindow,
+  ]);
 
   // Update timer separately to avoid recreating the DOM
   useEffect(() => {
-    if (!pipWindow) return;
-
-    const pipDocument = pipWindow.document;
-    const timerElement = pipDocument.querySelector('.pip-timer');
-    if (timerElement) {
-      if (recordingBlob && completedDuration > 0) {
-        // Show completed duration
-        timerElement.textContent = formatTime(completedDuration);
-      } else if (countdown !== null) {
-        // Show countdown
-        timerElement.textContent = String(countdown);
-      } else {
-        // Show elapsed time
-        timerElement.textContent = formatTime(elapsedTime);
-      }
-    }
-  }, [pipWindow, elapsedTime, countdown, recordingBlob, completedDuration, formatTime]);
+    updateTimerDisplay();
+  }, [pipWindow, countdown, recordingBlob]);
 
   // This component doesn't render anything in the main window
   return null;

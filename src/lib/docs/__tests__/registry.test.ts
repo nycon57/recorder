@@ -21,13 +21,21 @@ jest.mock('next/cache', () => ({
 // which is a plain console wrapper (no pino thread-stream, no setImmediate dep).
 
 // Test the pure helpers directly — no Next.js runtime needed
-import { canView, buildNavigation, relatedFor, validateRelatedLinks } from '../registry';
+import {
+  canView,
+  buildNavigation,
+  relatedFor,
+  validateRelatedLinks,
+} from '../registry';
 import { SECTIONS } from '../sections';
 import type { DocsPage, Audience } from '../types';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function makePage(overrides: Partial<DocsPage> & Pick<DocsPage, 'slug' | 'audience' | 'section'>): DocsPage {
+function makePage(
+  overrides: Partial<DocsPage> &
+    Pick<DocsPage, 'slug' | 'audience' | 'section'>,
+): DocsPage {
   return {
     title: `Page: ${overrides.slug}`,
     description: 'Test page',
@@ -39,9 +47,21 @@ function makePage(overrides: Partial<DocsPage> & Pick<DocsPage, 'slug' | 'audien
   };
 }
 
-const PAGE_PUBLIC = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started' });
-const PAGE_ORG_ADMIN = makePage({ slug: 'org-admin/billing', audience: 'org-admin', section: 'org-admin' });
-const PAGE_SYSTEM_ADMIN = makePage({ slug: 'system-admin/flags', audience: 'system-admin', section: 'system-admin' });
+const PAGE_PUBLIC = makePage({
+  slug: 'getting-started/install',
+  audience: 'public',
+  section: 'getting-started',
+});
+const PAGE_ORG_ADMIN = makePage({
+  slug: 'org-admin/billing',
+  audience: 'org-admin',
+  section: 'org-admin',
+});
+const PAGE_SYSTEM_ADMIN = makePage({
+  slug: 'system-admin/flags',
+  audience: 'system-admin',
+  section: 'system-admin',
+});
 
 function makePageMap(...pages: DocsPage[]): ReadonlyMap<string, DocsPage> {
   return new Map(pages.map((p) => [p.slug, p]));
@@ -93,8 +113,19 @@ describe('canView — §4 visibility matrix', () => {
 // ── Section filtering per audience ───────────────────────────────────────────
 
 describe('section filtering per audience', () => {
-  const PUBLIC_SECTION_IDS = ['getting-started', 'product', 'integrations', 'reference', 'policies'];
-  const ORG_ADMIN_SECTION_IDS = [...PUBLIC_SECTION_IDS, 'knowledge-ops', 'org-admin', 'observability'];
+  const PUBLIC_SECTION_IDS = [
+    'getting-started',
+    'product',
+    'integrations',
+    'reference',
+    'policies',
+  ];
+  const ORG_ADMIN_SECTION_IDS = [
+    ...PUBLIC_SECTION_IDS,
+    'knowledge-ops',
+    'org-admin',
+    'observability',
+  ];
   const SYSTEM_ADMIN_SECTION_IDS = [
     ...ORG_ADMIN_SECTION_IDS,
     'platform-runbooks',
@@ -104,9 +135,12 @@ describe('section filtering per audience', () => {
   ];
 
   function getSectionIds(audience: Audience): string[] {
-    return SECTIONS.filter(
-      (s) => ({ public: 0, 'org-admin': 1, 'system-admin': 2 }[audience] >= { public: 0, 'org-admin': 1, 'system-admin': 2 }[s.audience])
-    ).map((s) => s.id);
+    return SECTIONS.flatMap((__item, __index, __array) =>
+      ({ public: 0, 'org-admin': 1, 'system-admin': 2 })[audience] >=
+      { public: 0, 'org-admin': 1, 'system-admin': 2 }[__item.audience]
+        ? [__item.id]
+        : [],
+    );
   }
 
   test('public sees only public sections', () => {
@@ -128,14 +162,52 @@ describe('section filtering per audience', () => {
 // ── Nav grouping ──────────────────────────────────────────────────────────────
 
 describe('buildNavigation — sections → groups → pages', () => {
-  const pageA = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started', group: 'Setup', order: 1 });
-  const pageB = makePage({ slug: 'getting-started/quickstart', audience: 'public', section: 'getting-started', group: 'Setup', order: 2 });
-  const pageC = makePage({ slug: 'getting-started/overview', audience: 'public', section: 'getting-started', order: 3 });
-  const pageOrgAdmin = makePage({ slug: 'org-admin/billing', audience: 'org-admin', section: 'org-admin' });
-  const pageDraft = makePage({ slug: 'getting-started/draft', audience: 'public', section: 'getting-started', draft: true });
-  const pageUnlisted = makePage({ slug: 'getting-started/secret', audience: 'public', section: 'getting-started', unlisted: true });
+  const pageA = makePage({
+    slug: 'getting-started/install',
+    audience: 'public',
+    section: 'getting-started',
+    group: 'Setup',
+    order: 1,
+  });
+  const pageB = makePage({
+    slug: 'getting-started/quickstart',
+    audience: 'public',
+    section: 'getting-started',
+    group: 'Setup',
+    order: 2,
+  });
+  const pageC = makePage({
+    slug: 'getting-started/overview',
+    audience: 'public',
+    section: 'getting-started',
+    order: 3,
+  });
+  const pageOrgAdmin = makePage({
+    slug: 'org-admin/billing',
+    audience: 'org-admin',
+    section: 'org-admin',
+  });
+  const pageDraft = makePage({
+    slug: 'getting-started/draft',
+    audience: 'public',
+    section: 'getting-started',
+    draft: true,
+  });
+  const pageUnlisted = makePage({
+    slug: 'getting-started/secret',
+    audience: 'public',
+    section: 'getting-started',
+    unlisted: true,
+  });
 
-  const pages = makePageMap(pageA, pageB, pageC, pageOrgAdmin, pageDraft, pageUnlisted);
+  const pages = makePageMap(
+    pageA,
+    pageB,
+    pageC,
+    pageOrgAdmin,
+    pageDraft,
+    pageUnlisted,
+  );
 
   test('public nav includes only public sections', () => {
     const nav = buildNavigation(pages, SECTIONS, 'public');
@@ -146,21 +218,31 @@ describe('buildNavigation — sections → groups → pages', () => {
 
   test('draft pages are excluded from nav', () => {
     const nav = buildNavigation(pages, SECTIONS, 'public');
-    const gsSection = nav.sections.find((s) => s.section.id === 'getting-started');
+    const gsSection = nav.sections.find(
+      (s) => s.section.id === 'getting-started',
+    );
     const allPages = gsSection?.groups.flatMap((g) => g.pages) ?? [];
-    expect(allPages.find((p) => p.slug === 'getting-started/draft')).toBeUndefined();
+    expect(
+      allPages.find((p) => p.slug === 'getting-started/draft'),
+    ).toBeUndefined();
   });
 
   test('unlisted pages are excluded from nav', () => {
     const nav = buildNavigation(pages, SECTIONS, 'public');
-    const gsSection = nav.sections.find((s) => s.section.id === 'getting-started');
+    const gsSection = nav.sections.find(
+      (s) => s.section.id === 'getting-started',
+    );
     const allPages = gsSection?.groups.flatMap((g) => g.pages) ?? [];
-    expect(allPages.find((p) => p.slug === 'getting-started/secret')).toBeUndefined();
+    expect(
+      allPages.find((p) => p.slug === 'getting-started/secret'),
+    ).toBeUndefined();
   });
 
   test('pages with the same group are co-located', () => {
     const nav = buildNavigation(pages, SECTIONS, 'public');
-    const gsSection = nav.sections.find((s) => s.section.id === 'getting-started');
+    const gsSection = nav.sections.find(
+      (s) => s.section.id === 'getting-started',
+    );
     const setupGroup = gsSection?.groups.find((g) => g.group === 'Setup');
     expect(setupGroup?.pages.map((p) => p.slug)).toEqual([
       'getting-started/install',
@@ -170,9 +252,13 @@ describe('buildNavigation — sections → groups → pages', () => {
 
   test('ungrouped pages land in a group with group === undefined', () => {
     const nav = buildNavigation(pages, SECTIONS, 'public');
-    const gsSection = nav.sections.find((s) => s.section.id === 'getting-started');
+    const gsSection = nav.sections.find(
+      (s) => s.section.id === 'getting-started',
+    );
     const ungrouped = gsSection?.groups.find((g) => g.group === undefined);
-    expect(ungrouped?.pages.map((p) => p.slug)).toContain('getting-started/overview');
+    expect(ungrouped?.pages.map((p) => p.slug)).toContain(
+      'getting-started/overview',
+    );
   });
 
   test('org-admin nav includes org-admin sections', () => {
@@ -183,15 +269,21 @@ describe('buildNavigation — sections → groups → pages', () => {
 
   test('org-admin page appears in org-admin nav', () => {
     const nav = buildNavigation(pages, SECTIONS, 'org-admin');
-    const orgAdminSection = nav.sections.find((s) => s.section.id === 'org-admin');
+    const orgAdminSection = nav.sections.find(
+      (s) => s.section.id === 'org-admin',
+    );
     const allPages = orgAdminSection?.groups.flatMap((g) => g.pages) ?? [];
     expect(allPages.find((p) => p.slug === 'org-admin/billing')).toBeDefined();
   });
 
   test('org-admin page does not appear in public nav', () => {
     const nav = buildNavigation(pages, SECTIONS, 'public');
-    const allPages = nav.sections.flatMap((s) => s.groups.flatMap((g) => g.pages));
-    expect(allPages.find((p) => p.slug === 'org-admin/billing')).toBeUndefined();
+    const allPages = nav.sections.flatMap((s) =>
+      s.groups.flatMap((g) => g.pages),
+    );
+    expect(
+      allPages.find((p) => p.slug === 'org-admin/billing'),
+    ).toBeUndefined();
   });
 });
 
@@ -200,74 +292,167 @@ describe('buildNavigation — sections → groups → pages', () => {
 describe('relatedFor — §5 related-link stripping matrix', () => {
   // public → public: included
   test('public page: link to public page is included', () => {
-    const src = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started', related: ['getting-started/quickstart'] });
-    const linked = makePage({ slug: 'getting-started/quickstart', audience: 'public', section: 'getting-started' });
+    const src = makePage({
+      slug: 'getting-started/install',
+      audience: 'public',
+      section: 'getting-started',
+      related: ['getting-started/quickstart'],
+    });
+    const linked = makePage({
+      slug: 'getting-started/quickstart',
+      audience: 'public',
+      section: 'getting-started',
+    });
     const pages = makePageMap(src, linked);
-    expect(relatedFor('getting-started/install', 'public', pages)).toEqual([linked]);
+    expect(relatedFor('getting-started/install', 'public', pages)).toEqual([
+      linked,
+    ]);
   });
 
   // public → org-admin: stripped
   test('public page: link to org-admin page is stripped', () => {
-    const src = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started', related: ['org-admin/billing'] });
-    const linked = makePage({ slug: 'org-admin/billing', audience: 'org-admin', section: 'org-admin' });
+    const src = makePage({
+      slug: 'getting-started/install',
+      audience: 'public',
+      section: 'getting-started',
+      related: ['org-admin/billing'],
+    });
+    const linked = makePage({
+      slug: 'org-admin/billing',
+      audience: 'org-admin',
+      section: 'org-admin',
+    });
     const pages = makePageMap(src, linked);
     expect(relatedFor('getting-started/install', 'public', pages)).toEqual([]);
   });
 
   // public → system-admin: stripped
   test('public page: link to system-admin page is stripped', () => {
-    const src = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started', related: ['system-admin/flags'] });
-    const linked = makePage({ slug: 'system-admin/flags', audience: 'system-admin', section: 'system-admin' });
+    const src = makePage({
+      slug: 'getting-started/install',
+      audience: 'public',
+      section: 'getting-started',
+      related: ['system-admin/flags'],
+    });
+    const linked = makePage({
+      slug: 'system-admin/flags',
+      audience: 'system-admin',
+      section: 'system-admin',
+    });
     const pages = makePageMap(src, linked);
     expect(relatedFor('getting-started/install', 'public', pages)).toEqual([]);
   });
 
   // org-admin → public: included
   test('org-admin page: link to public page is included', () => {
-    const src = makePage({ slug: 'org-admin/billing', audience: 'org-admin', section: 'org-admin', related: ['getting-started/install'] });
-    const linked = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started' });
+    const src = makePage({
+      slug: 'org-admin/billing',
+      audience: 'org-admin',
+      section: 'org-admin',
+      related: ['getting-started/install'],
+    });
+    const linked = makePage({
+      slug: 'getting-started/install',
+      audience: 'public',
+      section: 'getting-started',
+    });
     const pages = makePageMap(src, linked);
-    expect(relatedFor('org-admin/billing', 'org-admin', pages)).toEqual([linked]);
+    expect(relatedFor('org-admin/billing', 'org-admin', pages)).toEqual([
+      linked,
+    ]);
   });
 
   // org-admin → org-admin: included
   test('org-admin page: link to org-admin page is included', () => {
-    const src = makePage({ slug: 'org-admin/billing', audience: 'org-admin', section: 'org-admin', related: ['org-admin/members'] });
-    const linked = makePage({ slug: 'org-admin/members', audience: 'org-admin', section: 'org-admin' });
+    const src = makePage({
+      slug: 'org-admin/billing',
+      audience: 'org-admin',
+      section: 'org-admin',
+      related: ['org-admin/members'],
+    });
+    const linked = makePage({
+      slug: 'org-admin/members',
+      audience: 'org-admin',
+      section: 'org-admin',
+    });
     const pages = makePageMap(src, linked);
-    expect(relatedFor('org-admin/billing', 'org-admin', pages)).toEqual([linked]);
+    expect(relatedFor('org-admin/billing', 'org-admin', pages)).toEqual([
+      linked,
+    ]);
   });
 
   // org-admin → system-admin: stripped
   test('org-admin page: link to system-admin page is stripped', () => {
-    const src = makePage({ slug: 'org-admin/billing', audience: 'org-admin', section: 'org-admin', related: ['system-admin/flags'] });
-    const linked = makePage({ slug: 'system-admin/flags', audience: 'system-admin', section: 'system-admin' });
+    const src = makePage({
+      slug: 'org-admin/billing',
+      audience: 'org-admin',
+      section: 'org-admin',
+      related: ['system-admin/flags'],
+    });
+    const linked = makePage({
+      slug: 'system-admin/flags',
+      audience: 'system-admin',
+      section: 'system-admin',
+    });
     const pages = makePageMap(src, linked);
     expect(relatedFor('org-admin/billing', 'org-admin', pages)).toEqual([]);
   });
 
   // system-admin → public: included
   test('system-admin page: link to public page is included', () => {
-    const src = makePage({ slug: 'system-admin/flags', audience: 'system-admin', section: 'system-admin', related: ['getting-started/install'] });
-    const linked = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started' });
+    const src = makePage({
+      slug: 'system-admin/flags',
+      audience: 'system-admin',
+      section: 'system-admin',
+      related: ['getting-started/install'],
+    });
+    const linked = makePage({
+      slug: 'getting-started/install',
+      audience: 'public',
+      section: 'getting-started',
+    });
     const pages = makePageMap(src, linked);
-    expect(relatedFor('system-admin/flags', 'system-admin', pages)).toEqual([linked]);
+    expect(relatedFor('system-admin/flags', 'system-admin', pages)).toEqual([
+      linked,
+    ]);
   });
 
   // system-admin → org-admin: included
   test('system-admin page: link to org-admin page is included', () => {
-    const src = makePage({ slug: 'system-admin/flags', audience: 'system-admin', section: 'system-admin', related: ['org-admin/billing'] });
-    const linked = makePage({ slug: 'org-admin/billing', audience: 'org-admin', section: 'org-admin' });
+    const src = makePage({
+      slug: 'system-admin/flags',
+      audience: 'system-admin',
+      section: 'system-admin',
+      related: ['org-admin/billing'],
+    });
+    const linked = makePage({
+      slug: 'org-admin/billing',
+      audience: 'org-admin',
+      section: 'org-admin',
+    });
     const pages = makePageMap(src, linked);
-    expect(relatedFor('system-admin/flags', 'system-admin', pages)).toEqual([linked]);
+    expect(relatedFor('system-admin/flags', 'system-admin', pages)).toEqual([
+      linked,
+    ]);
   });
 
   // system-admin → system-admin: included
   test('system-admin page: link to system-admin page is included', () => {
-    const src = makePage({ slug: 'system-admin/flags', audience: 'system-admin', section: 'system-admin', related: ['system-admin/cost'] });
-    const linked = makePage({ slug: 'system-admin/cost', audience: 'system-admin', section: 'system-admin' });
+    const src = makePage({
+      slug: 'system-admin/flags',
+      audience: 'system-admin',
+      section: 'system-admin',
+      related: ['system-admin/cost'],
+    });
+    const linked = makePage({
+      slug: 'system-admin/cost',
+      audience: 'system-admin',
+      section: 'system-admin',
+    });
     const pages = makePageMap(src, linked);
-    expect(relatedFor('system-admin/flags', 'system-admin', pages)).toEqual([linked]);
+    expect(relatedFor('system-admin/flags', 'system-admin', pages)).toEqual([
+      linked,
+    ]);
   });
 });
 
@@ -275,9 +460,16 @@ describe('relatedFor — §5 related-link stripping matrix', () => {
 
 describe('relatedFor — dangling slug stripping', () => {
   test('dangling related slug is stripped and does not throw', () => {
-    const src = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started', related: ['nonexistent/page'] });
+    const src = makePage({
+      slug: 'getting-started/install',
+      audience: 'public',
+      section: 'getting-started',
+      related: ['nonexistent/page'],
+    });
     const pages = makePageMap(src);
-    expect(() => relatedFor('getting-started/install', 'public', pages)).not.toThrow();
+    expect(() =>
+      relatedFor('getting-started/install', 'public', pages),
+    ).not.toThrow();
     expect(relatedFor('getting-started/install', 'public', pages)).toEqual([]);
   });
 });
@@ -291,8 +483,17 @@ describe('validateRelatedLinks — build-time warnings', () => {
 
   test('emits no warnings for valid same-or-lower audience links', () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const src = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started', related: ['getting-started/quickstart'] });
-    const linked = makePage({ slug: 'getting-started/quickstart', audience: 'public', section: 'getting-started' });
+    const src = makePage({
+      slug: 'getting-started/install',
+      audience: 'public',
+      section: 'getting-started',
+      related: ['getting-started/quickstart'],
+    });
+    const linked = makePage({
+      slug: 'getting-started/quickstart',
+      audience: 'public',
+      section: 'getting-started',
+    });
     validateRelatedLinks(makePageMap(src, linked));
     // pino logger calls console.warn internally — we just care it doesn't throw
     warnSpy.mockRestore();
@@ -300,7 +501,12 @@ describe('validateRelatedLinks — build-time warnings', () => {
 
   test('dangling slug triggers a warning', () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const src = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started', related: ['nonexistent/page'] });
+    const src = makePage({
+      slug: 'getting-started/install',
+      audience: 'public',
+      section: 'getting-started',
+      related: ['nonexistent/page'],
+    });
     validateRelatedLinks(makePageMap(src));
     // Function completes without throwing
     expect(true).toBe(true);
@@ -308,8 +514,17 @@ describe('validateRelatedLinks — build-time warnings', () => {
   });
 
   test('cross-audience escalation link does not throw', () => {
-    const src = makePage({ slug: 'getting-started/install', audience: 'public', section: 'getting-started', related: ['org-admin/billing'] });
-    const linked = makePage({ slug: 'org-admin/billing', audience: 'org-admin', section: 'org-admin' });
+    const src = makePage({
+      slug: 'getting-started/install',
+      audience: 'public',
+      section: 'getting-started',
+      related: ['org-admin/billing'],
+    });
+    const linked = makePage({
+      slug: 'org-admin/billing',
+      audience: 'org-admin',
+      section: 'org-admin',
+    });
     expect(() => validateRelatedLinks(makePageMap(src, linked))).not.toThrow();
   });
 });

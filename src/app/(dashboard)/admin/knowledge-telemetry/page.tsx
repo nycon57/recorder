@@ -187,9 +187,9 @@ export default function AdminKnowledgeTelemetryPage() {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">
-            Loading knowledge telemetry...
+            Loading knowledge telemetry…
           </p>
         </div>
       </div>
@@ -200,7 +200,7 @@ export default function AdminKnowledgeTelemetryPage() {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
-          <ShieldAlert className="h-4 w-4" />
+          <ShieldAlert className="size-4" />
           <AlertDescription>{inlineErrorMessage}</AlertDescription>
         </Alert>
       </div>
@@ -211,9 +211,9 @@ export default function AdminKnowledgeTelemetryPage() {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">
-            Loading knowledge telemetry...
+            Loading knowledge telemetry…
           </p>
         </div>
       </div>
@@ -225,7 +225,7 @@ export default function AdminKnowledgeTelemetryPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="trbd-page-title flex items-center gap-2">
-            <BarChart3 className="h-7 w-7" />
+            <BarChart3 className="size-7" />
             Knowledge Telemetry
           </h1>
           <p className="text-muted-foreground">
@@ -253,7 +253,7 @@ export default function AdminKnowledgeTelemetryPage() {
             onClick={refetch}
             className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="size-4" />
             Refresh
           </button>
         </div>
@@ -261,7 +261,7 @@ export default function AdminKnowledgeTelemetryPage() {
 
       {inlineErrorMessage ? (
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{inlineErrorMessage}</AlertDescription>
         </Alert>
       ) : null}
@@ -293,7 +293,7 @@ export default function AdminKnowledgeTelemetryPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Clock3 className="h-4 w-4" />
+              <Clock3 className="size-4" />
               Failure Classes
             </CardTitle>
           </CardHeader>
@@ -320,7 +320,7 @@ export default function AdminKnowledgeTelemetryPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <BarChart3 className="h-4 w-4" />
+              <BarChart3 className="size-4" />
               Retrieval Modes
             </CardTitle>
           </CardHeader>
@@ -347,7 +347,7 @@ export default function AdminKnowledgeTelemetryPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Layers3 className="h-4 w-4" />
+              <Layers3 className="size-4" />
               Source Layer Use
             </CardTitle>
           </CardHeader>

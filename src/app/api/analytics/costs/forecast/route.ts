@@ -6,9 +6,16 @@
  */
 
 import { NextRequest } from 'next/server';
-import { apiHandler, requireOrg, successResponse, errors, parseBody } from '@/lib/utils/api';
-import { generateCostForecast } from '@/lib/services/cost-analysis';
 import { z } from 'zod';
+
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  errors,
+  parseBody,
+} from '@/lib/utils/api';
+import { generateCostForecast } from '@/lib/services/cost-analysis';
 
 /**
  * POST /api/analytics/costs/forecast
@@ -27,8 +34,10 @@ const forecastSchema = z.object({
 });
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId } = await requireOrg();
-  const body = await parseBody(request, forecastSchema);
+  const [{ orgId }, body] = await Promise.all([
+    requireOrg(),
+    parseBody(request, forecastSchema),
+  ]);
 
   try {
     // Type assertion for parsed body
@@ -42,7 +51,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   } catch (error) {
     console.error('[Analytics Forecast] Error:', error);
     throw new Error(
-      `Failed to generate cost forecast: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to generate cost forecast: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 });

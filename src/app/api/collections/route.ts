@@ -30,7 +30,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
   const query = parseSearchParams<ListCollectionsQueryInput>(
     request,
-    listCollectionsQuerySchema
+    listCollectionsQuerySchema,
   );
 
   let collectionsQuery = supabaseAdmin
@@ -57,9 +57,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
   collectionsQuery = collectionsQuery.order('name', { ascending: true });
 
   // Apply pagination
-  const { data: collections, error, count } = await collectionsQuery.range(
+  const {
+    data: collections,
+    error,
+    count,
+  } = await collectionsQuery.range(
     query.offset,
-    query.offset + query.limit - 1
+    query.offset + query.limit - 1,
   );
 
   if (error) {
@@ -80,10 +84,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     if (!countError && counts) {
       // Count occurrences of each collection
-      const countMap = counts.reduce((acc, item) => {
-        acc[item.collection_id] = (acc[item.collection_id] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      const countMap = counts.reduce(
+        (acc, item) => {
+          acc[item.collection_id] = (acc[item.collection_id] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
 
       // Add item count to each collection
       collectionsWithCounts = collections.map((collection) => ({
@@ -116,8 +123,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * - visibility: Visibility level (optional, default: org)
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireOrg();
-  const body = await parseBody<CreateCollectionInput>(request, createCollectionSchema);
+  const [{ orgId, userId }, body] = await Promise.all([
+    requireOrg(),
+    parseBody<CreateCollectionInput>(request, createCollectionSchema),
+  ]);
 
   // If parent_id is provided, verify it exists and belongs to this org
   if (body.parent_id) {
@@ -166,7 +175,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
       metadata: { name: newCollection.name },
     });
   } catch (activityError) {
-    console.error('[POST /api/collections] Failed to log activity:', activityError);
+    console.error(
+      '[POST /api/collections] Failed to log activity:',
+      activityError,
+    );
     // Continue without blocking the response
   }
 

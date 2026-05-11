@@ -13,8 +13,8 @@
  * - Keyboard shortcuts
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useReducer, useRef, useEffect, useMemo, useCallback } from 'react';
+import { AnimatePresence, m } from 'motion/react';
 import {
   Search,
   Filter,
@@ -123,39 +123,97 @@ interface FilterState {
   conceptTypes: ConceptType[];
 }
 
+type SearchMode = 'vector' | 'hybrid';
+type SourceFilter = 'all' | 'transcript' | 'document';
+type SearchSort = 'relevance' | 'date' | 'name';
+type TagFilterMode = 'and' | 'or';
+
+type SearchPageState = {
+  query: string;
+  results: SearchResult[];
+  loading: boolean;
+  error: string | null;
+  searchMode: SearchMode;
+  sourceFilter: SourceFilter;
+  showFilters: boolean;
+  sortBy: SearchSort;
+  hasSearched: boolean;
+  filters: FilterState;
+  availableTags: SearchTag[];
+  collections: Collection[];
+  tagFilterMode: TagFilterMode;
+};
+
+type SearchPageAction =
+  | Partial<SearchPageState>
+  | ((state: SearchPageState) => SearchPageState);
+
+const emptySearchFilters: FilterState = {
+  contentTypes: [],
+  tagIds: [],
+  collectionId: null,
+  dateFrom: null,
+  dateTo: null,
+  favoritesOnly: false,
+  conceptTypes: [],
+};
+
+const initialSearchPageState: SearchPageState = {
+  query: '',
+  results: [],
+  loading: false,
+  error: null,
+  searchMode: 'vector',
+  sourceFilter: 'all',
+  showFilters: false,
+  sortBy: 'relevance',
+  hasSearched: false,
+  filters: emptySearchFilters,
+  availableTags: [],
+  collections: [],
+  tagFilterMode: 'or',
+};
+
+function searchPageReducer(
+  state: SearchPageState,
+  action: SearchPageAction,
+): SearchPageState {
+  return typeof action === 'function' ? action(state) : { ...state, ...action };
+}
+
 function SearchPageContent() {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searchMode, setSearchMode] = useState<'vector' | 'hybrid'>('vector');
-  const [sourceFilter, setSourceFilter] = useState<
-    'all' | 'transcript' | 'document'
-  >('all');
-  const [showFilters, setShowFilters] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [sortBy, setSortBy] = useState<'relevance' | 'date' | 'name'>(
-    'relevance',
+  return useSearchPageContentImplementation();
+}
+
+function useSearchPageContentImplementation() {
+  const [
+    {
+      query,
+      results,
+      loading,
+      error,
+      searchMode,
+      sourceFilter,
+      showFilters,
+      sortBy,
+      hasSearched,
+      filters,
+      availableTags,
+      collections,
+      tagFilterMode,
+    },
+    updateSearchPageState,
+  ] = useReducer(searchPageReducer, initialSearchPageState);
+
+  const updateFilters = useCallback(
+    (action: FilterState | ((filters: FilterState) => FilterState)) => {
+      updateSearchPageState((state) => ({
+        ...state,
+        filters: typeof action === 'function' ? action(state.filters) : action,
+      }));
+    },
+    [],
   );
-
-  // Track if user has performed a search (for showing "no results" vs initial state)
-  const [hasSearched, setHasSearched] = useState(false);
-
-  // Advanced filters state
-  const [filters, setFilters] = useState<FilterState>({
-    contentTypes: [],
-    tagIds: [],
-    collectionId: null,
-    dateFrom: null,
-    dateTo: null,
-    favoritesOnly: false,
-    conceptTypes: [],
-  });
-
-  // Tags and collections
-  const [availableTags, setAvailableTags] = useState<SearchTag[]>([]);
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [tagFilterMode, setTagFilterMode] = useState<'and' | 'or'>('or');
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -182,15 +240,15 @@ function SearchPageContent() {
 
       if (!searchQuery.trim()) {
         // Clear results if query is empty
-        setResults([]);
-        setError(null);
-        setHasSearched(false);
+        updateSearchPageState({
+          results: [],
+          error: null,
+          hasSearched: false,
+        });
         return;
       }
 
-      setLoading(true);
-      setShowSuggestions(false);
-      setError(null);
+      updateSearchPageState({ loading: true, error: null });
       trackSearchQuery(searchQuery);
       // Clear fetched concepts cache for fresh results
       fetchedConceptsRef.current.clear();
@@ -234,20 +292,25 @@ function SearchPageContent() {
         // Apply client-side sorting
         results = sortResults(results, sortBy);
 
-        setResults(results);
-        setError(null);
-        setHasSearched(true);
+        updateSearchPageState({
+          results,
+          error: null,
+          hasSearched: true,
+        });
+        void fetchResultsConcepts(results);
       } catch (error) {
         console.error('Search error:', error);
         const errorMessage =
           error instanceof Error
             ? error.message
             : 'Search failed. Please try again.';
-        setError(errorMessage);
-        setResults([]);
-        setHasSearched(true);
+        updateSearchPageState({
+          error: errorMessage,
+          results: [],
+          hasSearched: true,
+        });
       } finally {
-        setLoading(false);
+        updateSearchPageState({ loading: false });
       }
     },
     [query, filters, searchMode, sourceFilter, sortBy],
@@ -265,7 +328,7 @@ function SearchPageContent() {
       if (!response.ok) throw new Error('Failed to fetch tags');
 
       const data = await response.json();
-      setAvailableTags(data.data.tags || []);
+      updateSearchPageState({ availableTags: data.data.tags || [] });
     } catch (error) {
       console.error('Error fetching tags:', error);
     }
@@ -277,34 +340,42 @@ function SearchPageContent() {
       if (!response.ok) throw new Error('Failed to fetch collections');
 
       const data = await response.json();
-      setCollections(data.data?.collections || []);
+      updateSearchPageState({ collections: data.data?.collections || [] });
     } catch (error) {
       console.error('Error fetching collections:', error);
     }
   }
 
   // Fetch concepts for search results
-  const fetchResultsConcepts = useCallback(
-    async (searchResults: SearchResult[]) => {
-      if (searchResults.length === 0) return;
+  async function fetchResultsConcepts(searchResults: SearchResult[]) {
+    if (searchResults.length === 0) return;
 
-      // Get unique content IDs that we haven't already fetched
-      const allContentIds = [...new Set(searchResults.map((r) => r.contentId))];
-      const contentIdsToFetch = allContentIds.filter(
-        (id) => !fetchedConceptsRef.current.has(id),
-      );
+    // Get unique content IDs that we haven't already fetched
+    const allContentIds = [...new Set(searchResults.map((r) => r.contentId))];
+    const contentIdsToFetch = allContentIds.filter(
+      (id) => !fetchedConceptsRef.current.has(id),
+    );
 
-      if (contentIdsToFetch.length === 0) return;
+    if (contentIdsToFetch.length === 0) return;
 
-      // Track IDs currently being fetched to prevent concurrent duplicate requests
-      const fetchingIds = new Set<string>();
-      contentIdsToFetch.forEach((id) => fetchingIds.add(id));
+    // Track IDs currently being fetched to prevent concurrent duplicate requests
+    const fetchingIds = new Set<string>();
+    contentIdsToFetch.forEach((id) => fetchingIds.add(id));
 
-      const conceptsMap = new Map<string, SearchResultConcept[]>();
-      const BATCH_SIZE = 10;
+    const conceptsMap = new Map<string, SearchResultConcept[]>();
+    const BATCH_SIZE = 10;
 
-      // Process content IDs in batches to limit concurrent requests
-      for (let i = 0; i < contentIdsToFetch.length; i += BATCH_SIZE) {
+    // Process content IDs in batches to limit concurrent requests
+    await Promise.all(
+      Array.from(
+        {
+          length: Math.max(
+            0,
+            Math.ceil((contentIdsToFetch.length - 0) / BATCH_SIZE),
+          ),
+        },
+        (_, __loopIndex) => 0 + __loopIndex * BATCH_SIZE,
+      ).map(async (i) => {
         const batch = contentIdsToFetch.slice(i, i + BATCH_SIZE);
 
         await Promise.all(
@@ -334,29 +405,20 @@ function SearchPageContent() {
             }
           }),
         );
-      }
+      }),
+    );
 
-      // Update results with concepts
-      if (conceptsMap.size > 0) {
-        setResults((prevResults) =>
-          prevResults.map((result) => ({
-            ...result,
-            concepts: conceptsMap.get(result.contentId) || result.concepts,
-          })),
-        );
-      }
-    },
-    [],
-  );
-
-  // Fetch concepts when results change
-  useEffect(() => {
-    // Check if any result needs concepts (more robust than checking only first result)
-    const needsConcepts = results.some((r) => r.concepts === undefined);
-    if (results.length > 0 && needsConcepts) {
-      fetchResultsConcepts(results);
+    // Update results with concepts
+    if (conceptsMap.size > 0) {
+      updateSearchPageState((state) => ({
+        ...state,
+        results: state.results.map((result) => ({
+          ...result,
+          concepts: conceptsMap.get(result.contentId) || result.concepts,
+        })),
+      }));
     }
-  }, [results, fetchResultsConcepts]);
+  }
 
   const sortResults = (
     results: SearchResult[],
@@ -392,57 +454,37 @@ function SearchPageContent() {
   };
 
   const clearAllFilters = () => {
-    setFilters({
-      contentTypes: [],
-      tagIds: [],
-      collectionId: null,
-      dateFrom: null,
-      dateTo: null,
-      favoritesOnly: false,
-      conceptTypes: [],
-    });
+    updateFilters(emptySearchFilters);
   };
 
   const removeConceptTypeFilter = (type: ConceptType) => {
-    setFilters((prev) => ({
+    updateFilters((prev) => ({
       ...prev,
       conceptTypes: prev.conceptTypes.filter((t) => t !== type),
     }));
   };
 
   const removeContentTypeFilter = (type: ContentType) => {
-    setFilters((prev) => ({
+    updateFilters((prev) => ({
       ...prev,
       contentTypes: prev.contentTypes.filter((t) => t !== type),
     }));
   };
 
   const removeTagFilter = (tagId: string) => {
-    setFilters((prev) => ({
+    updateFilters((prev) => ({
       ...prev,
       tagIds: prev.tagIds.filter((id) => id !== tagId),
     }));
   };
 
-  // Hide suggestions when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        searchInputRef.current &&
-        !searchInputRef.current.contains(e.target as Node)
-      ) {
-        setShowSuggestions(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   // Re-sort results when sortBy changes
   useEffect(() => {
     if (results.length > 0) {
-      setResults((prevResults) => sortResults(prevResults, sortBy));
+      updateSearchPageState((state) => ({
+        ...state,
+        results: sortResults(state.results, sortBy),
+      }));
     }
   }, [sortBy]);
 
@@ -456,7 +498,7 @@ function SearchPageContent() {
       {
         key: 'f',
         handler: () =>
-          setFilters((prev) => ({
+          updateFilters((prev) => ({
             ...prev,
             favoritesOnly: !prev.favoritesOnly,
           })),
@@ -466,41 +508,33 @@ function SearchPageContent() {
         key: 'Escape',
         handler: () => {
           if (showFilters) {
-            setShowFilters(false);
-          } else if (showSuggestions) {
-            setShowSuggestions(false);
+            updateSearchPageState({ showFilters: false });
           }
         },
         description: 'Close filters/suggestions',
         preventDefault: false,
       },
     ],
-    [
-      showFilters,
-      showSuggestions,
-      setFilters,
-      setShowFilters,
-      setShowSuggestions,
-    ],
+    [showFilters, updateFilters],
   );
 
   useKeyboardShortcuts(keyboardShortcuts);
 
   const handleSearchModeChange = (value: string) => {
     if (value === 'vector' || value === 'hybrid') {
-      setSearchMode(value);
+      updateSearchPageState({ searchMode: value });
     }
   };
 
   const handleSourceFilterChange = (value: string) => {
     if (value === 'all' || value === 'transcript' || value === 'document') {
-      setSourceFilter(value);
+      updateSearchPageState({ sourceFilter: value });
     }
   };
 
   const handleSortByChange = (value: string) => {
     if (value === 'relevance' || value === 'date' || value === 'name') {
-      setSortBy(value);
+      updateSearchPageState({ sortBy: value });
     }
   };
 
@@ -526,23 +560,30 @@ function SearchPageContent() {
       <form onSubmit={handleSearch} className="mb-8">
         <div className="flex gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-5" />
             <Input
               ref={searchInputRef}
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for anything..."
+              onChange={(event) =>
+                updateSearchPageState({ query: event.target.value })
+              }
+              placeholder="Search for anything…"
               className="pl-10 pr-4 py-6 text-base"
             />
           </div>
           <Button type="submit" disabled={loading || !query.trim()} size="lg">
-            {loading ? 'Searching...' : 'Search'}
+            {loading ? 'Searching…' : 'Search'}
           </Button>
-          <Sheet open={showFilters} onOpenChange={setShowFilters}>
+          <Sheet
+            open={showFilters}
+            onOpenChange={(open) =>
+              updateSearchPageState({ showFilters: open })
+            }
+          >
             <SheetTrigger asChild>
               <Button variant="outline" size="lg" className="gap-2">
-                <Filter className="w-5 h-5" />
+                <Filter className="size-5" />
                 Filters
                 {activeFiltersCount > 0 && (
                   <Badge variant="secondary">{activeFiltersCount}</Badge>
@@ -559,9 +600,7 @@ function SearchPageContent() {
               <div className="space-y-5 sm:space-y-6 mt-4 sm:mt-6">
                 {/* Search Mode */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Search Mode
-                  </label>
+                  <p className="block text-sm font-medium mb-2">Search Mode</p>
                   <Select
                     value={searchMode}
                     onValueChange={handleSearchModeChange}
@@ -580,9 +619,7 @@ function SearchPageContent() {
 
                 {/* Source Filter */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Source
-                  </label>
+                  <p className="block text-sm font-medium mb-2">Source</p>
                   <Select
                     value={sourceFilter}
                     onValueChange={handleSourceFilterChange}
@@ -602,9 +639,9 @@ function SearchPageContent() {
 
                 {/* Content Types */}
                 <div>
-                  <label className="block text-sm sm:text-base font-medium mb-2">
+                  <p className="block text-sm sm:text-base font-medium mb-2">
                     Content Types
-                  </label>
+                  </p>
                   <div className="space-y-1">
                     {(
                       [
@@ -624,7 +661,7 @@ function SearchPageContent() {
                           checked={filters.contentTypes.includes(type)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setFilters((prev) => ({
+                              updateFilters((prev) => ({
                                 ...prev,
                                 contentTypes: [...prev.contentTypes, type],
                               }));
@@ -632,7 +669,7 @@ function SearchPageContent() {
                               removeContentTypeFilter(type);
                             }
                           }}
-                          className="rounded w-4 h-4 sm:w-5 sm:h-5"
+                          className="rounded size-4 sm:size-5"
                         />
                         <span className="text-sm sm:text-base capitalize">
                           {type}s
@@ -644,42 +681,45 @@ function SearchPageContent() {
 
                 {/* Tags Filter */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">Tags</label>
+                  <p className="block text-sm font-medium mb-2">Tags</p>
                   <TagFilter
                     tags={availableTags}
                     selectedTags={filters.tagIds}
                     onSelectionChange={(ids) =>
-                      setFilters((prev) => ({ ...prev, tagIds: ids }))
+                      updateFilters((prev) => ({ ...prev, tagIds: ids }))
                     }
                     filterMode={tagFilterMode}
-                    onFilterModeChange={setTagFilterMode}
+                    onFilterModeChange={(mode) =>
+                      updateSearchPageState({ tagFilterMode: mode })
+                    }
                     showCounts={true}
                   />
                 </div>
 
                 {/* Concept Types Filter */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <p className="block text-sm font-medium mb-2">
                     Concept Types
-                  </label>
+                  </p>
                   <ConceptFilter
                     selectedTypes={filters.conceptTypes}
                     onSelectionChange={(types) =>
-                      setFilters((prev) => ({ ...prev, conceptTypes: types }))
+                      updateFilters((prev) => ({
+                        ...prev,
+                        conceptTypes: types,
+                      }))
                     }
                   />
                 </div>
 
                 {/* Collection Filter */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Collection
-                  </label>
+                  <p className="block text-sm font-medium mb-2">Collection</p>
                   <CollectionPicker
                     collections={collections}
                     selectedId={filters.collectionId}
                     onSelect={(id) =>
-                      setFilters((prev) => ({ ...prev, collectionId: id }))
+                      updateFilters((prev) => ({ ...prev, collectionId: id }))
                     }
                     placeholder="All collections"
                   />
@@ -687,14 +727,12 @@ function SearchPageContent() {
 
                 {/* Date Range */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Date Range
-                  </label>
+                  <p className="block text-sm font-medium mb-2">Date Range</p>
                   <DateRangePicker
                     from={filters.dateFrom || undefined}
                     to={filters.dateTo || undefined}
                     onSelect={(range) =>
-                      setFilters((prev) => ({
+                      updateFilters((prev) => ({
                         ...prev,
                         dateFrom: range?.from || null,
                         dateTo: range?.to || null,
@@ -709,14 +747,14 @@ function SearchPageContent() {
                     type="checkbox"
                     checked={filters.favoritesOnly}
                     onChange={(e) =>
-                      setFilters((prev) => ({
+                      updateFilters((prev) => ({
                         ...prev,
                         favoritesOnly: e.target.checked,
                       }))
                     }
-                    className="rounded w-4 h-4 sm:w-5 sm:h-5"
+                    className="rounded size-4 sm:size-5"
                   />
-                  <Bookmark className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <Bookmark className="size-4 sm:size-5" />
                   <span className="text-sm sm:text-base">Favorites only</span>
                 </label>
 
@@ -751,7 +789,7 @@ function SearchPageContent() {
                   onClick={() => removeContentTypeFilter(type)}
                   className="hover:bg-black/10 rounded-full p-0.5"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="size-3" />
                 </button>
               </Badge>
             ))}
@@ -778,7 +816,7 @@ function SearchPageContent() {
                   onClick={() => removeConceptTypeFilter(type)}
                   className="hover:bg-black/10 rounded-full p-0.5"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="size-3" />
                 </button>
               </Badge>
             ))}
@@ -790,11 +828,11 @@ function SearchPageContent() {
                 <button
                   type="button"
                   onClick={() =>
-                    setFilters((prev) => ({ ...prev, collectionId: null }))
+                    updateFilters((prev) => ({ ...prev, collectionId: null }))
                   }
                   className="hover:bg-black/10 rounded-full p-0.5"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="size-3" />
                 </button>
               </Badge>
             )}
@@ -802,16 +840,16 @@ function SearchPageContent() {
             {/* Favorites Filter */}
             {filters.favoritesOnly && (
               <Badge variant="secondary" className="gap-1">
-                <Bookmark className="w-3 h-3" />
+                <Bookmark className="size-3" />
                 <span>Favorites</span>
                 <button
                   type="button"
                   onClick={() =>
-                    setFilters((prev) => ({ ...prev, favoritesOnly: false }))
+                    updateFilters((prev) => ({ ...prev, favoritesOnly: false }))
                   }
                   className="hover:bg-black/10 rounded-full p-0.5"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="size-3" />
                 </button>
               </Badge>
             )}
@@ -823,7 +861,7 @@ function SearchPageContent() {
                 <button
                   type="button"
                   onClick={() =>
-                    setFilters((prev) => ({
+                    updateFilters((prev) => ({
                       ...prev,
                       dateFrom: null,
                       dateTo: null,
@@ -831,7 +869,7 @@ function SearchPageContent() {
                   }
                   className="hover:bg-black/10 rounded-full p-0.5"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="size-3" />
                 </button>
               </Badge>
             )}
@@ -851,7 +889,7 @@ function SearchPageContent() {
       {/* Error Display */}
       {error && (
         <Alert variant="destructive" className="mb-6">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -860,13 +898,12 @@ function SearchPageContent() {
       {results.length > 0 && (
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-muted-foreground">
-            Found {results.length} result{results.length !== 1 ? 's' : ''} for
-            {' '}
+            Found {results.length} result{results.length !== 1 ? 's' : ''} for{' '}
             &quot;{query}&quot;
           </p>
           <Select value={sortBy} onValueChange={handleSortByChange}>
             <SelectTrigger className="w-[180px]">
-              <SlidersHorizontal className="mr-2 h-4 w-4" />
+              <SlidersHorizontal className="mr-2 size-4" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -881,7 +918,7 @@ function SearchPageContent() {
       {/* Results */}
       <AnimatePresence mode="wait">
         {loading ? (
-          <motion.div
+          <m.div
             key="loading"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -890,11 +927,11 @@ function SearchPageContent() {
           >
             <Loader size={48} className="text-primary mb-4" />
             <p className="text-muted-foreground">
-              Searching your knowledge base...
+              Searching your knowledge base…
             </p>
-          </motion.div>
+          </m.div>
         ) : results.length > 0 ? (
-          <motion.div
+          <m.div
             key="search-results"
             variants={staggerContainer}
             initial="hidden"
@@ -914,7 +951,7 @@ function SearchPageContent() {
                 rel="noopener noreferrer"
                 className="block"
               >
-                <motion.div
+                <m.div
                   variants={staggerItem}
                   className="border border-border rounded-lg p-5 transition-all hover:shadow-md hover:border-primary/50 cursor-pointer group"
                 >
@@ -943,11 +980,11 @@ function SearchPageContent() {
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted/50 text-xs font-medium">
                           {result.metadata.source === 'transcript' ? (
                             <>
-                              <Video className="w-3 h-3" /> Transcript
+                              <Video className="size-3" /> Transcript
                             </>
                           ) : (
                             <>
-                              <FileText className="w-3 h-3" /> AI Analysis
+                              <FileText className="size-3" /> AI Analysis
                             </>
                           )}
                         </span>
@@ -955,7 +992,7 @@ function SearchPageContent() {
                         {/* Timestamp if available */}
                         {result.metadata.startTime !== undefined && (
                           <span className="inline-flex items-center gap-1 text-xs">
-                            <Clock className="w-3 h-3" />
+                            <Clock className="size-3" />
                             {formatTime(result.metadata.startTime)}
                           </span>
                         )}
@@ -968,7 +1005,11 @@ function SearchPageContent() {
                     </div>
 
                     {/* Favorite Button - stop propagation to prevent navigation */}
-                    <div onClick={(e) => e.preventDefault()}>
+                    <div
+                      onClick={(e) => e.preventDefault()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      role="presentation"
+                    >
                       <FavoriteButton
                         recordingId={result.contentId}
                         isFavorite={result.metadata.isFavorite || false}
@@ -1009,12 +1050,12 @@ function SearchPageContent() {
                           <em className="italic">{children}</em>
                         ),
                         h1: ({ children }) => (
-                          <h1 className="text-xl font-bold mt-3 mb-2">
+                          <h1 className="text-xl font-semibold mt-3 mb-2">
                             {children}
                           </h1>
                         ),
                         h2: ({ children }) => (
-                          <h2 className="text-lg font-bold mt-2 mb-1">
+                          <h2 className="text-lg font-semibold mt-2 mb-1">
                             {children}
                           </h2>
                         ),
@@ -1056,16 +1097,15 @@ function SearchPageContent() {
                       )}
                     </div>
                   )}
-                </motion.div>
+                </m.div>
               </Link>
             ))}
-          </motion.div>
+          </m.div>
         ) : hasSearched && query ? (
           <SearchNoResultsState
             query={query}
             onClearSearch={() => {
-              setQuery('');
-              setHasSearched(false);
+              updateSearchPageState({ query: '', hasSearched: false });
             }}
           />
         ) : (

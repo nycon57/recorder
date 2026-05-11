@@ -25,6 +25,7 @@ import {
   validateSemanticChunkConfig,
   sanitizeMetadata,
 } from '@/lib/utils/config-validation';
+import { mapBatchesSequentially } from '@/lib/utils/async';
 
 // Security constraints
 const SECURITY_LIMITS = {
@@ -71,14 +72,18 @@ export class SemanticChunker {
       min: 100,
       max: 10000,
     });
-    const targetSize = parseIntSafe(process.env.SEMANTIC_CHUNK_TARGET_SIZE, 500, {
-      min: 50,
-      max: 10000,
-    });
+    const targetSize = parseIntSafe(
+      process.env.SEMANTIC_CHUNK_TARGET_SIZE,
+      500,
+      {
+        min: 50,
+        max: 10000,
+      },
+    );
     const similarityThreshold = parseFloatSafe(
       process.env.SEMANTIC_SIMILARITY_THRESHOLD,
       0.85,
-      { min: 0, max: 1 }
+      { min: 0, max: 1 },
     );
 
     this.config = {
@@ -112,22 +117,26 @@ export class SemanticChunker {
     if (!SECURITY_LIMITS.ALLOWED_MODELS.has(modelName)) {
       throw new Error(
         `Model "${modelName}" is not in the allowed list. Allowed models: ${Array.from(
-          SECURITY_LIMITS.ALLOWED_MODELS
-        ).join(', ')}`
+          SECURITY_LIMITS.ALLOWED_MODELS,
+        ).join(', ')}`,
       );
     }
 
     console.log('[Semantic Chunker] Loading model:', modelName);
 
     try {
-      globalModelCache.embedder = await pipeline('feature-extraction', modelName, {
-        quantized: true, // Use quantized model for faster inference
-        progress_callback: (progress: any) => {
-          if (progress.status === 'progress' && progress.progress) {
-            console.log(`[Model Loading] ${Math.round(progress.progress)}%`);
-          }
+      globalModelCache.embedder = await pipeline(
+        'feature-extraction',
+        modelName,
+        {
+          quantized: true, // Use quantized model for faster inference
+          progress_callback: (progress: any) => {
+            if (progress.status === 'progress' && progress.progress) {
+              console.log(`[Model Loading] ${Math.round(progress.progress)}%`);
+            }
+          },
         },
-      });
+      );
       globalModelCache.modelName = modelName;
       globalModelCache.lastUsed = Date.now();
 
@@ -138,7 +147,7 @@ export class SemanticChunker {
       throw new Error(
         `Failed to initialize semantic chunker model: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     }
   }
@@ -171,7 +180,7 @@ export class SemanticChunker {
    */
   async chunk(
     text: string,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
   ): Promise<SemanticChunk[]> {
     this.processingStartTime = Date.now();
 
@@ -186,7 +195,7 @@ export class SemanticChunker {
     // Size limit
     if (text.length > SECURITY_LIMITS.MAX_INPUT_SIZE) {
       console.warn(
-        `[Semantic Chunker] Input size ${text.length} exceeds limit ${SECURITY_LIMITS.MAX_INPUT_SIZE}, truncating`
+        `[Semantic Chunker] Input size ${text.length} exceeds limit ${SECURITY_LIMITS.MAX_INPUT_SIZE}, truncating`,
       );
       text = text.substring(0, SECURITY_LIMITS.MAX_INPUT_SIZE);
     }
@@ -222,7 +231,7 @@ export class SemanticChunker {
       // Enforce sentence count limit
       if (sentences.length > SECURITY_LIMITS.MAX_SENTENCE_COUNT) {
         console.warn(
-          `[Semantic Chunker] Sentence count ${sentences.length} exceeds limit ${SECURITY_LIMITS.MAX_SENTENCE_COUNT}, truncating`
+          `[Semantic Chunker] Sentence count ${sentences.length} exceeds limit ${SECURITY_LIMITS.MAX_SENTENCE_COUNT}, truncating`,
         );
         sentences.splice(SECURITY_LIMITS.MAX_SENTENCE_COUNT);
       }
@@ -248,7 +257,7 @@ export class SemanticChunker {
       const boundaries = this.identifyBoundaries(
         sentences,
         similarities,
-        structures
+        structures,
       );
 
       // Step 6: Create chunks from boundaries
@@ -257,13 +266,13 @@ export class SemanticChunker {
         sentences,
         boundaries,
         similarities,
-        structures
+        structures,
       );
 
       // Enforce chunk count limit
       if (chunks.length > SECURITY_LIMITS.MAX_CHUNK_COUNT) {
         console.warn(
-          `[Semantic Chunker] Chunk count ${chunks.length} exceeds limit ${SECURITY_LIMITS.MAX_CHUNK_COUNT}, truncating`
+          `[Semantic Chunker] Chunk count ${chunks.length} exceeds limit ${SECURITY_LIMITS.MAX_CHUNK_COUNT}, truncating`,
         );
         chunks.splice(SECURITY_LIMITS.MAX_CHUNK_COUNT);
       }
@@ -276,7 +285,10 @@ export class SemanticChunker {
         chunkCount: chunks.length,
         avgChunkSize:
           chunks.length > 0
-            ? Math.round(chunks.reduce((sum, c) => sum + c.text.length, 0) / chunks.length)
+            ? Math.round(
+                chunks.reduce((sum, c) => sum + c.text.length, 0) /
+                  chunks.length,
+              )
             : 0,
         processingTimeMs: processingTime,
       });
@@ -285,7 +297,7 @@ export class SemanticChunker {
     } catch (error) {
       console.error('[Semantic Chunker] Chunking failed:', error);
       throw new Error(
-        `Semantic chunking failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Semantic chunking failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }
@@ -294,9 +306,12 @@ export class SemanticChunker {
    * Check if processing has exceeded timeout
    */
   private checkTimeout(): void {
-    if (Date.now() - this.processingStartTime > SECURITY_LIMITS.MAX_PROCESSING_TIME) {
+    if (
+      Date.now() - this.processingStartTime >
+      SECURITY_LIMITS.MAX_PROCESSING_TIME
+    ) {
       throw new Error(
-        `Processing timeout exceeded (${SECURITY_LIMITS.MAX_PROCESSING_TIME}ms)`
+        `Processing timeout exceeded (${SECURITY_LIMITS.MAX_PROCESSING_TIME}ms)`,
       );
     }
   }
@@ -326,15 +341,17 @@ export class SemanticChunker {
     const sentencePattern = /(?<=[.!?])\s+(?=[A-Z])|(?:\n{2,5})/g;
     const sentences = textWithPlaceholders
       .split(sentencePattern)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+      .flatMap((__item, __index, __array) => {
+        const __mapped = __item.trim();
+        return __mapped.length > 0 ? [__mapped] : [];
+      });
 
     // Restore code blocks safely
     return sentences.map((sentence) =>
       sentence.replace(/__CODE_BLOCK_(\d+)__/g, (_, index) => {
         const idx = parseInt(index, 10);
         return idx < codeBlocks.length ? codeBlocks[idx] : '';
-      })
+      }),
     );
   }
 
@@ -347,8 +364,14 @@ export class SemanticChunker {
     // Safe patterns with bounded quantifiers to prevent ReDoS
     const patterns = [
       { regex: /```[\s\S]{0,50000}?```/g, type: 'code' as const },
-      { regex: /(?:^|\n)((?:[*\-+]\s+.{0,500}\n?){1,100})/gm, type: 'list' as const },
-      { regex: /\|.{0,500}\|\n\|[-:| ]{0,500}\|\n(?:\|.{0,500}\|\n){0,100}/g, type: 'table' as const },
+      {
+        regex: /(?:^|\n)((?:[*\-+]\s+.{0,500}\n?){1,100})/gm,
+        type: 'list' as const,
+      },
+      {
+        regex: /\|.{0,500}\|\n\|[-:| ]{0,500}\|\n(?:\|.{0,500}\|\n){0,100}/g,
+        type: 'table' as const,
+      },
       { regex: /(?:^|\n)(#{1,6}\s+.{0,200})/gm, type: 'heading' as const },
     ];
 
@@ -366,7 +389,9 @@ export class SemanticChunker {
 
           // Safety check for iteration count
           if (iterations > MAX_ITERATIONS) {
-            console.warn('[Semantic Chunker] Max iterations reached in structure detection');
+            console.warn(
+              '[Semantic Chunker] Max iterations reached in structure detection',
+            );
             break;
           }
 
@@ -387,7 +412,10 @@ export class SemanticChunker {
           }
         }
       } catch (error) {
-        console.warn(`[Semantic Chunker] Error detecting ${type} structures:`, error);
+        console.warn(
+          `[Semantic Chunker] Error detecting ${type} structures:`,
+          error,
+        );
         // Continue with other patterns
       }
     }
@@ -399,38 +427,40 @@ export class SemanticChunker {
    * Generate embeddings for sentences with memory management
    */
   private async generateSentenceEmbeddings(
-    sentences: string[]
+    sentences: string[],
   ): Promise<number[][]> {
     if (!globalModelCache.embedder) {
       throw new Error('Embedder not initialized');
     }
 
-    const embeddings: number[][] = [];
-
     // Process in batches for efficiency and memory management
     const batchSize = 32;
     const batchDelay = 10; // ms delay between batches to prevent overload
 
-    for (let i = 0; i < sentences.length; i += batchSize) {
-      // Check timeout before processing batch
-      this.checkTimeout();
+    return mapBatchesSequentially(
+      sentences,
+      batchSize,
+      async (batch, batchIndex) => {
+        const i = batchIndex * batchSize;
+        // Check timeout before processing batch
+        this.checkTimeout();
 
-      // Check memory periodically (every 5 batches)
-      if (i > 0 && i % (batchSize * 5) === 0) {
-        const memoryUsed = process.memoryUsage().heapUsed / 1024 / 1024;
-        if (memoryUsed > 500) {
-          // 500MB limit
-          console.warn(`[Semantic Chunker] High memory usage: ${Math.round(memoryUsed)}MB`);
+        // Check memory periodically (every 5 batches)
+        if (i > 0 && i % (batchSize * 5) === 0) {
+          const memoryUsed = process.memoryUsage().heapUsed / 1024 / 1024;
+          if (memoryUsed > 500) {
+            // 500MB limit
+            console.warn(
+              `[Semantic Chunker] High memory usage: ${Math.round(memoryUsed)}MB`,
+            );
+          }
         }
-      }
 
-      const batch = sentences.slice(i, Math.min(i + batchSize, sentences.length));
-
-      try {
         const results = await Promise.all(
           batch.map(async (sentence) => {
             // Truncate very long sentences to prevent memory issues
-            const truncated = sentence.length > 512 ? sentence.substring(0, 512) : sentence;
+            const truncated =
+              sentence.length > 512 ? sentence.substring(0, 512) : sentence;
 
             const output = await globalModelCache.embedder!(truncated, {
               pooling: 'mean',
@@ -438,27 +468,24 @@ export class SemanticChunker {
             });
 
             return Array.from(output.data as Float32Array);
-          })
-        );
+          }),
+        ).catch((error) => {
+          console.error(
+            `[Semantic Chunker] Error generating embeddings for batch ${i / batchSize}:`,
+            error,
+          );
+          // Use zero embeddings as fallback to prevent complete failure
+          return batch.map(() => new Array(384).fill(0));
+        });
 
-        embeddings.push(...results);
-      } catch (error) {
-        console.error(
-          `[Semantic Chunker] Error generating embeddings for batch ${i / batchSize}:`,
-          error
-        );
-        // Use zero embeddings as fallback to prevent complete failure
-        const fallback = batch.map(() => new Array(384).fill(0));
-        embeddings.push(...fallback);
-      }
+        // Small delay between batches to prevent overwhelming the system
+        if (i + batchSize < sentences.length) {
+          await new Promise((resolve) => setTimeout(resolve, batchDelay));
+        }
 
-      // Small delay between batches to prevent overwhelming the system
-      if (i + batchSize < sentences.length) {
-        await new Promise((resolve) => setTimeout(resolve, batchDelay));
-      }
-    }
-
-    return embeddings;
+        return results;
+      },
+    );
   }
 
   /**
@@ -468,7 +495,10 @@ export class SemanticChunker {
     const similarities: number[] = [];
 
     for (let i = 0; i < embeddings.length - 1; i++) {
-      const similarity = this.cosineSimilarity(embeddings[i], embeddings[i + 1]);
+      const similarity = this.cosineSimilarity(
+        embeddings[i],
+        embeddings[i + 1],
+      );
       similarities.push(similarity);
     }
 
@@ -499,7 +529,7 @@ export class SemanticChunker {
   private identifyBoundaries(
     sentences: string[],
     similarities: number[],
-    structures: StructureElement[]
+    structures: StructureElement[],
   ): ChunkBoundary[] {
     const boundaries: ChunkBoundary[] = [];
     let currentPosition = 0;
@@ -511,7 +541,7 @@ export class SemanticChunker {
 
       // Check if in structure boundary
       const inStructure = structures.some(
-        (s) => currentPosition >= s.start && currentPosition <= s.end
+        (s) => currentPosition >= s.start && currentPosition <= s.end,
       );
 
       // Don't break within structures
@@ -565,7 +595,7 @@ export class SemanticChunker {
     sentences: string[],
     boundaries: ChunkBoundary[],
     similarities: number[],
-    structures: StructureElement[]
+    structures: StructureElement[],
   ): SemanticChunk[] {
     const chunks: SemanticChunk[] = [];
     let currentChunk: string[] = [];
@@ -600,12 +630,12 @@ export class SemanticChunker {
         // Calculate semantic coherence score
         const chunkSentenceIndices = Array.from(
           { length: currentChunk.length },
-          (_, i) => sentenceIndex - currentChunk.length + i
+          (_, i) => sentenceIndex - currentChunk.length + i,
         );
 
         const semanticScore = this.calculateChunkCoherence(
           chunkSentenceIndices,
-          similarities
+          similarities,
         );
 
         // Determine structure type
@@ -613,7 +643,7 @@ export class SemanticChunker {
           chunkText,
           structures,
           currentStart - chunkSize,
-          currentStart
+          currentStart,
         );
 
         chunks.push({
@@ -655,7 +685,7 @@ export class SemanticChunker {
    */
   private calculateChunkCoherence(
     sentenceIndices: number[],
-    similarities: number[]
+    similarities: number[],
   ): number {
     if (sentenceIndices.length <= 1) {
       return 1.0;
@@ -683,11 +713,11 @@ export class SemanticChunker {
     chunkText: string,
     structures: StructureElement[],
     start: number,
-    end: number
+    end: number,
   ): string {
     // Check if chunk overlaps with any structure
     const overlappingStructures = structures.filter(
-      (s) => s.start < end && s.end > start
+      (s) => s.start < end && s.end > start,
     );
 
     if (overlappingStructures.length === 0) {
@@ -706,7 +736,7 @@ export class SemanticChunker {
  * Create default semantic chunker instance
  */
 export function createSemanticChunker(
-  config?: Partial<ChunkingConfig>
+  config?: Partial<ChunkingConfig>,
 ): SemanticChunker {
   return new SemanticChunker(config);
 }

@@ -13,7 +13,7 @@ import {
 } from '@/app/components/ui/popover';
 import { cn } from '@/lib/utils';
 
-export interface DateRange {
+interface DateRange {
   from: Date | undefined;
   to?: Date | undefined;
 }

@@ -118,17 +118,17 @@ function isJobTimeoutError(error: unknown): error is JobTimeoutError {
  */
 function getCompletionMessage(jobType: string): string {
   const messages: Record<string, string> = {
-    'extract_text_docx': 'Text extracted successfully',
-    'extract_text_pdf': 'PDF text extracted successfully',
-    'extract_audio': 'Audio extracted successfully',
-    'transcribe': 'Transcription complete',
-    'doc_generate': 'Document generated successfully',
-    'generate_embeddings': 'Search indexing complete',
-    'generate_summary': 'AI summary generated',
-    'extract_frames': 'Video frames extracted',
-    'sync_connector': 'External sync complete',
-    'publish_document': 'Document published successfully',
-    'generate_metadata': 'Metadata generated successfully',
+    extract_text_docx: 'Text extracted successfully',
+    extract_text_pdf: 'PDF text extracted successfully',
+    extract_audio: 'Audio extracted successfully',
+    transcribe: 'Transcription complete',
+    doc_generate: 'Document generated successfully',
+    generate_embeddings: 'Search indexing complete',
+    generate_summary: 'AI summary generated',
+    extract_frames: 'Video frames extracted',
+    sync_connector: 'External sync complete',
+    publish_document: 'Document published successfully',
+    generate_metadata: 'Metadata generated successfully',
   };
 
   return messages[jobType] || 'Processing complete';
@@ -142,7 +142,7 @@ export async function updateJobProgress(
   contentId: string,
   percent: number,
   message: string,
-  data?: Json
+  data?: Json,
 ): Promise<void> {
   const supabase = createAdminClient();
 
@@ -183,13 +183,17 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Compression handlers
   compress_video: async (job: Job) => {
-    const result = await handleCompressVideo(job.payload as unknown as CompressVideoJobPayload);
+    const result = await handleCompressVideo(
+      job.payload as unknown as CompressVideoJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'Video compression failed');
     }
   },
   compress_audio: async (job: Job) => {
-    const result = await handleCompressAudio(job.payload as unknown as CompressAudioJobPayload);
+    const result = await handleCompressAudio(
+      job.payload as unknown as CompressAudioJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'Audio compression failed');
     }
@@ -197,7 +201,9 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Storage tier migration
   migrate_storage_tier: async (job: Job) => {
-    const result = await handleMigrateStorageTier(job.payload as unknown as MigrateStorageTierJobPayload);
+    const result = await handleMigrateStorageTier(
+      job.payload as unknown as MigrateStorageTierJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'Storage tier migration failed');
     }
@@ -205,13 +211,17 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Deduplication handlers
   deduplicate_file: async (job: Job) => {
-    const result = await handleDeduplicateFile(job.payload as unknown as DeduplicateFileJobPayload);
+    const result = await handleDeduplicateFile(
+      job.payload as unknown as DeduplicateFileJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'File deduplication failed');
     }
   },
   batch_deduplicate: async (job: Job) => {
-    const result = await handleBatchDeduplicate(job.payload as unknown as BatchDeduplicateJobPayload);
+    const result = await handleBatchDeduplicate(
+      job.payload as unknown as BatchDeduplicateJobPayload,
+    );
     if (!result.success) {
       throw new Error('Batch deduplication failed');
     }
@@ -219,13 +229,17 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 
   // Similarity detection handlers
   detect_similarity: async (job: Job) => {
-    const result = await handleDetectSimilarity(job.payload as unknown as DetectSimilarityJobPayload);
+    const result = await handleDetectSimilarity(
+      job.payload as unknown as DetectSimilarityJobPayload,
+    );
     if (!result.success) {
       throw new Error(result.error || 'Similarity detection failed');
     }
   },
   batch_detect_similarity: async (job: Job) => {
-    const result = await handleBatchDetectSimilarity(job.payload as unknown as BatchDetectSimilarityJobPayload);
+    const result = await handleBatchDetectSimilarity(
+      job.payload as unknown as BatchDetectSimilarityJobPayload,
+    );
     if (!result.success) {
       throw new Error('Batch similarity detection failed');
     }
@@ -271,13 +285,16 @@ const JOB_HANDLERS: Record<JobType, JobHandler> = {
 // PERF-WK-001: Job priority levels (0 = highest, 3 = lowest)
 export const JOB_PRIORITY = {
   CRITICAL: 0, // User is actively waiting (transcribe, extract)
-  HIGH: 1,     // Processing pipeline (doc_generate, embeddings)
-  NORMAL: 2,   // Background operations (sync, compress)
-  LOW: 3,      // Analytics and monitoring (metrics, alerts)
+  HIGH: 1, // Processing pipeline (doc_generate, embeddings)
+  NORMAL: 2, // Background operations (sync, compress)
+  LOW: 3, // Analytics and monitoring (metrics, alerts)
 } as const;
 
 // CFG-001-003: Environment-based configuration with sensible defaults
-function parseIntWithDefault(value: string | undefined, defaultValue: number): number {
+function parseIntWithDefault(
+  value: string | undefined,
+  defaultValue: number,
+): number {
   const parsed = parseInt(value || '', 10);
   return Number.isNaN(parsed) || parsed <= 0 ? defaultValue : parsed;
 }
@@ -285,14 +302,26 @@ function parseIntWithDefault(value: string | undefined, defaultValue: number): n
 const CONFIG = {
   batchSize: parseIntWithDefault(process.env.JOB_BATCH_SIZE, 10),
   pollInterval: parseIntWithDefault(process.env.JOB_POLL_INTERVAL_MS, 2000),
-  maxPollInterval: parseIntWithDefault(process.env.JOB_MAX_POLL_INTERVAL_MS, 10000),
+  maxPollInterval: parseIntWithDefault(
+    process.env.JOB_MAX_POLL_INTERVAL_MS,
+    10000,
+  ),
   maxRetries: parseIntWithDefault(process.env.JOB_MAX_RETRIES, 3),
-  deadLetterAfterRetries: parseIntWithDefault(process.env.JOB_DEAD_LETTER_RETRIES, 5),
+  deadLetterAfterRetries: parseIntWithDefault(
+    process.env.JOB_DEAD_LETTER_RETRIES,
+    5,
+  ),
   // Maximum job execution time (4 hours default)
   // This prevents long-running jobs from blocking the worker indefinitely
-  jobTimeoutMs: parseIntWithDefault(process.env.JOB_TIMEOUT_MS, 4 * 60 * 60 * 1000),
+  jobTimeoutMs: parseIntWithDefault(
+    process.env.JOB_TIMEOUT_MS,
+    4 * 60 * 60 * 1000,
+  ),
   // Memory warning threshold (default: 80% of heap limit)
-  memoryWarningThreshold: parseIntWithDefault(process.env.JOB_MEMORY_WARNING_PERCENT, 80),
+  memoryWarningThreshold: parseIntWithDefault(
+    process.env.JOB_MEMORY_WARNING_PERCENT,
+    80,
+  ),
 };
 
 /**
@@ -313,7 +342,9 @@ function getMemoryUsage(): {
     heapUsedMB: Math.round(memoryUsage.heapUsed / 1024 / 1024),
     heapTotalMB: Math.round(memoryUsage.heapTotal / 1024 / 1024),
     rssMB: Math.round(memoryUsage.rss / 1024 / 1024),
-    heapPercentUsed: Math.round((memoryUsage.heapUsed / heapStats.heap_size_limit) * 100),
+    heapPercentUsed: Math.round(
+      (memoryUsage.heapUsed / heapStats.heap_size_limit) * 100,
+    ),
     v8HeapLimitMB: Math.round(heapStats.heap_size_limit / 1024 / 1024),
   };
 }
@@ -327,7 +358,7 @@ function getMemoryUsage(): {
 function logMemoryUsage(
   context: string,
   jobId?: string,
-  jobType?: string
+  jobType?: string,
 ): void {
   const memory = getMemoryUsage();
   const isHighUsage = memory.heapPercentUsed >= CONFIG.memoryWarningThreshold;
@@ -345,12 +376,18 @@ function logMemoryUsage(
 
   if (isHighUsage) {
     processorLogger.warn(`[Memory] HIGH USAGE: ${context}`, {
-      context: { ...logData, warning: 'Consider increasing Node.js memory limit or optimizing job handlers' },
+      context: {
+        ...logData,
+        warning:
+          'Consider increasing Node.js memory limit or optimizing job handlers',
+      },
     });
 
     // Suggest garbage collection if available (requires --expose-gc flag)
     if (global.gc) {
-      processorLogger.info('[Memory] Triggering garbage collection due to high memory usage');
+      processorLogger.info(
+        '[Memory] Triggering garbage collection due to high memory usage',
+      );
       global.gc();
     }
   } else {
@@ -368,7 +405,7 @@ async function withTimeout<T>(
   fn: () => Promise<T>,
   timeoutMs: number,
   jobId: string,
-  jobType: string
+  jobType: string,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
@@ -407,20 +444,28 @@ export async function processJobs(options?: {
 
   const supabase = createAdminClient();
 
-  console.log('[Job Processor] Starting job processor with exponential backoff...');
-  console.log(`[Job Processor] Batch size: ${batchSize}, Base poll interval: ${pollInterval}ms, Max poll interval: ${maxPollInterval}ms`);
-  console.log(`[Job Processor] Job timeout: ${Math.round(CONFIG.jobTimeoutMs / 60000)} minutes, Max retries: ${maxRetries}`);
+  console.log(
+    '[Job Processor] Starting job processor with exponential backoff...',
+  );
+  console.log(
+    `[Job Processor] Batch size: ${batchSize}, Base poll interval: ${pollInterval}ms, Max poll interval: ${maxPollInterval}ms`,
+  );
+  console.log(
+    `[Job Processor] Job timeout: ${Math.round(CONFIG.jobTimeoutMs / 60000)} minutes, Max retries: ${maxRetries}`,
+  );
 
   // Log initial memory state
   const initialMemory = getMemoryUsage();
-  console.log(`[Job Processor] Initial memory: ${initialMemory.heapUsedMB}MB used / ${initialMemory.v8HeapLimitMB}MB limit (${initialMemory.heapPercentUsed}%)`);
+  console.log(
+    `[Job Processor] Initial memory: ${initialMemory.heapUsedMB}MB used / ${initialMemory.v8HeapLimitMB}MB limit (${initialMemory.heapPercentUsed}%)`,
+  );
 
   // Exponential backoff state
   let currentPollInterval = pollInterval;
   let consecutiveEmptyPolls = 0;
 
   // Main processing loop
-  while (true) {
+  const processNextBatch = async (): Promise<void> => {
     try {
       // PERF-DB-002: Claim pending jobs with content data (eliminates N+1 queries)
       // PERF-WK-001: RPC preserves priority/run_at/created_at ordering while claiming atomically.
@@ -429,7 +474,7 @@ export async function processJobs(options?: {
       if (error) {
         console.error('[Job Processor] Error claiming jobs:', error);
         await sleep(currentPollInterval);
-        continue;
+        return processNextBatch();
       }
 
       if (!jobs || jobs.length === 0) {
@@ -439,23 +484,29 @@ export async function processJobs(options?: {
         // Double the interval with each empty poll, up to max
         currentPollInterval = Math.min(
           pollInterval * Math.pow(2, consecutiveEmptyPolls),
-          maxPollInterval
+          maxPollInterval,
         );
 
         // Log backoff changes to help with monitoring
         if (consecutiveEmptyPolls === 1) {
-          console.log(`[Job Processor] No jobs found, entering backoff mode (current interval: ${currentPollInterval}ms)`);
+          console.log(
+            `[Job Processor] No jobs found, entering backoff mode (current interval: ${currentPollInterval}ms)`,
+          );
         } else if (consecutiveEmptyPolls % 5 === 0) {
-          console.log(`[Job Processor] Still idle after ${consecutiveEmptyPolls} polls (current interval: ${currentPollInterval}ms)`);
+          console.log(
+            `[Job Processor] Still idle after ${consecutiveEmptyPolls} polls (current interval: ${currentPollInterval}ms)`,
+          );
         }
 
         await sleep(currentPollInterval);
-        continue;
+        return processNextBatch();
       }
 
       // Jobs found! Reset backoff
       if (consecutiveEmptyPolls > 0) {
-        console.log(`[Job Processor] Jobs detected, resetting poll interval to ${pollInterval}ms`);
+        console.log(
+          `[Job Processor] Jobs detected, resetting poll interval to ${pollInterval}ms`,
+        );
         consecutiveEmptyPolls = 0;
         currentPollInterval = pollInterval;
       }
@@ -464,17 +515,20 @@ export async function processJobs(options?: {
 
       // Process jobs in parallel
       await Promise.allSettled(
-        jobs.map(job => processClaimedJob(job, maxRetries))
+        jobs.map((job) => processClaimedJob(job, maxRetries)),
       );
 
       // After processing, poll immediately for more jobs
       // (Don't sleep if we just processed a batch)
-
     } catch (error) {
       console.error('[Job Processor] Unexpected error in main loop:', error);
       await sleep(currentPollInterval);
     }
-  }
+
+    return processNextBatch();
+  };
+
+  await processNextBatch();
 }
 
 /**
@@ -522,7 +576,7 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
       () => handler(job, progressCallback),
       CONFIG.jobTimeoutMs,
       job.id,
-      job.type
+      job.type,
     );
 
     // Mark job as completed (preserve contextual message)
@@ -540,10 +594,16 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
 
     // Stream completion
     if (contentId) {
-      streamingManager.sendProgress(contentId, 'all', 100, 'Job completed successfully', {
-        jobId: job.id,
-        jobType: job.type,
-      });
+      streamingManager.sendProgress(
+        contentId,
+        'all',
+        100,
+        'Job completed successfully',
+        {
+          jobId: job.id,
+          jobType: job.type,
+        },
+      );
     }
 
     const jobDuration = Date.now() - jobStartTime;
@@ -559,7 +619,6 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
         durationSec: Math.round(jobDuration / 1000),
       },
     });
-
   } catch (error) {
     processorLogger.error('Job processing failed', {
       context: { jobId: job.id, contentId },
@@ -569,7 +628,8 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
     const attemptCount = (job.attempts ?? 0) + 1;
     const timedOut = isJobTimeoutError(error);
     const shouldRetry = !timedOut && attemptCount < maxRetries;
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
 
     if (shouldRetry) {
       // Schedule retry with exponential backoff
@@ -594,12 +654,18 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
         streamingManager.sendLog(
           contentId,
           `Job failed, scheduling retry ${attemptCount}/${maxRetries} in ${retryDelay}ms`,
-          { error: errorMessage }
+          { error: errorMessage },
         );
       }
 
       processorLogger.info('Job retry scheduled', {
-        context: { jobId: job.id, contentId, attemptCount, maxRetries, retryDelay },
+        context: {
+          jobId: job.id,
+          contentId,
+          attemptCount,
+          maxRetries,
+          retryDelay,
+        },
       });
     } else {
       // PERF-WK-002: Determine if job should go to dead letter queue
@@ -632,14 +698,25 @@ async function processClaimedJob(job: Job, maxRetries: number): Promise<void> {
             ? `Job moved to dead letter queue after ${attemptCount} attempts: ${errorMessage}`
             : timedOut
               ? `Job timed out and will not be retried automatically: ${errorMessage}`
-              : `Job failed after ${maxRetries} attempts: ${errorMessage}`
+              : `Job failed after ${maxRetries} attempts: ${errorMessage}`,
         );
       }
 
-      processorLogger.error(isDeadLetter ? 'Job moved to dead letter queue' : 'Job failed permanently', {
-        context: { jobId: job.id, contentId, attemptCount, maxRetries, isDeadLetter },
-        error: error as Error,
-      });
+      processorLogger.error(
+        isDeadLetter
+          ? 'Job moved to dead letter queue'
+          : 'Job failed permanently',
+        {
+          context: {
+            jobId: job.id,
+            contentId,
+            attemptCount,
+            maxRetries,
+            isDeadLetter,
+          },
+          error: error as Error,
+        },
+      );
     }
   }
 }
@@ -667,5 +744,5 @@ export async function processJobById(jobId: string): Promise<void> {
  * Utility: Sleep helper
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

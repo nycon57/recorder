@@ -18,14 +18,17 @@ import {
   type RoutingRoute,
 } from './routing-review';
 
-export type ReviewQueueKind = 'contradiction' | 'routing' | 'manual-publication';
+export type ReviewQueueKind =
+  | 'contradiction'
+  | 'routing'
+  | 'manual-publication';
 
-export interface ReviewQueueAction {
+interface ReviewQueueAction {
   label: string;
   href: string;
 }
 
-export interface RoutingReviewSourceLink {
+interface RoutingReviewSourceLink {
   sourceId: string;
   sourceType: KnowledgeSourceType;
   contributedAt: string;
@@ -52,7 +55,7 @@ export interface ApprovalRoutingReviewCandidate {
   proposedRoute: RoutingRoute;
 }
 
-export type RoutingReviewCandidate =
+type RoutingReviewCandidate =
   | LegacyRoutingReviewCandidate
   | ApprovalRoutingReviewCandidate;
 
@@ -64,7 +67,7 @@ export interface ManualPublicationReviewCandidate {
   connectorCount: number;
 }
 
-export interface ReviewQueueContradictionItem {
+interface ReviewQueueContradictionItem {
   kind: 'contradiction';
   id: string;
   sortAt: string;
@@ -81,7 +84,7 @@ export interface ReviewQueueContradictionItem {
   mergedContentPreview?: string | null;
 }
 
-export interface ReviewQueueRoutingLegacyItem {
+interface ReviewQueueRoutingLegacyItem {
   kind: 'routing';
   routingKind: 'legacy';
   id: string;
@@ -96,7 +99,7 @@ export interface ReviewQueueRoutingLegacyItem {
   secondaryAction?: ReviewQueueAction;
 }
 
-export interface ReviewQueueRoutingApprovalItem {
+interface ReviewQueueRoutingApprovalItem {
   kind: 'routing';
   routingKind: 'approval';
   id: string;
@@ -114,11 +117,11 @@ export interface ReviewQueueRoutingApprovalItem {
   routeReason: string | null;
 }
 
-export type ReviewQueueRoutingItem =
+type ReviewQueueRoutingItem =
   | ReviewQueueRoutingLegacyItem
   | ReviewQueueRoutingApprovalItem;
 
-export interface ReviewQueueManualPublicationItem {
+interface ReviewQueueManualPublicationItem {
   kind: 'manual-publication';
   id: string;
   sortAt: string;
@@ -183,10 +186,16 @@ function toTimestamp(value: string | null | undefined): number {
 }
 
 function sortReviewQueueItems(items: ReviewQueueItem[]): ReviewQueueItem[] {
-  return [...items].sort((left, right) => toTimestamp(right.sortAt) - toTimestamp(left.sortAt));
+  return items.toSorted(
+    (left, right) => toTimestamp(right.sortAt) - toTimestamp(left.sortAt),
+  );
 }
 
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+function pluralize(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+): string {
   return count === 1 ? singular : plural;
 }
 
@@ -202,8 +211,8 @@ export function buildReviewQueueItems(input: {
   routing: RoutingReviewCandidate[];
   manualPublications: ManualPublicationReviewCandidate[];
 }): ReviewQueueItem[] {
-  const contradictionItems: ReviewQueueContradictionItem[] = input.contradictions.flatMap(
-    ({ page, pendingEntries }) =>
+  const contradictionItems: ReviewQueueContradictionItem[] =
+    input.contradictions.flatMap(({ page, pendingEntries }) =>
       pendingEntries.map(({ entryIndex, entry }) => ({
         kind: 'contradiction',
         id: `contradiction:${page.id}:${entryIndex}`,
@@ -219,86 +228,93 @@ export function buildReviewQueueItems(input: {
         contradictions: entry.contradictions ?? [],
         additions: entry.additions,
         mergedContentPreview: entry.merged_content ?? null,
-      }))
-  );
+      })),
+    );
 
-  const routingItems: ReviewQueueRoutingItem[] = input.routing.map((candidate) => {
-    if ('approvalId' in candidate) {
-      const confidenceLabel = formatRouteConfidence(candidate.routeConfidence);
-      const summary = [
-        confidenceLabel ? `${confidenceLabel}.` : 'Low-confidence route detected.',
-        candidate.routeReason ?? 'Review and adjust the proposed topic, app, and screen before compile_wiki publishes.',
-      ]
-        .filter(Boolean)
-        .join(' ');
+  const routingItems: ReviewQueueRoutingItem[] = input.routing.map(
+    (candidate) => {
+      if ('approvalId' in candidate) {
+        const confidenceLabel = formatRouteConfidence(
+          candidate.routeConfidence,
+        );
+        const summary = [
+          confidenceLabel
+            ? `${confidenceLabel}.`
+            : 'Low-confidence route detected.',
+          candidate.routeReason ??
+            'Review and adjust the proposed topic, app, and screen before compile_wiki publishes.',
+        ]
+          .filter(Boolean)
+          .join(' ');
+
+        return {
+          kind: 'routing',
+          routingKind: 'approval',
+          id: `routing-approval:${candidate.approvalId}`,
+          sortAt: candidate.createdAt,
+          approvalId: candidate.approvalId,
+          contentId: candidate.contentId,
+          title: candidate.title?.trim() || 'Untitled source',
+          topic: candidate.proposedRoute.topic,
+          app: candidate.proposedRoute.app,
+          screen: candidate.proposedRoute.screen,
+          sourceCount: 1,
+          summary,
+          primaryAction: {
+            label: 'Open source detail',
+            href: `/library/${candidate.contentId}`,
+          },
+          routeConfidence: candidate.routeConfidence,
+          routeReason: candidate.routeReason,
+        };
+      }
+
+      const [primarySource] = candidate.sourceLinks.toSorted(
+        (left, right) =>
+          toTimestamp(right.contributedAt) - toTimestamp(left.contributedAt),
+      );
+
+      const sourceCount = candidate.sourceLinks.length;
+      const sourceDetailAction = primarySource
+        ? {
+            label: 'Open source detail',
+            href: `/library/${primarySource.sourceId}`,
+          }
+        : null;
 
       return {
         kind: 'routing',
-        routingKind: 'approval',
-        id: `routing-approval:${candidate.approvalId}`,
-        sortAt: candidate.createdAt,
-        approvalId: candidate.approvalId,
-        contentId: candidate.contentId,
-        title: candidate.title?.trim() || 'Untitled source',
-        topic: candidate.proposedRoute.topic,
-        app: candidate.proposedRoute.app,
-        screen: candidate.proposedRoute.screen,
-        sourceCount: 1,
-        summary,
-        primaryAction: {
-          label: 'Open source detail',
-          href: `/library/${candidate.contentId}`,
-        },
-        routeConfidence: candidate.routeConfidence,
-        routeReason: candidate.routeReason,
-      };
-    }
-
-    const [primarySource] = [...candidate.sourceLinks].sort(
-      (left, right) => toTimestamp(right.contributedAt) - toTimestamp(left.contributedAt)
-    );
-
-    const sourceCount = candidate.sourceLinks.length;
-    const sourceDetailAction = primarySource
-      ? {
-          label: 'Open source detail',
-          href: `/library/${primarySource.sourceId}`,
-        }
-      : null;
-
-    return {
-      kind: 'routing',
-      routingKind: 'legacy',
-      id: `routing:${candidate.pageId}`,
-      sortAt:
-        primarySource?.contributedAt ??
-        candidate.updatedAt ??
-        candidate.createdAt,
-      pageId: candidate.pageId,
-      title: candidate.topic,
-      app: candidate.app,
-      screen: candidate.screen,
-      sourceCount,
-      summary:
-        sourceCount > 0
-          ? `This page is missing an app or screen assignment. ${sourceCount} linked ${pluralize(
-              sourceCount,
-              'source'
-            )} can be used to reroute it.`
-          : 'This page is missing an app or screen assignment and needs manual routing.',
-      primaryAction:
-        sourceDetailAction ?? {
+        routingKind: 'legacy',
+        id: `routing:${candidate.pageId}`,
+        sortAt:
+          primarySource?.contributedAt ??
+          candidate.updatedAt ??
+          candidate.createdAt,
+        pageId: candidate.pageId,
+        title: candidate.topic,
+        app: candidate.app,
+        screen: candidate.screen,
+        sourceCount,
+        summary:
+          sourceCount > 0
+            ? `This page is missing an app or screen assignment. ${sourceCount} linked ${pluralize(
+                sourceCount,
+                'source',
+              )} can be used to reroute it.`
+            : 'This page is missing an app or screen assignment and needs manual routing.',
+        primaryAction: sourceDetailAction ?? {
           label: 'Open knowledge health',
           href: '/knowledge/health',
         },
-      secondaryAction: sourceDetailAction
-        ? {
-            label: 'Open knowledge health',
-            href: '/knowledge/health',
-          }
-        : undefined,
-    };
-  });
+        secondaryAction: sourceDetailAction
+          ? {
+              label: 'Open knowledge health',
+              href: '/knowledge/health',
+            }
+          : undefined,
+      };
+    },
+  );
 
   const manualPublicationItems: ReviewQueueManualPublicationItem[] =
     input.manualPublications.map((candidate) => ({
@@ -311,7 +327,7 @@ export function buildReviewQueueItems(input: {
       connectorCount: candidate.connectorCount,
       summary: `Ready to publish manually to ${candidate.connectorCount} connected ${pluralize(
         candidate.connectorCount,
-        'destination'
+        'destination',
       )}.`,
       primaryAction: {
         label: 'Open publish flow',
@@ -326,10 +342,9 @@ export function buildReviewQueueItems(input: {
   ]);
 }
 
-export function splitReviewQueueItemsByKind(items: ReviewQueueItem[]): Record<
-  ReviewQueueKind,
-  ReviewQueueItem[]
-> {
+export function splitReviewQueueItemsByKind(
+  items: ReviewQueueItem[],
+): Record<ReviewQueueKind, ReviewQueueItem[]> {
   return items.reduce<Record<ReviewQueueKind, ReviewQueueItem[]>>(
     (groups, item) => {
       groups[item.kind].push(item);
@@ -339,12 +354,12 @@ export function splitReviewQueueItemsByKind(items: ReviewQueueItem[]): Record<
       contradiction: [],
       routing: [],
       'manual-publication': [],
-    }
+    },
   );
 }
 
 async function listLegacyRoutingReviewCandidates(
-  orgId: string
+  orgId: string,
 ): Promise<LegacyRoutingReviewCandidate[]> {
   const { data: pages, error: pagesError } = await supabaseAdmin
     .from('org_wiki_pages')
@@ -357,14 +372,14 @@ async function listLegacyRoutingReviewCandidates(
   if (pagesError) {
     console.warn(
       '[review-queue] Failed to load routing review candidates:',
-      pagesError.message
+      pagesError.message,
     );
     return [];
   }
 
   const routingPages = ((pages ?? []) as RoutingPageRow[]).filter((page) => {
     const pendingCount = extractPendingContradictions(
-      readCompilationLog(page.compilation_log)
+      readCompilationLog(page.compilation_log),
     ).length;
     return pendingCount === 0;
   });
@@ -382,13 +397,18 @@ async function listLegacyRoutingReviewCandidates(
   if (sourceLinksError) {
     console.warn(
       '[review-queue] Failed to load routing source links:',
-      sourceLinksError.message
+      sourceLinksError.message,
     );
   }
 
   const normalizedSourceLinks = (sourceLinks ?? []) as RoutingSourceRow[];
   const contentIds = Array.from(
-    new Set(normalizedSourceLinks.map((link) => link.source_id).filter(Boolean))
+    new Set(
+      normalizedSourceLinks.flatMap((__item, __index, __array) => {
+        const __mapped = __item.source_id;
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   );
 
   const contentTitles = new Map<string, string | null>();
@@ -401,7 +421,7 @@ async function listLegacyRoutingReviewCandidates(
     if (contentError) {
       console.warn(
         '[review-queue] Failed to load routing source titles:',
-        contentError.message
+        contentError.message,
       );
     } else {
       for (const row of (contentRows ?? []) as ContentTitleRow[]) {
@@ -417,45 +437,51 @@ async function listLegacyRoutingReviewCandidates(
     screen: page.screen,
     createdAt: page.created_at,
     updatedAt: page.updated_at,
-    sourceLinks: normalizedSourceLinks
-      .filter((link) => link.page_id === page.id)
-      .map((link) => ({
-        sourceId: link.source_id,
-        sourceType: link.source_type,
-        contributedAt: link.contributed_at,
-        sourceTitle: contentTitles.get(link.source_id) ?? null,
-      })),
+    sourceLinks: normalizedSourceLinks.flatMap((__item, __index, __array) =>
+      __item.page_id === page.id
+        ? [
+            {
+              sourceId: __item.source_id,
+              sourceType: __item.source_type,
+              contributedAt: __item.contributed_at,
+              sourceTitle: contentTitles.get(__item.source_id) ?? null,
+            },
+          ]
+        : [],
+    ),
   }));
 }
 
 async function listPendingRoutingApprovalCandidates(
-  orgId: string
+  orgId: string,
 ): Promise<ApprovalRoutingReviewCandidate[]> {
   const approvals = await getPendingApprovals(orgId);
 
-  return approvals
-    .filter((approval) => approval.action_type === ROUTING_REVIEW_ACTION_TYPE)
-    .map((approval) => {
-      const proposedAction = parseRoutingReviewProposedAction(approval.proposed_action);
-      if (!proposedAction || !approval.content_id) {
-        return null;
-      }
+  return approvals.flatMap((approval) => {
+    if (approval.action_type !== ROUTING_REVIEW_ACTION_TYPE) return [];
+    const proposedAction = parseRoutingReviewProposedAction(
+      approval.proposed_action,
+    );
+    if (!proposedAction || !approval.content_id) {
+      return [];
+    }
 
-      return {
+    return [
+      {
         approvalId: approval.id,
         contentId: approval.content_id,
         title: proposedAction.contentTitle,
-        createdAt: approval.created_at,
+        createdAt: approval.created_at ?? new Date(0).toISOString(),
         routeConfidence: proposedAction.routeConfidence,
         routeReason: proposedAction.routeReason,
         proposedRoute: proposedAction.proposedRoute,
-      };
-    })
-    .filter((candidate): candidate is ApprovalRoutingReviewCandidate => candidate !== null);
+      },
+    ];
+  });
 }
 
 async function listRoutingReviewCandidates(
-  orgId: string
+  orgId: string,
 ): Promise<RoutingReviewCandidate[]> {
   const [approvalCandidates, legacyCandidates] = await Promise.all([
     listPendingRoutingApprovalCandidates(orgId),
@@ -466,26 +492,19 @@ async function listRoutingReviewCandidates(
 }
 
 async function listManualPublicationReviewCandidates(
-  orgId: string
+  orgId: string,
 ): Promise<ManualPublicationReviewCandidate[]> {
-  const [connectorsResult, settingsResult] = await Promise.all([
-    supabaseAdmin
-      .from('connector_configs')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .eq('supports_publish', true),
-    supabaseAdmin
-      .from('org_publish_settings')
-      .select('auto_publish_enabled')
-      .eq('org_id', orgId)
-      .maybeSingle(),
-  ]);
+  const connectorsResult = await supabaseAdmin
+    .from('connector_configs')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .eq('is_active', true)
+    .eq('supports_publish', true);
 
   if (connectorsResult.error) {
     console.warn(
       '[review-queue] Failed to count publish-capable connectors:',
-      connectorsResult.error.message
+      connectorsResult.error.message,
     );
     return [];
   }
@@ -495,10 +514,16 @@ async function listManualPublicationReviewCandidates(
     return [];
   }
 
+  const settingsResult = await supabaseAdmin
+    .from('org_publish_settings')
+    .select('auto_publish_enabled')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
   if (settingsResult.error && settingsResult.error.code !== 'PGRST116') {
     console.warn(
       '[review-queue] Failed to read publish settings:',
-      settingsResult.error.message
+      settingsResult.error.message,
     );
     return [];
   }
@@ -518,7 +543,7 @@ async function listManualPublicationReviewCandidates(
   if (contentError) {
     console.warn(
       '[review-queue] Failed to load manual publication content candidates:',
-      contentError.message
+      contentError.message,
     );
     return [];
   }
@@ -529,34 +554,33 @@ async function listManualPublicationReviewCandidates(
   }
 
   const contentIds = normalizedContentRows.map((row) => row.id);
-  const [documentRowsResult, publicationRowsResult] = await Promise.all([
-    supabaseAdmin
-      .from('documents')
-      .select('id, content_id, created_at, status')
-      .eq('org_id', orgId)
-      .in('content_id', contentIds)
-      .in('status', ['generated', 'edited'])
-      .order('created_at', { ascending: false }),
-    supabaseAdmin
-      .from('published_documents')
-      .select('content_id')
-      .eq('org_id', orgId)
-      .is('deleted_at', null)
-      .in('content_id', contentIds),
-  ]);
+  const documentRowsResult = await supabaseAdmin
+    .from('documents')
+    .select('id, content_id, created_at, status')
+    .eq('org_id', orgId)
+    .in('content_id', contentIds)
+    .in('status', ['generated', 'edited'])
+    .order('created_at', { ascending: false });
 
   if (documentRowsResult.error) {
     console.warn(
       '[review-queue] Failed to load generated documents for publication review:',
-      documentRowsResult.error.message
+      documentRowsResult.error.message,
     );
     return [];
   }
 
+  const publicationRowsResult = await supabaseAdmin
+    .from('published_documents')
+    .select('content_id')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .in('content_id', contentIds);
+
   if (publicationRowsResult.error) {
     console.warn(
       '[review-queue] Failed to load existing publications:',
-      publicationRowsResult.error.message
+      publicationRowsResult.error.message,
     );
     return [];
   }
@@ -570,23 +594,31 @@ async function listManualPublicationReviewCandidates(
 
   const publishedContentIds = new Set(
     ((publicationRowsResult.data ?? []) as PublishedDocumentQueueRow[]).map(
-      (row) => row.content_id
-    )
+      (row) => row.content_id,
+    ),
   );
 
-  return normalizedContentRows
-    .filter((row) => latestDocumentByContentId.has(row.id))
-    .filter((row) => !publishedContentIds.has(row.id))
-    .map((row) => ({
-      contentId: row.id,
-      documentId: latestDocumentByContentId.get(row.id)!.id,
-      title: row.title,
-      createdAt: row.completed_at ?? row.updated_at ?? row.created_at,
-      connectorCount,
-    }));
+  return normalizedContentRows.flatMap((__item, __index, __array) =>
+    latestDocumentByContentId.has(__item.id)
+      ? !publishedContentIds.has(__item.id)
+        ? [
+            {
+              contentId: __item.id,
+              documentId: latestDocumentByContentId.get(__item.id)!.id,
+              title: __item.title,
+              createdAt:
+                __item.completed_at ?? __item.updated_at ?? __item.created_at,
+              connectorCount,
+            },
+          ]
+        : []
+      : [],
+  );
 }
 
-export async function listReviewQueueItems(orgId: string): Promise<ReviewQueueItem[]> {
+export async function listReviewQueueItems(
+  orgId: string,
+): Promise<ReviewQueueItem[]> {
   const [contradictions, routing, manualPublications] = await Promise.all([
     listPendingReviewPages(orgId),
     listRoutingReviewCandidates(orgId),
@@ -600,13 +632,13 @@ export async function listReviewQueueItems(orgId: string): Promise<ReviewQueueIt
   });
 }
 
-export function getPendingReviewQueueCount(orgId: string): Promise<number> {
+function getPendingReviewQueueCount(orgId: string): Promise<number> {
   return unstable_cache(
     async (id: string) => {
       const items = await listReviewQueueItems(id);
       return items.length;
     },
     ['review-queue-count', orgId],
-    { revalidate: 60, tags: [`review-queue-count:${orgId}`] }
+    { revalidate: 60, tags: [`review-queue-count:${orgId}`] },
   )(orgId);
 }

@@ -7,11 +7,11 @@
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-export interface LogContext {
+interface LogContext {
   [key: string]: any;
 }
 
-export interface LogEntry {
+interface LogEntry {
   timestamp: string;
   level: LogLevel;
   message: string;

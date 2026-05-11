@@ -18,6 +18,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function getMetadataNumber(
+  metadata: Record<string, unknown>,
+  key: string,
+  fallback: number,
+) {
+  const value = metadata[key];
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : fallback;
+  }
+
+  return fallback;
+}
+
+function getMetadataString(
+  metadata: Record<string, unknown>,
+  key: string,
+  fallback: string,
+) {
+  const value = metadata[key];
+  return typeof value === 'string' && value.length > 0 ? value : fallback;
+}
+
 interface SearchMetrics {
   // Success rates
   overallSuccessRate: number; // % queries returning > 0 results
@@ -77,7 +104,7 @@ interface SearchMetrics {
  */
 async function analyzeSearchQuality(
   startDate?: Date,
-  endDate?: Date
+  endDate?: Date,
 ): Promise<SearchMetrics> {
   const supabase = createClient();
 
@@ -87,7 +114,7 @@ async function analyzeSearchQuality(
 
   console.log('📊 Analyzing search quality metrics...');
   console.log(
-    `Time range: ${startDate?.toISOString() || 'all time'} to ${endDate?.toISOString() || 'now'}\n`
+    `Time range: ${startDate?.toISOString() || 'all time'} to ${endDate?.toISOString() || 'now'}\n`,
   );
 
   // Initialize metrics
@@ -150,10 +177,12 @@ async function analyzeSearchQuality(
     if (error) {
       console.warn('⚠️  Could not query chat_messages table:', error.message);
       console.log(
-        '\n💡 TIP: This script analyzes search logs from the chat API.'
+        '\n💡 TIP: This script analyzes search logs from the chat API.',
       );
       console.log('   To collect metrics, ensure chat_messages table exists.');
-      console.log('   In production, integrate with your log aggregation service.\n');
+      console.log(
+        '   In production, integrate with your log aggregation service.\n',
+      );
       return metrics;
     }
 
@@ -165,35 +194,40 @@ async function analyzeSearchQuality(
     metrics.totalQueries = messages.length;
 
     // Analyze message metadata for search quality
-    const queryMetrics = messages
-      .map((msg) => {
-        const metadata = isRecord(msg.metadata) ? msg.metadata : {};
-        const content = msg.content;
-        const text =
-          typeof content === 'string'
-            ? content
-            : isRecord(content)
-              ? typeof content.text === 'string'
-                ? content.text
-                : typeof content.content === 'string'
-                  ? content.content
-                  : ''
-              : '';
+    const queryMetrics = messages.flatMap((msg) => {
+      const metadata = isRecord(msg.metadata) ? msg.metadata : {};
+      const content = msg.content;
+      const text =
+        typeof content === 'string'
+          ? content
+          : isRecord(content)
+            ? typeof content.text === 'string'
+              ? content.text
+              : typeof content.content === 'string'
+                ? content.content
+                : ''
+            : '';
 
-        return {
+      if (text.length === 0) return [];
+      return [
+        {
           query: text,
           queryLength: text.length,
           queryWordCount: text.split(/\s+/).length,
-          sourcesFound: metadata?.sourcesFound || 0,
-          retrievalAttempts: metadata?.retrievalAttempts || 1,
-          strategy: metadata?.strategy || 'unknown',
-          threshold: metadata?.threshold || 0.7,
-          retrievalTimeMs: metadata?.retrievalTimeMs || 0,
-          avgSimilarity: metadata?.avgSimilarity || 0,
-          usedTools: metadata?.toolCallCount > 0,
-        };
-      })
-      .filter((m) => m.queryLength > 0);
+          sourcesFound: getMetadataNumber(metadata, 'sourcesFound', 0),
+          retrievalAttempts: getMetadataNumber(
+            metadata,
+            'retrievalAttempts',
+            1,
+          ),
+          strategy: getMetadataString(metadata, 'strategy', 'unknown'),
+          threshold: getMetadataNumber(metadata, 'threshold', 0.7),
+          retrievalTimeMs: getMetadataNumber(metadata, 'retrievalTimeMs', 0),
+          avgSimilarity: getMetadataNumber(metadata, 'avgSimilarity', 0),
+          usedTools: getMetadataNumber(metadata, 'toolCallCount', 0) > 0,
+        },
+      ];
+    });
 
     if (queryMetrics.length === 0) {
       console.log('ℹ️  No valid queries found with metadata.');
@@ -203,31 +237,32 @@ async function analyzeSearchQuality(
     // Calculate success rates
     const successfulQueries = queryMetrics.filter((m) => m.sourcesFound > 0);
     const firstAttemptSuccess = queryMetrics.filter(
-      (m) => m.sourcesFound > 0 && m.retrievalAttempts === 1
+      (m) => m.sourcesFound > 0 && m.retrievalAttempts === 1,
     );
     const retrySuccess = queryMetrics.filter(
-      (m) => m.sourcesFound > 0 && m.retrievalAttempts > 1
+      (m) => m.sourcesFound > 0 && m.retrievalAttempts > 1,
     );
 
     metrics.overallSuccessRate = successfulQueries.length / queryMetrics.length;
     metrics.firstAttemptSuccessRate =
       firstAttemptSuccess.length / queryMetrics.length;
     // Avoid division by zero: if all queries succeed on first attempt, retrySuccessRate is 0
-    const queriesRequiringRetry = queryMetrics.length - firstAttemptSuccess.length;
+    const queriesRequiringRetry =
+      queryMetrics.length - firstAttemptSuccess.length;
     metrics.retrySuccessRate =
       queriesRequiringRetry > 0
         ? retrySuccess.length / queriesRequiringRetry
         : 0;
 
     // Similarity scores
-    const similarities = queryMetrics
-      .filter((m) => m.avgSimilarity > 0)
-      .map((m) => m.avgSimilarity);
+    const similarities = queryMetrics.flatMap((__item) =>
+      __item.avgSimilarity > 0 ? [__item.avgSimilarity] : [],
+    );
 
     if (similarities.length > 0) {
       metrics.avgSimilarityScore =
         similarities.reduce((a, b) => a + b, 0) / similarities.length;
-      const sortedSimilarities = [...similarities].sort((a, b) => a - b);
+      const sortedSimilarities = similarities.toSorted((a, b) => a - b);
 
       // Calculate median: average of two middle values for even-length arrays
       if (sortedSimilarities.length % 2 === 0) {
@@ -241,23 +276,28 @@ async function analyzeSearchQuality(
 
       // Distribution
       metrics.similarityDistribution.below_50 = similarities.filter(
-        (s) => s < 0.5
+        (s) => s < 0.5,
       ).length;
       metrics.similarityDistribution.between_50_60 = similarities.filter(
-        (s) => s >= 0.5 && s < 0.6
+        (s) => s >= 0.5 && s < 0.6,
       ).length;
       metrics.similarityDistribution.between_60_70 = similarities.filter(
-        (s) => s >= 0.6 && s < 0.7
+        (s) => s >= 0.6 && s < 0.7,
       ).length;
       metrics.similarityDistribution.above_70 = similarities.filter(
-        (s) => s >= 0.7
+        (s) => s >= 0.7,
       ).length;
     }
 
     // Strategy breakdown
     queryMetrics.forEach((m) => {
       const strategy = m.strategy as keyof typeof metrics.strategyBreakdown;
-      if (Object.prototype.hasOwnProperty.call(metrics.strategyBreakdown, strategy)) {
+      if (
+        Object.prototype.hasOwnProperty.call(
+          metrics.strategyBreakdown,
+          strategy,
+        )
+      ) {
         metrics.strategyBreakdown[strategy]++;
       }
     });
@@ -279,14 +319,14 @@ async function analyzeSearchQuality(
     });
 
     // Performance metrics
-    const retrievalTimes = queryMetrics
-      .filter((m) => m.retrievalTimeMs > 0)
-      .map((m) => m.retrievalTimeMs);
+    const retrievalTimes = queryMetrics.flatMap((__item) =>
+      __item.retrievalTimeMs > 0 ? [__item.retrievalTimeMs] : [],
+    );
 
     if (retrievalTimes.length > 0) {
       metrics.avgRetrievalTimeMs =
         retrievalTimes.reduce((a, b) => a + b, 0) / retrievalTimes.length;
-      const sortedTimes = [...retrievalTimes].sort((a, b) => a - b);
+      const sortedTimes = retrievalTimes.toSorted((a, b) => a - b);
       metrics.p95RetrievalTimeMs =
         sortedTimes[Math.floor(sortedTimes.length * 0.95)];
       metrics.p99RetrievalTimeMs =
@@ -309,14 +349,15 @@ async function analyzeSearchQuality(
 
     // Zero result queries (sample)
     const zeroResultQueries = queryMetrics
-      .filter((m) => m.sourcesFound === 0)
-      .map((m) => m.query)
+      .flatMap((__item) =>
+        __item.sourcesFound === 0 ? [__item.query] : [],
+      )
       .slice(0, 10);
     metrics.zeroResultQueries = zeroResultQueries;
 
     // Alerted failures (queries with 0 results and multiple attempts)
     metrics.alertedFailures = queryMetrics.filter(
-      (m) => m.sourcesFound === 0 && m.retrievalAttempts > 1
+      (m) => m.sourcesFound === 0 && m.retrievalAttempts > 1,
     ).length;
   } catch (error) {
     console.error('❌ Error analyzing search quality:', error);
@@ -336,112 +377,124 @@ function displayMetrics(metrics: SearchMetrics) {
   console.log('📈 SUCCESS RATES');
   console.log('─────────────────────────────────────────────────');
   console.log(
-    `  Overall Success Rate:      ${(metrics.overallSuccessRate * 100).toFixed(1)}%`
+    `  Overall Success Rate:      ${(metrics.overallSuccessRate * 100).toFixed(1)}%`,
   );
   console.log(
-    `  First Attempt Success:     ${(metrics.firstAttemptSuccessRate * 100).toFixed(1)}%`
+    `  First Attempt Success:     ${(metrics.firstAttemptSuccessRate * 100).toFixed(1)}%`,
   );
   console.log(
-    `  Retry Success Rate:        ${(metrics.retrySuccessRate * 100).toFixed(1)}%`
+    `  Retry Success Rate:        ${(metrics.retrySuccessRate * 100).toFixed(1)}%`,
   );
   console.log();
 
   console.log('🎯 SIMILARITY SCORES');
   console.log('─────────────────────────────────────────────────');
-  console.log(`  Average:                   ${metrics.avgSimilarityScore.toFixed(3)}`);
-  console.log(`  Median:                    ${metrics.medianSimilarityScore.toFixed(3)}`);
+  console.log(
+    `  Average:                   ${metrics.avgSimilarityScore.toFixed(3)}`,
+  );
+  console.log(
+    `  Median:                    ${metrics.medianSimilarityScore.toFixed(3)}`,
+  );
   console.log('  Distribution:');
   console.log(
-    `    < 0.50:                  ${metrics.similarityDistribution.below_50} queries`
+    `    < 0.50:                  ${metrics.similarityDistribution.below_50} queries`,
   );
   console.log(
-    `    0.50 - 0.60:             ${metrics.similarityDistribution.between_50_60} queries`
+    `    0.50 - 0.60:             ${metrics.similarityDistribution.between_50_60} queries`,
   );
   console.log(
-    `    0.60 - 0.70:             ${metrics.similarityDistribution.between_60_70} queries`
+    `    0.60 - 0.70:             ${metrics.similarityDistribution.between_60_70} queries`,
   );
   console.log(
-    `    > 0.70:                  ${metrics.similarityDistribution.above_70} queries`
+    `    > 0.70:                  ${metrics.similarityDistribution.above_70} queries`,
   );
   console.log();
 
   console.log('🔍 STRATEGY BREAKDOWN');
   console.log('─────────────────────────────────────────────────');
   console.log(
-    `  Standard Search:           ${metrics.strategyBreakdown.standard_search} queries`
+    `  Standard Search:           ${metrics.strategyBreakdown.standard_search} queries`,
   );
   console.log(
-    `  Hybrid Search:             ${metrics.strategyBreakdown.hybrid_search} queries`
+    `  Hybrid Search:             ${metrics.strategyBreakdown.hybrid_search} queries`,
   );
   console.log(
-    `  Hierarchical Search:       ${metrics.strategyBreakdown.hierarchical_search} queries`
+    `  Hierarchical Search:       ${metrics.strategyBreakdown.hierarchical_search} queries`,
   );
   console.log(
-    `  Keyword Fallback:          ${metrics.strategyBreakdown.keyword_fallback} queries`
+    `  Keyword Fallback:          ${metrics.strategyBreakdown.keyword_fallback} queries`,
   );
   console.log(
-    `  Error Fallback:            ${metrics.strategyBreakdown.error_fallback} queries`
+    `  Error Fallback:            ${metrics.strategyBreakdown.error_fallback} queries`,
   );
   console.log();
 
   console.log('🎚️  THRESHOLD DISTRIBUTION');
   console.log('─────────────────────────────────────────────────');
   console.log(
-    `  Threshold 0.50:            ${metrics.thresholdDistribution.threshold_50} queries`
+    `  Threshold 0.50:            ${metrics.thresholdDistribution.threshold_50} queries`,
   );
   console.log(
-    `  Threshold 0.55:            ${metrics.thresholdDistribution.threshold_55} queries`
+    `  Threshold 0.55:            ${metrics.thresholdDistribution.threshold_55} queries`,
   );
   console.log(
-    `  Threshold 0.65:            ${metrics.thresholdDistribution.threshold_65} queries`
+    `  Threshold 0.65:            ${metrics.thresholdDistribution.threshold_65} queries`,
   );
   console.log(
-    `  Threshold 0.70+:           ${metrics.thresholdDistribution.threshold_70} queries`
+    `  Threshold 0.70+:           ${metrics.thresholdDistribution.threshold_70} queries`,
   );
   console.log(
-    `  Other thresholds:          ${metrics.thresholdDistribution.other} queries`
+    `  Other thresholds:          ${metrics.thresholdDistribution.other} queries`,
   );
   console.log();
 
   console.log('⚡ PERFORMANCE');
   console.log('─────────────────────────────────────────────────');
   console.log(
-    `  Avg Retrieval Time:        ${metrics.avgRetrievalTimeMs.toFixed(0)}ms`
+    `  Avg Retrieval Time:        ${metrics.avgRetrievalTimeMs.toFixed(0)}ms`,
   );
-  console.log(`  P95:                       ${metrics.p95RetrievalTimeMs.toFixed(0)}ms`);
-  console.log(`  P99:                       ${metrics.p99RetrievalTimeMs.toFixed(0)}ms`);
+  console.log(
+    `  P95:                       ${metrics.p95RetrievalTimeMs.toFixed(0)}ms`,
+  );
+  console.log(
+    `  P99:                       ${metrics.p99RetrievalTimeMs.toFixed(0)}ms`,
+  );
   console.log();
 
   console.log('📝 QUERY CHARACTERISTICS');
   console.log('─────────────────────────────────────────────────');
   console.log(
-    `  Avg Query Length:          ${metrics.avgQueryLength.toFixed(0)} chars`
+    `  Avg Query Length:          ${metrics.avgQueryLength.toFixed(0)} chars`,
   );
   console.log(
-    `  Avg Word Count:            ${metrics.avgQueryWordCount.toFixed(1)} words`
+    `  Avg Word Count:            ${metrics.avgQueryWordCount.toFixed(1)} words`,
   );
   console.log(
-    `  Short Queries (< 5 words): ${(metrics.shortQueryPercentage * 100).toFixed(1)}%`
+    `  Short Queries (< 5 words): ${(metrics.shortQueryPercentage * 100).toFixed(1)}%`,
   );
   console.log();
 
   console.log('🛠️  TOOL USAGE');
   console.log('─────────────────────────────────────────────────');
   console.log(
-    `  Tool Fallback Rate:        ${(metrics.toolFallbackRate * 100).toFixed(1)}%`
+    `  Tool Fallback Rate:        ${(metrics.toolFallbackRate * 100).toFixed(1)}%`,
   );
   console.log();
 
   console.log('❌ FAILURE ANALYSIS');
   console.log('─────────────────────────────────────────────────');
   console.log(`  Total Queries Analyzed:    ${metrics.totalQueries}`);
-  console.log(`  Zero Result Queries:       ${metrics.zeroResultQueries.length > 0 ? metrics.zeroResultQueries.length : 'None'}`);
+  console.log(
+    `  Zero Result Queries:       ${metrics.zeroResultQueries.length > 0 ? metrics.zeroResultQueries.length : 'None'}`,
+  );
   console.log(`  Alerted Failures:          ${metrics.alertedFailures}`);
 
   if (metrics.zeroResultQueries.length > 0) {
     console.log('\n  Sample Zero-Result Queries:');
     metrics.zeroResultQueries.forEach((query, idx) => {
-      console.log(`    ${idx + 1}. ${query.substring(0, 80)}${query.length > 80 ? '...' : ''}`);
+      console.log(
+        `    ${idx + 1}. ${query.substring(0, 80)}${query.length > 80 ? '...' : ''}`,
+      );
     });
   }
 
@@ -460,54 +513,54 @@ function generateRecommendations(metrics: SearchMetrics) {
   // Success rate recommendations
   if (metrics.overallSuccessRate < 0.7) {
     recommendations.push(
-      `⚠️  Low success rate (${(metrics.overallSuccessRate * 100).toFixed(1)}%). Consider lowering thresholds or enabling hybrid search by default.`
+      `⚠️  Low success rate (${(metrics.overallSuccessRate * 100).toFixed(1)}%). Consider lowering thresholds or enabling hybrid search by default.`,
     );
   }
 
   if (metrics.retrySuccessRate > 0.3) {
     recommendations.push(
-      `✅ Retry logic is effective (${(metrics.retrySuccessRate * 100).toFixed(1)}% rescue rate). Consider enabling more aggressive initial search.`
+      `✅ Retry logic is effective (${(metrics.retrySuccessRate * 100).toFixed(1)}% rescue rate). Consider enabling more aggressive initial search.`,
     );
   }
 
   // Similarity score recommendations
   if (metrics.avgSimilarityScore < 0.6) {
     recommendations.push(
-      '⚠️  Low average similarity scores. Consider improving embeddings quality or query preprocessing.'
+      '⚠️  Low average similarity scores. Consider improving embeddings quality or query preprocessing.',
     );
   }
 
   if (metrics.similarityDistribution.below_50 > metrics.totalQueries * 0.2) {
     recommendations.push(
-      '⚠️  Many results below 0.50 similarity. Review threshold tuning or enable reranking.'
+      '⚠️  Many results below 0.50 similarity. Review threshold tuning or enable reranking.',
     );
   }
 
   // Performance recommendations
   if (metrics.p95RetrievalTimeMs > 2000) {
     recommendations.push(
-      `⚠️  High P95 latency (${metrics.p95RetrievalTimeMs.toFixed(0)}ms). Consider caching embeddings or optimizing vector index.`
+      `⚠️  High P95 latency (${metrics.p95RetrievalTimeMs.toFixed(0)}ms). Consider caching embeddings or optimizing vector index.`,
     );
   }
 
   // Query characteristics
   if (metrics.shortQueryPercentage > 0.5) {
     recommendations.push(
-      `ℹ️  ${(metrics.shortQueryPercentage * 100).toFixed(1)}% of queries are short (< 5 words). Ensure query expansion is working.`
+      `ℹ️  ${(metrics.shortQueryPercentage * 100).toFixed(1)}% of queries are short (< 5 words). Ensure query expansion is working.`,
     );
   }
 
   // Tool fallback
   if (metrics.toolFallbackRate > 0.3) {
     recommendations.push(
-      `ℹ️  ${(metrics.toolFallbackRate * 100).toFixed(1)}% of queries use tool fallback. This may indicate RAG context is insufficient.`
+      `ℹ️  ${(metrics.toolFallbackRate * 100).toFixed(1)}% of queries use tool fallback. This may indicate RAG context is insufficient.`,
     );
   }
 
   // Failure analysis
   if (metrics.alertedFailures > metrics.totalQueries * 0.1) {
     recommendations.push(
-      `⚠️  ${metrics.alertedFailures} alerted failures (${((metrics.alertedFailures / metrics.totalQueries) * 100).toFixed(1)}%). Review zero-result queries for patterns.`
+      `⚠️  ${metrics.alertedFailures} alerted failures (${((metrics.alertedFailures / metrics.totalQueries) * 100).toFixed(1)}%). Review zero-result queries for patterns.`,
     );
   }
 

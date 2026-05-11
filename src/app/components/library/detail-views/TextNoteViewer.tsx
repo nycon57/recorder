@@ -46,17 +46,14 @@ type MarkdownCodeProps = React.ComponentPropsWithoutRef<'code'> & {
 
 const markdownComponents: Components = {
   code(props) {
-    const { inline, className, children, node, ...rest } = props as MarkdownCodeProps;
+    const { inline, className, children, node, ...rest } =
+      props as MarkdownCodeProps;
     void node;
     const match = /language-(\w+)/.exec(className || '');
     const language = match ? match[1] : '';
 
     return !inline && language ? (
-      <SyntaxHighlighter
-        style={oneDark}
-        language={language}
-        PreTag="div"
-      >
+      <SyntaxHighlighter style={oneDark} language={language} PreTag="div">
         {String(children).replace(/\n$/, '')}
       </SyntaxHighlighter>
     ) : (
@@ -67,17 +64,26 @@ const markdownComponents: Components = {
   },
 };
 
-export default function TextNoteViewer({
+export default function TextNoteViewer(
+  props: Parameters<typeof useTextNoteViewerImplementation>[0],
+) {
+  return useTextNoteViewerImplementation(props);
+}
+
+function useTextNoteViewerImplementation({
   recordingId,
   content: initialContent,
   title,
   fileType = 'txt',
-  onContentUpdate
+  onContentUpdate,
 }: TextNoteViewerProps) {
   const [isEditing, setIsEditing] = React.useState(false);
-  const [editedContent, setEditedContent] = React.useState(initialContent);
+  const [editedContentDraft, setEditedContentDraft] = React.useState<
+    string | null
+  >(null);
   const [isSaving, setIsSaving] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<TextNoteTab>('preview');
+  const editedContent = editedContentDraft ?? initialContent;
 
   const isMarkdown = fileType === 'md';
   const wordCount = initialContent.split(/\s+/).filter(Boolean).length;
@@ -86,23 +92,24 @@ export default function TextNoteViewer({
 
   // File type color configuration - using new content-type CSS variables
   const fileTypeConfig = {
-    'txt': {
+    txt: {
       color: 'text-content-text',
       bgColor: 'bg-content-text-bg',
-      borderColor: 'border-l-content-text-border'
+      borderColor: 'border-l-content-text-border',
     },
-    'md': {
+    md: {
       color: 'text-content-text',
       bgColor: 'bg-content-text-bg',
-      borderColor: 'border-l-content-text-border'
+      borderColor: 'border-l-content-text-border',
     },
-    'default': {
+    default: {
       color: 'text-content-text',
       bgColor: 'bg-content-text-bg',
-      borderColor: 'border-l-content-text-border'
-    }
+      borderColor: 'border-l-content-text-border',
+    },
   };
-  const config = fileTypeConfig[fileType || 'default'] || fileTypeConfig.default;
+  const config =
+    fileTypeConfig[fileType || 'default'] || fileTypeConfig.default;
 
   // Enhanced stats with reading time
   const readingTime = Math.ceil(wordCount / 200);
@@ -110,19 +117,19 @@ export default function TextNoteViewer({
     {
       label: 'Words',
       value: wordCount,
-      icon: <Type className="h-4 w-4" />,
-      subtext: `~${readingTime} min read`
+      icon: <Type className="size-4" />,
+      subtext: `~${readingTime} min read`,
     },
     {
       label: 'Characters',
       value: charCount,
-      icon: <Hash className="h-4 w-4" />
+      icon: <Hash className="size-4" />,
     },
     {
       label: 'Lines',
       value: lineCount,
-      icon: <FileText className="h-4 w-4" />
-    }
+      icon: <FileText className="size-4" />,
+    },
   ];
 
   const handleCopy = async () => {
@@ -151,19 +158,23 @@ export default function TextNoteViewer({
     setIsSaving(true);
     try {
       // Update via transcript API (text content is stored in transcript table)
-      const response = await fetch(`/api/recordings/${recordingId}/transcript`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: editedContent,
-        }),
-      });
+      const response = await fetch(
+        `/api/recordings/${recordingId}/transcript`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: editedContent,
+          }),
+        },
+      );
 
       if (!response.ok) {
         throw new Error('Failed to save content');
       }
 
       toast.success('Content updated successfully');
+      setEditedContentDraft(null);
       setIsEditing(false);
       if (onContentUpdate) {
         onContentUpdate(editedContent);
@@ -177,12 +188,13 @@ export default function TextNoteViewer({
   };
 
   const handleCancel = () => {
-    setEditedContent(initialContent);
+    setEditedContentDraft(null);
     setIsEditing(false);
     setActiveTab('preview');
   };
 
   const handleEdit = () => {
+    setEditedContentDraft(initialContent);
     setIsEditing(true);
     setActiveTab('edit');
   };
@@ -195,11 +207,11 @@ export default function TextNoteViewer({
           <div className="flex flex-col gap-4 sm:gap-6">
             {/* Title Row */}
             <div className="flex items-start gap-3">
-              <div className={cn("p-2.5 rounded-lg shrink-0", config.bgColor)}>
-                <FileText className={cn("h-5 w-5", config.color)} />
+              <div className={cn('p-2.5 rounded-lg shrink-0', config.bgColor)}>
+                <FileText className={cn('size-5', config.color)} />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+                <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
                   {title || 'Untitled Note'}
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -260,7 +272,7 @@ export default function TextNoteViewer({
                     {isSaving ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
-                        Saving...
+                        Saving…
                       </>
                     ) : (
                       <>
@@ -283,7 +295,7 @@ export default function TextNoteViewer({
             key={stat.label}
             className={cn(
               'transition-all duration-200 hover:shadow-md hover:scale-[1.02] border-l-4',
-              config.borderColor
+              config.borderColor,
             )}
           >
             <CardContent className="p-6 space-y-3">
@@ -312,7 +324,10 @@ export default function TextNoteViewer({
       {isEditing ? (
         <Card>
           <CardContent className="p-0">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TextNoteTab)}>
+            <Tabs
+              value={activeTab}
+              onValueChange={(v) => setActiveTab(v as TextNoteTab)}
+            >
               <div className="border-b px-4 pt-4">
                 <TabsList>
                   <TabsTrigger value="edit">
@@ -331,10 +346,9 @@ export default function TextNoteViewer({
               <TabsContent value="edit" className="p-4 m-0">
                 <Textarea
                   value={editedContent}
-                  onChange={(e) => setEditedContent(e.target.value)}
+                  onChange={(e) => setEditedContentDraft(e.target.value)}
                   className="min-h-[600px] font-mono text-sm resize-none"
-                  placeholder="Enter your text here..."
-                  autoFocus
+                  placeholder="Enter your text here…"
                 />
               </TabsContent>
 
@@ -342,9 +356,7 @@ export default function TextNoteViewer({
                 <TabsContent value="preview" className="p-8 m-0">
                   <div className="min-h-[600px] max-h-[800px] overflow-y-auto">
                     <div className="prose dark:prose-invert max-w-3xl mx-auto prose-sm sm:prose-base prose-headings:font-semibold prose-p:leading-relaxed">
-                      <ReactMarkdown
-                        components={markdownComponents}
-                      >
+                      <ReactMarkdown components={markdownComponents}>
                         {editedContent}
                       </ReactMarkdown>
                     </div>
@@ -360,9 +372,7 @@ export default function TextNoteViewer({
             <div className="min-h-[400px] max-h-[800px] overflow-y-auto px-6 py-8 sm:px-8 sm:py-10">
               {isMarkdown ? (
                 <div className="prose dark:prose-invert max-w-3xl mx-auto prose-sm sm:prose-base prose-headings:font-semibold prose-p:leading-relaxed">
-                  <ReactMarkdown
-                    components={markdownComponents}
-                  >
+                  <ReactMarkdown components={markdownComponents}>
                     {initialContent}
                   </ReactMarkdown>
                 </div>

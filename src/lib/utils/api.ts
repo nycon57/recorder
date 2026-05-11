@@ -16,14 +16,14 @@ export function generateRequestId(): string {
 export function successResponse<T>(
   data: T,
   requestId?: string,
-  status = 200
+  status = 200,
 ): NextResponse<ApiSuccess<T>> {
   return NextResponse.json(
     {
       data,
       requestId,
     },
-    { status }
+    { status },
   );
 }
 
@@ -33,7 +33,7 @@ export function errorResponse(
   code: string,
   status = 400,
   details?: unknown,
-  requestId?: string
+  requestId?: string,
 ): NextResponse<ApiError> {
   return NextResponse.json(
     {
@@ -42,7 +42,7 @@ export function errorResponse(
       details,
       requestId,
     },
-    { status }
+    { status },
   );
 }
 
@@ -57,7 +57,7 @@ export const errors = {
       'FORBIDDEN',
       403,
       undefined,
-      requestId
+      requestId,
     ),
 
   notFound: (resource: string, requestId?: string) =>
@@ -66,7 +66,7 @@ export const errors = {
       'NOT_FOUND',
       404,
       undefined,
-      requestId
+      requestId,
     ),
 
   badRequest: (message: string, details?: unknown, requestId?: string) =>
@@ -78,7 +78,7 @@ export const errors = {
       'VALIDATION_ERROR',
       400,
       details,
-      requestId
+      requestId,
     ),
 
   internalError: (requestId?: string) =>
@@ -87,7 +87,7 @@ export const errors = {
       'INTERNAL_ERROR',
       500,
       undefined,
-      requestId
+      requestId,
     ),
 
   rateLimitExceeded: (details?: unknown, requestId?: string) =>
@@ -96,7 +96,7 @@ export const errors = {
       'RATE_LIMIT_EXCEEDED',
       429,
       details,
-      requestId
+      requestId,
     ),
 
   quotaExceeded: (details?: unknown, requestId?: string) =>
@@ -105,12 +105,12 @@ export const errors = {
       'QUOTA_EXCEEDED',
       402,
       details,
-      requestId
+      requestId,
     ),
 };
 
 // Get authenticated user from Better Auth
-export async function getAuthUser() {
+async function getAuthUser() {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -136,10 +136,7 @@ export async function requireAuth() {
   return user;
 }
 
-// Require organization context
-export async function requireOrg() {
-  const user = await requireAuth();
-
+async function requireOrgForUser(user: { userId: string }) {
   // PERFORMANCE OPTIMIZATION: Check cache first to avoid an extra DB query
   // MULTI-TENANT: Use auth user ID as cache key
   const cacheKey = `ba:${user.userId}`;
@@ -172,7 +169,9 @@ export async function requireOrg() {
 
   // If user doesn't exist, throw a clear error
   if (error?.code === 'PGRST116') {
-    throw new Error(`User ${user.userId} not found in database. Please ensure user record exists.`);
+    throw new Error(
+      `User ${user.userId} not found in database. Please ensure user record exists.`,
+    );
   } else if (error) {
     console.error('[requireOrg] Error fetching user org:', error);
     throw new Error('User organization not found');
@@ -203,6 +202,22 @@ export async function requireOrg() {
     orgId: userData!.org_id,
     role,
   };
+}
+
+// Require organization context
+export async function requireOrg() {
+  const user = await requireAuth();
+  return requireOrgForUser(user);
+}
+
+export async function requireAdminForUser(user: { userId: string }) {
+  const orgContext = await requireOrgForUser(user);
+
+  if (orgContext.role !== 'owner' && orgContext.role !== 'admin') {
+    throw new Error('Admin privileges required');
+  }
+
+  return orgContext;
 }
 
 // Require admin role (owner or admin) - For organization-level admin functions
@@ -243,7 +258,9 @@ export async function requireSystemAdmin() {
   // SECURITY: Strict check for system admin flag
   if (userData.is_system_admin !== true) {
     // Log potential unauthorized access attempt
-    console.warn(`[SECURITY] Non-system-admin user ${userData.email} (role: ${userData.role}) attempted to access system admin endpoint`);
+    console.warn(
+      `[SECURITY] Non-system-admin user ${userData.email} (role: ${userData.role}) attempted to access system admin endpoint`,
+    );
     throw new Error('System admin privileges required');
   }
 
@@ -258,38 +275,55 @@ export async function requireSystemAdmin() {
 // Parse and validate request body with Zod
 export async function parseBody<T>(
   request: NextRequest,
-  schema: ZodType<T>
+  schema: ZodType<T>,
 ): Promise<T> {
   try {
     const body = await request.json();
     return schema.parse(body);
   } catch (error) {
-    throw new Error(`Invalid request body: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Invalid request body: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 }
 
 // Parse and validate URL search params with Zod
 export function parseSearchParams<T>(
   request: NextRequest,
-  schema: ZodType<T>
+  schema: ZodType<T>,
 ): T {
   try {
     const { searchParams } = new URL(request.url);
     const params = Object.fromEntries(searchParams.entries());
     return schema.parse(params);
   } catch (error) {
-    throw new Error(`Invalid search params: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Invalid search params: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
   }
 }
 
+type ApiHandlerResult<T> = Promise<
+  NextResponse<ApiSuccess<T>> | NextResponse<ApiError> | Response
+>;
+
 // Handle API route with error handling
 export function apiHandler<T = unknown>(
+  handler: (request: NextRequest) => ApiHandlerResult<T>,
+): (request: NextRequest) => ApiHandlerResult<T>;
+export function apiHandler<T = unknown, TContext = unknown>(
   handler: (
     request: NextRequest,
-    context?: unknown
-  ) => Promise<NextResponse<ApiSuccess<T>> | NextResponse<ApiError> | Response>
+    context: TContext,
+  ) => ApiHandlerResult<T>,
+): (request: NextRequest, context: TContext) => ApiHandlerResult<T>;
+export function apiHandler<T = unknown, TContext = unknown>(
+  handler: (
+    request: NextRequest,
+    context?: TContext,
+  ) => ApiHandlerResult<T>,
 ) {
-  return async (request: NextRequest, context?: unknown) => {
+  return async (request: NextRequest, context?: TContext) => {
     const requestId = generateRequestId();
 
     try {

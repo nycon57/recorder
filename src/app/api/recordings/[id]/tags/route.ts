@@ -8,12 +8,25 @@ import {
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
+interface ContentTagRow {
+  tags: {
+    id: string;
+    name: string;
+    color: string | null;
+    created_at: string;
+    updated_at: string;
+  } | null;
+}
+
 /**
  * GET /api/recordings/[id]/tags
  * Get all tags for a recording
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const { orgId } = await requireOrg();
     const supabase = supabaseAdmin;
     const { id: recordingId } = await params;
@@ -33,7 +46,8 @@ export const GET = apiHandler(
     // Fetch tags for this content
     const { data: recordingTags, error: fetchError } = await supabase
       .from('content_tags')
-      .select(`
+      .select(
+        `
         tag_id,
         tags (
           id,
@@ -42,7 +56,8 @@ export const GET = apiHandler(
           created_at,
           updated_at
         )
-      `)
+      `,
+      )
       .eq('content_id', recordingId);
 
     if (fetchError) {
@@ -51,12 +66,11 @@ export const GET = apiHandler(
     }
 
     // Extract tags from the joined data
-    const tags = recordingTags
-      .map((rt: any) => rt.tags)
-      .filter(Boolean);
+    const tags = ((recordingTags as unknown as ContentTagRow[] | null) ?? [])
+      .flatMap((__item) => (__item.tags ? [__item.tags] : []));
 
     return successResponse({ tags });
-  }
+  },
 );
 
 /**
@@ -64,12 +78,16 @@ export const GET = apiHandler(
  * Add a tag to a recording (creates tag if doesn't exist)
  */
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const { orgId } = await requireOrg();
     const supabase = supabaseAdmin;
-    const { id: recordingId } = await params;
-
-    const body = await request.json();
+    const [{ id: recordingId }, body] = await Promise.all([
+      params,
+      request.json(),
+    ]);
     const { name, color = '#3b82f6' } = body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -146,5 +164,5 @@ export const POST = apiHandler(
     }
 
     return successResponse({ tag });
-  }
+  },
 );

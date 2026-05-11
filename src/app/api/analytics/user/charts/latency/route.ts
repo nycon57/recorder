@@ -4,8 +4,10 @@ import { apiHandler, requireAuth, successResponse } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { userId } = await requireAuth();
-  const supabase = await createClient();
+  const [{ userId }, supabase] = await Promise.all([
+    requireAuth(),
+    createClient(),
+  ]);
 
   const { searchParams } = new URL(request.url);
   const timeRange = searchParams.get('timeRange') || '30d';
@@ -71,13 +73,22 @@ export const GET = apiHandler(async (request: NextRequest) => {
     let key: string;
 
     if (groupByFormat === 'day') {
-      key = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      key = date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
     } else if (groupByFormat === 'week') {
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay() + 1);
-      key = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      key = weekStart.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
     } else {
-      key = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      key = date.toLocaleDateString('en-US', {
+        month: 'short',
+        year: 'numeric',
+      });
     }
 
     if (!dataMap.has(key)) {
@@ -88,7 +99,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   const chartData = Array.from(dataMap.entries()).map(([date, data]) => {
     const latencies = data.latencies.sort((a, b) => a - b);
-    const avgLatency = Math.round(latencies.reduce((sum, l) => sum + l, 0) / latencies.length);
+    const avgLatency = Math.round(
+      latencies.reduce((sum, l) => sum + l, 0) / latencies.length,
+    );
 
     // Calculate P95
     const p95Index = Math.floor(latencies.length * 0.95);

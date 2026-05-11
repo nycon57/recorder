@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 /**
  * Standard error response from API
  */
-export interface ApiErrorResponse {
+interface ApiErrorResponse {
   code: string;
   message: string;
   details?: any;
@@ -31,7 +31,7 @@ export class AppError extends Error {
     code: string = 'UNKNOWN_ERROR',
     statusCode?: number,
     details?: any,
-    requestId?: string
+    requestId?: string,
   ) {
     super(message);
     this.name = 'AppError';
@@ -45,7 +45,7 @@ export class AppError extends Error {
 /**
  * Parse API error response
  */
-export function parseApiError(error: any): AppError {
+function parseApiError(error: any): AppError {
   // Already an AppError
   if (error instanceof AppError) {
     return error;
@@ -61,7 +61,7 @@ export function parseApiError(error: any): AppError {
       data?.code || `HTTP_${statusCode}`,
       statusCode,
       data?.details,
-      data?.requestId
+      data?.requestId,
     );
   }
 
@@ -70,21 +70,21 @@ export function parseApiError(error: any): AppError {
     return new AppError(
       'Network error. Please check your connection and try again.',
       'NETWORK_ERROR',
-      0
+      0,
     );
   }
 
   // Generic error
   return new AppError(
     error.message || 'An unexpected error occurred',
-    'UNKNOWN_ERROR'
+    'UNKNOWN_ERROR',
   );
 }
 
 /**
  * Get user-friendly error message
  */
-export function getUserFriendlyMessage(error: AppError): string {
+function getUserFriendlyMessage(error: AppError): string {
   const errorMessages: Record<string, string> = {
     // Auth errors
     UNAUTHORIZED: 'You need to be logged in to perform this action.',
@@ -99,8 +99,10 @@ export function getUserFriendlyMessage(error: AppError): string {
     CONFLICT: 'This resource already exists.',
 
     // Rate limiting
-    RATE_LIMIT_EXCEEDED: 'Too many requests. Please wait a moment and try again.',
-    QUOTA_EXCEEDED: 'You have reached your quota limit. Please upgrade your plan.',
+    RATE_LIMIT_EXCEEDED:
+      'Too many requests. Please wait a moment and try again.',
+    QUOTA_EXCEEDED:
+      'You have reached your quota limit. Please upgrade your plan.',
 
     // File upload errors
     FILE_TOO_LARGE: 'The file is too large. Please choose a smaller file.',
@@ -117,10 +119,13 @@ export function getUserFriendlyMessage(error: AppError): string {
 
     // Server errors
     INTERNAL_ERROR: 'An internal error occurred. Please try again later.',
-    SERVICE_UNAVAILABLE: 'Service is temporarily unavailable. Please try again later.',
+    SERVICE_UNAVAILABLE:
+      'Service is temporarily unavailable. Please try again later.',
   };
 
-  return errorMessages[error.code] || error.message || 'An unexpected error occurred';
+  return (
+    errorMessages[error.code] || error.message || 'An unexpected error occurred'
+  );
 }
 
 /**
@@ -133,7 +138,7 @@ export function getAcceptedFileTypesMessage(): string {
 /**
  * Get file size limit message for a content type
  */
-export function getFileSizeLimitMessage(contentType: string): string {
+function getFileSizeLimitMessage(contentType: string): string {
   const limits: Record<string, string> = {
     video: '500 MB',
     recording: '500 MB',
@@ -174,8 +179,12 @@ const defaultRetryConfig: Required<RetryConfig> = {
 /**
  * Exponential backoff with jitter
  */
-function calculateDelay(attempt: number, config: Required<RetryConfig>): number {
-  const exponentialDelay = config.initialDelay * Math.pow(config.backoffMultiplier, attempt - 1);
+function calculateDelay(
+  attempt: number,
+  config: Required<RetryConfig>,
+): number {
+  const exponentialDelay =
+    config.initialDelay * Math.pow(config.backoffMultiplier, attempt - 1);
   const cappedDelay = Math.min(exponentialDelay, config.maxDelay);
   // Add jitter (±25%)
   const jitter = cappedDelay * (0.75 + Math.random() * 0.5);
@@ -185,18 +194,16 @@ function calculateDelay(attempt: number, config: Required<RetryConfig>): number 
 /**
  * Retry function with exponential backoff
  */
-export async function retryWithBackoff<T>(
+async function retryWithBackoff<T>(
   fn: () => Promise<T>,
-  config: RetryConfig = {}
+  config: RetryConfig = {},
 ): Promise<T> {
   const finalConfig = { ...defaultRetryConfig, ...config };
-  let lastError: AppError | null = null;
-
-  for (let attempt = 1; attempt <= finalConfig.maxAttempts; attempt++) {
+  const runAttempt = async (attempt: number): Promise<T> => {
     try {
       return await fn();
     } catch (error) {
-      lastError = parseApiError(error);
+      const lastError = parseApiError(error);
 
       // Don't retry if we shouldn't
       if (!finalConfig.shouldRetry(lastError)) {
@@ -210,42 +217,54 @@ export async function retryWithBackoff<T>(
 
       // Wait before retrying
       const delay = calculateDelay(attempt, finalConfig);
-      console.log(`[Retry] Attempt ${attempt} failed. Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      console.log(
+        `[Retry] Attempt ${attempt} failed. Retrying in ${delay}ms...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return runAttempt(attempt + 1);
     }
-  }
+  };
 
-  throw lastError;
+  return runAttempt(1);
 }
 
 /**
  * Show error toast notification
  */
-export function showErrorToast(error: AppError | Error | string, title?: string) {
-  const appError = typeof error === 'string'
-    ? new AppError(error)
-    : error instanceof AppError
-      ? error
-      : parseApiError(error);
+export function showErrorToast(
+  error: AppError | Error | string,
+  title?: string,
+) {
+  const appError =
+    typeof error === 'string'
+      ? new AppError(error)
+      : error instanceof AppError
+        ? error
+        : parseApiError(error);
 
   const message = getUserFriendlyMessage(appError);
 
   toast.error(title || 'Error', {
     description: message,
-    action: appError.requestId ? {
-      label: 'Copy Request ID',
-      onClick: () => {
-        navigator.clipboard.writeText(appError.requestId!);
-        toast.success('Request ID copied to clipboard');
-      },
-    } : undefined,
+    action: appError.requestId
+      ? {
+          label: 'Copy Request ID',
+          onClick: () => {
+            navigator.clipboard.writeText(appError.requestId!);
+            toast.success('Request ID copied to clipboard');
+          },
+        }
+      : undefined,
   });
 }
 
 /**
  * Log error with context (for debugging/monitoring)
  */
-export function logError(error: AppError | Error, context?: Record<string, any>) {
+export function logError(
+  error: AppError | Error,
+  context?: Record<string, any>,
+) {
   const appError = error instanceof AppError ? error : parseApiError(error);
 
   console.error('[Error]', {
@@ -273,7 +292,7 @@ export function logError(error: AppError | Error, context?: Record<string, any>)
 export async function fetchWithRetry<T = any>(
   url: string,
   options?: RequestInit,
-  retryConfig?: RetryConfig
+  retryConfig?: RetryConfig,
 ): Promise<T> {
   return retryWithBackoff(async () => {
     try {
@@ -286,7 +305,7 @@ export async function fetchWithRetry<T = any>(
           errorData.code || `HTTP_${response.status}`,
           response.status,
           errorData.details,
-          errorData.requestId
+          errorData.requestId,
         );
       }
 
@@ -301,10 +320,7 @@ export async function fetchWithRetry<T = any>(
         throw new AppError('Request was cancelled', 'ABORTED');
       }
 
-      throw new AppError(
-        error.message || 'Network error',
-        'NETWORK_ERROR'
-      );
+      throw new AppError(error.message || 'Network error', 'NETWORK_ERROR');
     }
   }, retryConfig);
 }
@@ -312,13 +328,13 @@ export async function fetchWithRetry<T = any>(
 /**
  * Wrap async function with error handling
  */
-export function withErrorHandling<T extends any[], R>(
+function withErrorHandling<T extends any[], R>(
   fn: (...args: T) => Promise<R>,
   options?: {
     onError?: (error: AppError) => void;
     showToast?: boolean;
     logError?: boolean;
-  }
+  },
 ) {
   return async (...args: T): Promise<R | undefined> => {
     try {

@@ -18,7 +18,11 @@ import {
 } from '@/app/components/ui/form';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
-import { vendorIngestInputSchema, type VendorIngestInput } from '@/lib/schemas/vendor-source';
+import {
+  vendorIngestInputSchema,
+  type VendorIngestFormValues,
+  type VendorIngestInput,
+} from '@/lib/schemas/vendor-source';
 
 /** Suggested tier-1 apps shown below the app input as quick-fill chips. */
 const TIER1_SUGGESTIONS = [
@@ -41,7 +45,7 @@ interface NewIngestFormProps {
 export function NewIngestForm({ onSuccess, defaultApp }: NewIngestFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const form = useForm<VendorIngestInput>({
+  const form = useForm<VendorIngestFormValues, any, VendorIngestInput>({
     resolver: zodResolver(vendorIngestInputSchema),
     defaultValues: {
       app: defaultApp ?? '',
@@ -229,7 +233,7 @@ export function NewIngestForm({ onSuccess, defaultApp }: NewIngestFormProps) {
                   placeholder="https://example.com/terms"
                   autoComplete="off"
                   {...field}
-                  value={field.value ?? ''}
+                  value={typeof field.value === 'string' ? field.value : ''}
                 />
               </FormControl>
               <FormDescription>
@@ -264,13 +268,13 @@ export function NewIngestForm({ onSuccess, defaultApp }: NewIngestFormProps) {
           control={form.control}
           name="force"
           render={({ field }) => (
-            <FormItem className="flex items-start gap-3 space-y-0">
+            <FormItem className="flex items-start gap-3 gap-y-0">
               <FormControl>
                 <input
                   type="checkbox"
                   checked={field.value ?? false}
                   onChange={(e) => field.onChange(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-border"
+                  className="mt-0.5 size-4 rounded border-border"
                 />
               </FormControl>
               <div className="space-y-0.5">

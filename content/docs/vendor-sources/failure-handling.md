@@ -1,11 +1,9 @@
 ---
-slug: vendor-sources/failure-handling
 title: Failure handling
 description: Diagnostic playbook for failed ingest_vendor_docs jobs — how to classify, re-queue, or escalate.
 audience: system-admin
 section: vendor-sources
 order: 20
-updatedAt: "2026-04-20"
 related:
   - vendor-sources/sync-lifecycle
   - vendor-sources/governance

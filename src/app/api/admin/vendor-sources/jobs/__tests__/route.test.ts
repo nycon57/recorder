@@ -32,9 +32,13 @@ jest.mock('@/lib/utils/api', () => ({
     }),
   errors: {
     badRequest: (msg: string) =>
-      new Response(JSON.stringify({ error: { message: msg } }), { status: 400 }),
+      new Response(JSON.stringify({ error: { message: msg } }), {
+        status: 400,
+      }),
     internalError: () =>
-      new Response(JSON.stringify({ error: { message: 'Internal error' } }), { status: 500 }),
+      new Response(JSON.stringify({ error: { message: 'Internal error' } }), {
+        status: 500,
+      }),
   },
 }));
 
@@ -84,14 +88,20 @@ function buildQueryChain(result: unknown) {
 
   const statusFilterResult = {
     then: (resolve: (v: unknown) => unknown) => resolve(result),
-    catch: (reject: (e: unknown) => unknown) => { void reject; return statusFilterResult; },
+    catch: (reject: (e: unknown) => unknown) => {
+      void reject;
+      return statusFilterResult;
+    },
   };
 
   const eqStatus = jest.fn().mockReturnValue(statusFilterResult);
 
   const limitResult = {
     then: (resolve: (v: unknown) => unknown) => resolve(result),
-    catch: (reject: (e: unknown) => unknown) => { void reject; return limitResult; },
+    catch: (reject: (e: unknown) => unknown) => {
+      void reject;
+      return limitResult;
+    },
     eq: eqStatus,
   };
 
@@ -135,7 +145,9 @@ describe('GET /api/admin/vendor-sources/jobs', () => {
     buildQueryChain({ data: [], error: null });
 
     const { GET } = await import('../route');
-    await expect(GET(makeRequest())).rejects.toThrow('System admin privileges required');
+    await expect(GET(makeRequest())).rejects.toThrow(
+      'System admin privileges required',
+    );
   });
 
   test('returns jobs on happy path', async () => {
@@ -143,7 +155,11 @@ describe('GET /api/admin/vendor-sources/jobs', () => {
       {
         id: 'job-1',
         status: 'completed',
-        payload: { app: 'hubspot', url: 'https://knowledge.hubspot.com', triggered_by_user_id: 'user-1' },
+        payload: {
+          app: 'hubspot',
+          url: 'https://knowledge.hubspot.com',
+          triggered_by_user_id: 'user-1',
+        },
         error: null,
         created_at: '2026-04-20T12:00:00.000Z',
         processing_started_at: '2026-04-20T12:00:05.000Z',
@@ -194,11 +210,13 @@ describe('GET /api/admin/vendor-sources/jobs', () => {
   test('accepts all valid status filter values', async () => {
     const validStatuses = ['pending', 'processing', 'completed', 'failed'];
 
-    for (const status of validStatuses) {
-      buildQueryChain({ data: [], error: null });
-      const { GET } = await import('../route');
-      const res = await GET(makeRequest({ status }));
-      expect(res.status).toBe(200);
-    }
+    await Promise.all(
+      Array.from(validStatuses).map(async (status) => {
+        buildQueryChain({ data: [], error: null });
+        const { GET } = await import('../route');
+        const res = await GET(makeRequest({ status }));
+        expect(res.status).toBe(200);
+      }),
+    );
   });
 });

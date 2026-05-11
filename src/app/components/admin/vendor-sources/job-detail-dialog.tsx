@@ -17,7 +17,7 @@ import {
   DialogTrigger,
 } from '@/app/components/ui/dialog';
 import { Badge } from '@/app/components/ui/badge';
-import { formatDistanceToNow } from 'date-fns';
+import { formatStableDateTime } from '@/lib/utils/formatting';
 
 interface JobDetailDialogProps {
   job: {
@@ -55,14 +55,14 @@ export function JobDetailDialog({ job, trigger }: JobDetailDialogProps) {
               <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Queued
               </p>
-              <p>{formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}</p>
+              <p>{formatStableDateTime(job.created_at)}</p>
             </div>
             {job.processing_started_at && (
               <div className="space-y-0.5">
                 <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                   Started
                 </p>
-                <p>{formatDistanceToNow(new Date(job.processing_started_at), { addSuffix: true })}</p>
+                <p>{formatStableDateTime(job.processing_started_at)}</p>
               </div>
             )}
             <div className="space-y-0.5">
@@ -74,12 +74,15 @@ export function JobDetailDialog({ job, trigger }: JobDetailDialogProps) {
           </div>
 
           {/* Triggered by */}
-          {job.triggeredByEmail || (job.payload?.triggered_by_user_id) ? (
+          {job.triggeredByEmail || job.payload?.triggered_by_user_id ? (
             <div className="space-y-0.5 text-xs">
               <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Triggered by
               </p>
-              <p>{job.triggeredByEmail ?? String(job.payload?.triggered_by_user_id ?? '—')}</p>
+              <p>
+                {job.triggeredByEmail ??
+                  String(job.payload?.triggered_by_user_id ?? '—')}
+              </p>
             </div>
           ) : null}
 
@@ -96,7 +99,9 @@ export function JobDetailDialog({ job, trigger }: JobDetailDialogProps) {
           {/* Payload */}
           {job.payload ? (
             <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">Payload</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Payload
+              </p>
               <pre className="bg-muted rounded-md p-3 text-xs font-mono overflow-x-auto">
                 {JSON.stringify(job.payload, null, 2)}
               </pre>

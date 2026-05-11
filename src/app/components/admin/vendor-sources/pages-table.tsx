@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { Suspense, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ExternalLink, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
 
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -27,6 +26,7 @@ import {
 } from '@/app/components/ui/table';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
 import { useFetchWithInterval } from '@/app/hooks/useFetchWithAbort';
+import { formatStableDateTime } from '@/lib/utils/formatting';
 
 interface VendorPage {
   id: string;
@@ -61,17 +61,18 @@ const PAGE_SIZE = 50;
  * and per-row delete via ConfirmationDialog (requires typing the `app` name).
  *
  * NOTE: vendor_wiki_pages has no soft-delete column. Deletion is permanent.
- * TRIB-152 will likely add a soft-delete / "retract" affordance — until then
+ * TRIB-152 will likely add a soft-delete / "retract" affordance - until then
  * deletions here are hard-deletes. This component should NOT add bulk-delete.
  *
  * TRIB-149
  */
-export function PagesTable({ availableApps }: PagesTableProps) {
-  const router = useRouter();
+function PagesTableContent({ availableApps }: PagesTableProps) {
+  const { push } = useRouter();
   const searchParams = useSearchParams();
+  const getSearchParam = searchParams.get.bind(searchParams);
 
-  const appFilter = searchParams.get('app') ?? '';
-  const offsetParam = searchParams.get('offset');
+  const appFilter = getSearchParam('app') ?? '';
+  const offsetParam = getSearchParam('offset');
   const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
 
   const [screenSearch, setScreenSearch] = useState('');
@@ -83,9 +84,11 @@ export function PagesTable({ availableApps }: PagesTableProps) {
     ? `/api/admin/vendor-sources/pages?app=${encodeURIComponent(appFilter)}&offset=${offset}`
     : `/api/admin/vendor-sources/pages?offset=${offset}`;
 
-  const { data, loading, refetch } = useFetchWithInterval<{ data: PagesResponse }>(
+  const { data, loading, refetch } = useFetchWithInterval<{
+    data: PagesResponse;
+  }>(
     queryUrl,
-    0, // no auto-poll — user-driven on this view
+    0, // no auto-poll - user-driven on this view
   );
 
   const pagesData = data?.data;
@@ -106,7 +109,7 @@ export function PagesTable({ availableApps }: PagesTableProps) {
       params.delete('app');
     }
     params.delete('offset');
-    router.push(`?${params.toString()}`);
+    push(`?${params.toString()}`);
   }
 
   function goToOffset(newOffset: number) {
@@ -116,16 +119,19 @@ export function PagesTable({ availableApps }: PagesTableProps) {
     } else {
       params.delete('offset');
     }
-    router.push(`?${params.toString()}`);
+    push(`?${params.toString()}`);
   }
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/admin/vendor-sources/pages/${deleteTarget.id}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(
+        `/api/admin/vendor-sources/pages/${deleteTarget.id}`,
+        {
+          method: 'DELETE',
+        },
+      );
 
       if (!res.ok) {
         const json = await res.json().catch(() => null);
@@ -137,7 +143,7 @@ export function PagesTable({ availableApps }: PagesTableProps) {
       setDeleteTarget(null);
       refetch();
     } catch (err) {
-      toast.error('Network error — please try again.');
+      toast.error('Network error - please try again.');
       console.error('[PagesTable] delete error:', err);
     } finally {
       setIsDeleting(false);
@@ -186,7 +192,9 @@ export function PagesTable({ availableApps }: PagesTableProps) {
               <TableHead className="w-28">App</TableHead>
               <TableHead>Screen</TableHead>
               <TableHead className="hidden lg:table-cell">Source URL</TableHead>
-              <TableHead className="hidden md:table-cell w-36">Updated</TableHead>
+              <TableHead className="hidden md:table-cell w-36">
+                Updated
+              </TableHead>
               <TableHead className="hidden xl:table-cell w-32">Hash</TableHead>
               <TableHead className="w-24 text-right">Actions</TableHead>
             </TableRow>
@@ -194,7 +202,10 @@ export function PagesTable({ availableApps }: PagesTableProps) {
           <TableBody>
             {pages.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
                   {loading ? 'Loading pages…' : 'No pages found.'}
                 </TableCell>
               </TableRow>
@@ -223,14 +234,14 @@ export function PagesTable({ availableApps }: PagesTableProps) {
                         className="inline-flex items-center gap-1 text-xs text-primary hover:underline truncate"
                       >
                         {page.source_url}
-                        <ExternalLink className="h-3 w-3 shrink-0" />
+                        <ExternalLink className="size-3 shrink-0" />
                       </a>
                     ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(page.updated_at), { addSuffix: true })}
+                    {formatStableDateTime(page.updated_at)}
                   </TableCell>
                   <TableCell className="hidden xl:table-cell">
                     {page.content_hash ? (
@@ -241,13 +252,20 @@ export function PagesTable({ availableApps }: PagesTableProps) {
                         {page.content_hash.slice(0, 10)}…
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="sm" asChild className="h-7 px-2">
-                        <Link href={`/admin/vendor-sources/pages/${page.id}`}>View</Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                        className="h-7 px-2"
+                      >
+                        <Link href={`/admin/vendor-sources/pages/${page.id}`}>
+                          View
+                        </Link>
                       </Button>
                       <Button
                         variant="ghost"
@@ -255,7 +273,7 @@ export function PagesTable({ availableApps }: PagesTableProps) {
                         className="h-7 px-2 text-destructive hover:text-destructive"
                         onClick={() => setDeleteTarget(page)}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="size-3.5" />
                       </Button>
                     </div>
                   </TableCell>
@@ -291,7 +309,7 @@ export function PagesTable({ availableApps }: PagesTableProps) {
         </div>
       )}
 
-      {/* Delete confirmation dialog — requires typing the app name */}
+      {/* Delete confirmation dialog - requires typing the app name */}
       <ConfirmationDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
@@ -316,5 +334,13 @@ export function PagesTable({ availableApps }: PagesTableProps) {
         ]}
       />
     </div>
+  );
+}
+
+export function PagesTable(props: PagesTableProps) {
+  return (
+    <Suspense fallback={null}>
+      <PagesTableContent {...props} />
+    </Suspense>
   );
 }

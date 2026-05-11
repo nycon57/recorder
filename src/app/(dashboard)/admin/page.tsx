@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   Activity,
@@ -21,6 +22,7 @@ import {
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
 import { useFetchWithInterval } from '@/app/hooks/useFetchWithAbort';
+import { formatStableTime } from '@/lib/utils/formatting';
 
 interface DashboardMetrics {
   summary: {
@@ -74,7 +76,7 @@ export default function AdminDashboard() {
   if (loading && !metrics) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -83,7 +85,7 @@ export default function AdminDashboard() {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
@@ -100,7 +102,7 @@ export default function AdminDashboard() {
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="trbd-icon-chip">
-            <Shield className="h-6 w-6 text-primary" />
+            <Shield className="size-6 text-primary" />
           </div>
           <div>
             <h1 className="trbd-page-title">System Dashboard</h1>
@@ -110,14 +112,14 @@ export default function AdminDashboard() {
           </div>
         </div>
         <Badge variant="outline" className="text-sm">
-          Last updated: {new Date().toLocaleTimeString()}
+          Last updated: {formatStableTime()}
         </Badge>
       </div>
 
       {/* Critical Alerts Warning */}
       {metrics.summary.criticalAlerts > 0 && (
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>
             {metrics.summary.criticalAlerts} critical alert
             {metrics.summary.criticalAlerts > 1 ? 's' : ''} require immediate
@@ -130,11 +132,11 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Searches */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Total Searches
             </CardTitle>
-            <Search className="h-4 w-4 text-muted-foreground" />
+            <Search className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -146,9 +148,9 @@ export default function AdminDashboard() {
 
         {/* P95 Latency */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">P95 Latency</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <Clock className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -160,11 +162,11 @@ export default function AdminDashboard() {
 
         {/* Cache Hit Rate */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Cache Hit Rate
             </CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
+            <Zap className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -176,9 +178,9 @@ export default function AdminDashboard() {
 
         {/* Active Jobs */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Jobs</CardTitle>
-            <Database className="h-4 w-4 text-muted-foreground" />
+            <Database className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -275,11 +277,11 @@ export default function AdminDashboard() {
 
       {/* Quick Links */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <a href="/admin/metrics">
+        <Link href="/admin/metrics">
           <Card className="hover:bg-accent cursor-pointer transition-colors">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
+                <Activity className="size-5" />
                 View Metrics
               </CardTitle>
             </CardHeader>
@@ -289,13 +291,13 @@ export default function AdminDashboard() {
               </p>
             </CardContent>
           </Card>
-        </a>
+        </Link>
 
-        <a href="/admin/jobs">
+        <Link href="/admin/jobs">
           <Card className="hover:bg-accent cursor-pointer transition-colors">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Database className="h-5 w-5" />
+                <Database className="size-5" />
                 Manage Jobs
               </CardTitle>
             </CardHeader>
@@ -305,13 +307,13 @@ export default function AdminDashboard() {
               </p>
             </CardContent>
           </Card>
-        </a>
+        </Link>
 
-        <a href="/admin/quotas">
+        <Link href="/admin/quotas">
           <Card className="hover:bg-accent cursor-pointer transition-colors">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
+                <TrendingUp className="size-5" />
                 View Quotas
               </CardTitle>
             </CardHeader>
@@ -321,7 +323,7 @@ export default function AdminDashboard() {
               </p>
             </CardContent>
           </Card>
-        </a>
+        </Link>
       </div>
     </div>
   );

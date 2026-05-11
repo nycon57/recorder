@@ -79,10 +79,11 @@ export const GET = apiHandler(async (_request: NextRequest) => {
   // a page gets deleted after detection runs) are handled gracefully.
   const centralIds = Array.from(
     new Set(
-      clusters
-        .map((c) => c.central_page_id)
-        .filter((id): id is string => id !== null)
-    )
+      clusters.flatMap((__item, __index, __array) => {
+        const __mapped = __item.central_page_id;
+        return __mapped !== null ? [__mapped] : [];
+      }),
+    ),
   );
 
   const topicById = new Map<string, string>();
@@ -96,7 +97,7 @@ export const GET = apiHandler(async (_request: NextRequest) => {
     if (pagesError) {
       console.error(
         '[GET /api/knowledge/clusters] central page fetch failed',
-        pagesError
+        pagesError,
       );
       // Non-fatal — we can still return cluster rows without topics.
     } else {

@@ -84,7 +84,10 @@ export interface VendorCorpusPageMatch {
   matchType: 'semantic' | 'exact';
 }
 
-export function formatVendorKnowledgeTitle(app: string, screen: string | null): string {
+export function formatVendorKnowledgeTitle(
+  app: string,
+  screen: string | null,
+): string {
   const appLabel = VENDOR_LABELS[app.toLowerCase()] ?? humanizeSlug(app);
   const screenLabel = humanizeSlug(screen || 'overview');
   return `${appLabel} ${screenLabel}`.trim();
@@ -102,8 +105,11 @@ function normalizeScreen(value: string | null | undefined): string | null {
 function humanizeSlug(value: string): string {
   return value
     .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .flatMap((__item, __index, __array) =>
+      __item
+        ? [__item.charAt(0).toUpperCase() + __item.slice(1)]
+        : [],
+    )
     .join(' ');
 }
 
@@ -116,7 +122,10 @@ function normalizeVendorContent(content: string): string {
 }
 
 function buildVendorContentExcerpt(content: string): string {
-  return content.replace(/\s+/g, ' ').trim().slice(0, CONTENT_EXCERPT_MAX_CHARS);
+  return content
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, CONTENT_EXCERPT_MAX_CHARS);
 }
 
 function extractMarkdownHeading(content: string): string | null {
@@ -124,7 +133,10 @@ function extractMarkdownHeading(content: string): string | null {
   return match?.[1]?.trim() ?? null;
 }
 
-function deriveVendorCorpusTitle(page: VendorWikiPage, normalizedContent: string): string {
+function deriveVendorCorpusTitle(
+  page: VendorWikiPage,
+  normalizedContent: string,
+): string {
   return (
     extractMarkdownHeading(normalizedContent) ??
     humanizeSlug(page.screen || 'overview')
@@ -147,7 +159,10 @@ function buildVendorEmbeddingInput(args: {
     .slice(0, EMBEDDING_INPUT_MAX_CHARS);
 }
 
-function ensureVendorContentHash(page: VendorWikiPage, normalizedContent: string): string {
+function ensureVendorContentHash(
+  page: VendorWikiPage,
+  normalizedContent: string,
+): string {
   if (page.content_hash) {
     return page.content_hash;
   }
@@ -197,7 +212,7 @@ function computeKeywordScore(tokens: string[], searchableText: string): number {
   let matchedTokens = 0;
 
   for (const token of tokens) {
-    if (normalizedText.includes(token)) {
+    if (containsText(normalizedText, token)) {
       matchedTokens += 1;
     }
   }
@@ -205,16 +220,24 @@ function computeKeywordScore(tokens: string[], searchableText: string): number {
   return matchedTokens / Math.min(tokens.length, 6);
 }
 
-export async function syncVendorCorpusFromLegacyPages(args: {
-  app: string;
-}, deps: VendorDocCorpusDeps = {}): Promise<{
+function containsText(text: string, searchText: string) {
+  return text.includes(searchText);
+}
+
+export async function syncVendorCorpusFromLegacyPages(
+  args: {
+    app: string;
+  },
+  deps: VendorDocCorpusDeps = {},
+): Promise<{
   inserted: number;
   updated: number;
   skipped: number;
 }> {
   const app = normalizeApp(args.app);
   const supabase = deps.supabase ?? supabaseAdmin;
-  const generateEmbedding = deps.generateEmbedding ?? generateEmbeddingWithFallback;
+  const generateEmbedding =
+    deps.generateEmbedding ?? generateEmbeddingWithFallback;
 
   const { data: legacyData, error: legacyError } = await supabase
     .from('vendor_wiki_pages')
@@ -225,18 +248,22 @@ export async function syncVendorCorpusFromLegacyPages(args: {
     .is('retired_at', null);
 
   if (legacyError) {
-    throw new Error(`Failed to load legacy vendor pages for ${app}: ${legacyError.message}`);
+    throw new Error(
+      `Failed to load legacy vendor pages for ${app}: ${legacyError.message}`,
+    );
   }
 
-  const legacyPages = await filterQueryableVendorSourceRows(
-    (legacyData as VendorWikiPage[] | null) ?? [],
-    supabase,
-  );
-
-  const { data: existingData, error: existingError } = await supabase
-    .from('vendor_corpus_pages')
-    .select('id, vendor_page_id, content_hash, embedding')
-    .eq('app', app);
+  const [legacyPages, { data: existingData, error: existingError }] =
+    await Promise.all([
+      filterQueryableVendorSourceRows(
+        (legacyData as VendorWikiPage[] | null) ?? [],
+        supabase,
+      ),
+      supabase
+        .from('vendor_corpus_pages')
+        .select('id, vendor_page_id, content_hash, embedding')
+        .eq('app', app),
+    ]);
 
   if (existingError) {
     throw new Error(
@@ -245,27 +272,34 @@ export async function syncVendorCorpusFromLegacyPages(args: {
   }
 
   const existingRows =
-    (existingData as
-      | Array<Pick<VendorCorpusPageRow, 'id' | 'vendor_page_id' | 'content_hash' | 'embedding'>>
-      | null) ?? [];
+    (existingData as Array<
+      Pick<
+        VendorCorpusPageRow,
+        'id' | 'vendor_page_id' | 'content_hash' | 'embedding'
+      >
+    > | null) ?? [];
 
   const existingByVendorPageId = new Map(
-    existingRows
-      .filter((row) => row.vendor_page_id != null)
-      .map((row) => [row.vendor_page_id as string, row]),
+    existingRows.flatMap((row) =>
+      row.vendor_page_id != null
+        ? ([[row.vendor_page_id as string, row]] as const)
+        : [],
+    ),
   );
   const activeVendorPageIds = new Set(legacyPages.map((page) => page.id));
-  const staleCorpusIds = existingRows
-    .filter(
-      (row) =>
-        row.vendor_page_id != null && !activeVendorPageIds.has(row.vendor_page_id),
-    )
-    .map((row) => row.id);
+  const staleCorpusIds = existingRows.flatMap((__item, __index, __array) =>
+    __item.vendor_page_id != null &&
+    !activeVendorPageIds.has(__item.vendor_page_id)
+      ? [__item.id]
+      : [],
+  );
 
   if (staleCorpusIds.length > 0) {
-    const { error: deleteError } = await (supabase
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .from('vendor_corpus_pages') as any)
+    const { error: deleteError } = await (
+      supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .from('vendor_corpus_pages') as any
+    )
       .delete()
       .in('id', staleCorpusIds);
 
@@ -284,76 +318,84 @@ export async function syncVendorCorpusFromLegacyPages(args: {
     };
   }
 
-  const rowsToUpsert: Array<Record<string, unknown>> = [];
-  let inserted = 0;
-  let updated = 0;
-  let skipped = 0;
+  const preparedPages = await Promise.all(
+    legacyPages.map(async (page) => {
+      const normalizedContent = normalizeVendorContent(page.content ?? '');
+      if (!normalizedContent) {
+        return { status: 'skipped' as const };
+      }
 
-  for (const page of legacyPages) {
-    const normalizedContent = normalizeVendorContent(page.content ?? '');
-    if (!normalizedContent) {
-      skipped += 1;
-      continue;
-    }
+      const contentHash = ensureVendorContentHash(page, normalizedContent);
+      const existingRow = existingByVendorPageId.get(page.id);
 
-    const contentHash = ensureVendorContentHash(page, normalizedContent);
-    const existingRow = existingByVendorPageId.get(page.id);
+      if (
+        existingRow &&
+        existingRow.content_hash === contentHash &&
+        Array.isArray(existingRow.embedding) &&
+        existingRow.embedding.length > 0
+      ) {
+        return { status: 'skipped' as const };
+      }
 
-    if (
-      existingRow &&
-      existingRow.content_hash === contentHash &&
-      Array.isArray(existingRow.embedding) &&
-      existingRow.embedding.length > 0
-    ) {
-      skipped += 1;
-      continue;
-    }
-
-    const title = deriveVendorCorpusTitle(page, normalizedContent);
-    const excerpt = buildVendorContentExcerpt(normalizedContent);
-    const embeddingInput = buildVendorEmbeddingInput({
-      app,
-      screen: normalizeScreen(page.screen),
-      title,
-      excerpt,
-    });
-
-    const { embedding } = await generateEmbedding(
-      embeddingInput,
-      'RETRIEVAL_DOCUMENT',
-    );
-
-    rowsToUpsert.push({
-      app,
-      screen: normalizeScreen(page.screen),
-      title,
-      normalized_content: normalizedContent,
-      content_excerpt: excerpt,
-      source_url: page.source_url,
-      vendor_page_id: page.id,
-      vendor_source_id: page.vendor_source_id,
-      content_hash: contentHash,
-      embedding: JSON.stringify(embedding),
-      updated_at: new Date().toISOString(),
-    });
-
-    if (existingRow) {
-      updated += 1;
-    } else {
-      inserted += 1;
-    }
-  }
-
-  if (rowsToUpsert.length > 0) {
-    const { error: upsertError } = await (supabase
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .from('vendor_corpus_pages') as any)
-      .upsert(rowsToUpsert, {
-        onConflict: 'vendor_page_id',
+      const title = deriveVendorCorpusTitle(page, normalizedContent);
+      const excerpt = buildVendorContentExcerpt(normalizedContent);
+      const embeddingInput = buildVendorEmbeddingInput({
+        app,
+        screen: normalizeScreen(page.screen),
+        title,
+        excerpt,
       });
 
+      const { embedding } = await generateEmbedding(
+        embeddingInput,
+        'RETRIEVAL_DOCUMENT',
+      );
+
+      return {
+        status: existingRow ? ('updated' as const) : ('inserted' as const),
+        row: {
+          app,
+          screen: normalizeScreen(page.screen),
+          title,
+          normalized_content: normalizedContent,
+          content_excerpt: excerpt,
+          source_url: page.source_url,
+          vendor_page_id: page.id,
+          vendor_source_id: page.vendor_source_id,
+          content_hash: contentHash,
+          embedding: JSON.stringify(embedding),
+          updated_at: new Date().toISOString(),
+        },
+      };
+    }),
+  );
+
+  const rowsToUpsert = preparedPages.flatMap((page) =>
+    'row' in page ? [page.row] : [],
+  );
+  const inserted = preparedPages.filter(
+    (page) => page.status === 'inserted',
+  ).length;
+  const updated = preparedPages.filter(
+    (page) => page.status === 'updated',
+  ).length;
+  const skipped = preparedPages.filter(
+    (page) => page.status === 'skipped',
+  ).length;
+
+  if (rowsToUpsert.length > 0) {
+    const { error: upsertError } = await (
+      supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .from('vendor_corpus_pages') as any
+    ).upsert(rowsToUpsert, {
+      onConflict: 'vendor_page_id',
+    });
+
     if (upsertError) {
-      throw new Error(`Failed to upsert vendor corpus pages for ${app}: ${upsertError.message}`);
+      throw new Error(
+        `Failed to upsert vendor corpus pages for ${app}: ${upsertError.message}`,
+      );
     }
   }
 
@@ -373,13 +415,16 @@ export async function syncVendorCorpusFromLegacyPages(args: {
   };
 }
 
-export async function resolveVendorCorpusPages(args: {
-  app: string;
-  screen?: string;
-  question: string;
-  questionEmbedding: number[];
-  limit?: number;
-}, deps: VendorDocCorpusDeps = {}): Promise<VendorCorpusPageMatch[]> {
+export async function resolveVendorCorpusPages(
+  args: {
+    app: string;
+    screen?: string;
+    question: string;
+    questionEmbedding: number[];
+    limit?: number;
+  },
+  deps: VendorDocCorpusDeps = {},
+): Promise<VendorCorpusPageMatch[]> {
   const app = normalizeApp(args.app);
   const screen = normalizeScreen(args.screen);
   const questionTokens = tokenize(args.question);
@@ -388,10 +433,13 @@ export async function resolveVendorCorpusPages(args: {
   try {
     await syncVendorCorpusFromLegacyPages({ app }, deps);
   } catch (error) {
-    logger.warn('Vendor corpus sync failed during retrieval; continuing with existing corpus', {
-      context: { app, screen },
-      error: error as Error,
-    });
+    logger.warn(
+      'Vendor corpus sync failed during retrieval; continuing with existing corpus',
+      {
+        context: { app, screen },
+        error: error as Error,
+      },
+    );
   }
 
   const { data, error } = await supabase
@@ -402,7 +450,9 @@ export async function resolveVendorCorpusPages(args: {
     .eq('app', app);
 
   if (error) {
-    throw new Error(`Failed to load vendor corpus pages for ${app}: ${error.message}`);
+    throw new Error(
+      `Failed to load vendor corpus pages for ${app}: ${error.message}`,
+    );
   }
 
   const rows = await filterQueryableVendorSourceRows(
@@ -414,12 +464,13 @@ export async function resolveVendorCorpusPages(args: {
   }
 
   const rankedResults = rows
-    .map((row) => {
+    .flatMap((row) => {
       const semanticSimilarity = cosineSimilarity(
         args.questionEmbedding,
         row.embedding ?? [],
       );
-      const exactScreenMatch = screen != null && normalizeScreen(row.screen) === screen;
+      const exactScreenMatch =
+        screen != null && normalizeScreen(row.screen) === screen;
       const keywordScore = computeKeywordScore(
         questionTokens,
         `${row.title} ${row.screen ?? ''} ${row.content_excerpt} ${row.normalized_content}`,
@@ -431,20 +482,24 @@ export async function resolveVendorCorpusPages(args: {
           (exactScreenMatch ? SCREEN_MATCH_BOOST : 0),
       );
 
-      return {
-        row,
-        semanticSimilarity,
-        keywordScore,
-        exactScreenMatch,
-        combinedScore,
-      };
+      if (
+        !exactScreenMatch &&
+        semanticSimilarity < MIN_SEMANTIC_SIMILARITY &&
+        keywordScore < MIN_KEYWORD_SCORE
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          row,
+          semanticSimilarity,
+          keywordScore,
+          exactScreenMatch,
+          combinedScore,
+        },
+      ];
     })
-    .filter(
-      (result) =>
-        result.exactScreenMatch ||
-        result.semanticSimilarity >= MIN_SEMANTIC_SIMILARITY ||
-        result.keywordScore >= MIN_KEYWORD_SCORE,
-    )
     .sort((left, right) => {
       if (left.exactScreenMatch !== right.exactScreenMatch) {
         return left.exactScreenMatch ? -1 : 1;

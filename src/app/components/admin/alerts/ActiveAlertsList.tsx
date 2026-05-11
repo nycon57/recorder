@@ -1,9 +1,23 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { AlertCircle, AlertTriangle, Info, Clock, CheckCircle2, X } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  AlertCircle,
+  AlertTriangle,
+  Info,
+  Clock,
+  CheckCircle2,
+  X,
+} from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
@@ -29,81 +43,37 @@ interface Alert {
 }
 
 export default function ActiveAlertsList() {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
-  const [actionType, setActionType] = useState<'acknowledge' | 'resolve' | 'dismiss' | null>(null);
+  const [actionType, setActionType] = useState<
+    'acknowledge' | 'resolve' | 'dismiss' | null
+  >(null);
   const [processing, setProcessing] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    const fetchAlertsWithAbort = async () => {
-      // Abort previous request if it exists
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      // Create new AbortController for this fetch
-      abortControllerRef.current = new AbortController();
-
-      try {
-        const response = await fetch('/api/analytics/alerts?resolved=false', {
-          signal: abortControllerRef.current.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch alerts');
-        }
-
-        const { data } = await response.json();
-        setAlerts(data.alerts || []);
-        setError(null);
-      } catch (err) {
-        // Ignore abort errors
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-
-        console.error('Error fetching alerts:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load alerts');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAlertsWithAbort();
-
-    // Auto-refresh every 15 seconds
-    const interval = setInterval(fetchAlertsWithAbort, 15000);
-
-    return () => {
-      clearInterval(interval);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
-
-  const fetchAlerts = async () => {
-    try {
-      const response = await fetch('/api/analytics/alerts?resolved=false');
+  const {
+    data: alerts = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<Alert[], Error>({
+    queryKey: ['analytics', 'alerts', 'active'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch('/api/analytics/alerts?resolved=false', {
+        signal,
+      });
 
       if (!response.ok) {
         throw new Error('Failed to fetch alerts');
       }
 
       const { data } = await response.json();
-      setAlerts(data.alerts || []);
-    } catch (err) {
-      console.error('Error fetching alerts:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load alerts');
-    } finally {
-      setLoading(false);
-    }
-  };
+      return data.alerts || [];
+    },
+    refetchInterval: 15000,
+  });
 
-  const handleAlertAction = async (alert: Alert, action: 'acknowledge' | 'resolve' | 'dismiss') => {
+  const handleAlertAction = async (
+    alert: Alert,
+    action: 'acknowledge' | 'resolve' | 'dismiss',
+  ) => {
     setSelectedAlert(alert);
     setActionType(action);
   };
@@ -113,9 +83,10 @@ export default function ActiveAlertsList() {
 
     setProcessing(true);
     try {
-      const endpoint = actionType === 'dismiss'
-        ? `/api/analytics/alerts/${selectedAlert.id}/dismiss`
-        : `/api/analytics/alerts/${selectedAlert.id}`;
+      const endpoint =
+        actionType === 'dismiss'
+          ? `/api/analytics/alerts/${selectedAlert.id}/dismiss`
+          : `/api/analytics/alerts/${selectedAlert.id}`;
 
       const response = await fetch(endpoint, {
         method: actionType === 'dismiss' ? 'POST' : 'PATCH',
@@ -128,7 +99,7 @@ export default function ActiveAlertsList() {
       }
 
       // Refresh alerts list
-      await fetchAlerts();
+      await refetch();
 
       setSelectedAlert(null);
       setActionType(null);
@@ -143,17 +114,19 @@ export default function ActiveAlertsList() {
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
       case 'critical':
-        return <AlertCircle className="h-4 w-4 text-red-600" />;
+        return <AlertCircle className="size-4 text-red-600" />;
       case 'warning':
-        return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+        return <AlertTriangle className="size-4 text-yellow-600" />;
       case 'info':
-        return <Info className="h-4 w-4 text-blue-600" />;
+        return <Info className="size-4 text-blue-600" />;
       default:
         return null;
     }
   };
 
-  const getSeverityBadgeVariant = (severity: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
+  const getSeverityBadgeVariant = (
+    severity: string,
+  ): 'default' | 'secondary' | 'destructive' | 'outline' => {
     switch (severity) {
       case 'critical':
         return 'destructive';
@@ -180,7 +153,7 @@ export default function ActiveAlertsList() {
     return `${diffDays}d ago`;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -189,9 +162,11 @@ export default function ActiveAlertsList() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-24 w-full" />
-            ))}
+            {['alert-skeleton-1', 'alert-skeleton-2', 'alert-skeleton-3'].map(
+              (skeletonId) => (
+                <Skeleton key={skeletonId} className="h-24 w-full" />
+              ),
+            )}
           </div>
         </CardContent>
       </Card>
@@ -202,7 +177,9 @@ export default function ActiveAlertsList() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading alerts: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading alerts: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -222,7 +199,7 @@ export default function ActiveAlertsList() {
         <CardContent>
           {alerts.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-600" />
+              <CheckCircle2 className="size-12 mx-auto mb-4 text-green-600" />
               <p className="text-sm">All systems operating normally</p>
             </div>
           ) : (
@@ -240,7 +217,9 @@ export default function ActiveAlertsList() {
                       </div>
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center gap-2">
-                          <Badge variant={getSeverityBadgeVariant(alert.severity)}>
+                          <Badge
+                            variant={getSeverityBadgeVariant(alert.severity)}
+                          >
                             {alert.severity.toUpperCase()}
                           </Badge>
                           <Badge variant="outline" className="text-xs">
@@ -248,17 +227,19 @@ export default function ActiveAlertsList() {
                           </Badge>
                           {alert.acknowledged && (
                             <Badge variant="outline" className="text-xs">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              <CheckCircle2 className="size-3 mr-1" />
                               Acknowledged
                             </Badge>
                           )}
                         </div>
                         <p className="text-sm font-medium">{alert.message}</p>
                         {alert.details && (
-                          <p className="text-xs text-muted-foreground">{alert.details}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {alert.details}
+                          </p>
                         )}
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
+                          <Clock className="size-3" />
                           <span>{formatDate(alert.createdAt)}</span>
                         </div>
                       </div>
@@ -270,7 +251,9 @@ export default function ActiveAlertsList() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleAlertAction(alert, 'acknowledge')}
+                          onClick={() =>
+                            handleAlertAction(alert, 'acknowledge')
+                          }
                         >
                           Acknowledge
                         </Button>
@@ -287,7 +270,7 @@ export default function ActiveAlertsList() {
                         variant="ghost"
                         onClick={() => handleAlertAction(alert, 'dismiss')}
                       >
-                        <X className="h-4 w-4" />
+                        <X className="size-4" />
                       </Button>
                     </div>
                   </div>

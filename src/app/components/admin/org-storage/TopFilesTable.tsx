@@ -1,10 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { FileVideo, User, Calendar, HardDrive, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  FileVideo,
+  User,
+  Calendar,
+  HardDrive,
+  ExternalLink,
+} from 'lucide-react';
 import Link from 'next/link';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
@@ -27,59 +40,34 @@ interface TopFilesTableProps {
 }
 
 export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
-  const [files, setFiles] = useState<FileRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(10);
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const {
+    data: files = [],
+    isLoading,
+    error,
+  } = useQuery<FileRecord[], Error>({
+    queryKey: [
+      'analytics',
+      'organizations',
+      organizationId,
+      'top-files',
+      limit,
+    ],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        `/api/analytics/organizations/${organizationId}/top-files?limit=${limit}`,
+        { signal },
+      );
 
-    const fetchFiles = async () => {
-      setLoading(true);
-
-      try {
-        const response = await fetch(
-          `/api/analytics/organizations/${organizationId}/top-files?limit=${limit}`,
-          {
-            signal: controller.signal,
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch top files');
-        }
-
-        const { data } = await response.json();
-
-        // Guard state updates
-        if (!controller.signal.aborted) {
-          setFiles(data.files || []);
-          setError(null);
-        }
-      } catch (err) {
-        // Ignore abort errors
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-
-        console.error('Error fetching top files:', err);
-        if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Failed to load files');
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
+      if (!response.ok) {
+        throw new Error('Failed to fetch top files');
       }
-    };
 
-    fetchFiles();
-
-    return () => {
-      controller.abort();
-    };
-  }, [organizationId, limit]);
+      const { data } = await response.json();
+      return data.files || [];
+    },
+  });
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
@@ -90,7 +78,9 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
     });
   };
 
-  const getTierBadgeVariant = (tier: string): 'default' | 'secondary' | 'outline' => {
+  const getTierBadgeVariant = (
+    tier: string,
+  ): 'default' | 'secondary' | 'outline' => {
     switch (tier) {
       case 'hot':
         return 'default';
@@ -101,7 +91,7 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -110,8 +100,14 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <Skeleton key={i} className="h-16 w-full" />
+            {[
+              'top-file-1',
+              'top-file-2',
+              'top-file-3',
+              'top-file-4',
+              'top-file-5',
+            ].map((skeletonId) => (
+              <Skeleton key={skeletonId} className="h-16 w-full" />
             ))}
           </div>
         </CardContent>
@@ -123,7 +119,9 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading top files: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading top files: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -135,7 +133,7 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <FileVideo className="h-5 w-5" />
+              <FileVideo className="size-5" />
               Largest Files
             </CardTitle>
             <CardDescription>
@@ -170,7 +168,7 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
       <CardContent>
         {files.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            <FileVideo className="h-12 w-12 mx-auto mb-4" />
+            <FileVideo className="size-12 mx-auto mb-4" />
             <p className="text-sm">No files found for this organization</p>
           </div>
         ) : (
@@ -193,20 +191,24 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
               >
                 {/* File Info */}
                 <div className="col-span-4 flex items-center gap-3">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                  <div className="flex items-center justify-center size-8 rounded-full bg-primary/10 text-primary text-xs font-bold">
                     {index + 1}
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{file.title}</p>
-                    <p className="text-xs text-muted-foreground">{file.mimeType}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {file.mimeType}
+                    </p>
                   </div>
                 </div>
 
                 {/* Size */}
                 <div className="col-span-2">
                   <div className="flex items-center gap-2">
-                    <HardDrive className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-sm font-medium">{formatBytes(file.size)}</span>
+                    <HardDrive className="size-3 text-muted-foreground" />
+                    <span className="text-sm font-medium">
+                      {formatBytes(file.size)}
+                    </span>
                   </div>
                   {file.compressionRate > 0 && (
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -217,7 +219,10 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
 
                 {/* Tier */}
                 <div className="col-span-2">
-                  <Badge variant={getTierBadgeVariant(file.tier)} className="text-xs">
+                  <Badge
+                    variant={getTierBadgeVariant(file.tier)}
+                    className="text-xs"
+                  >
                     {file.tier.toUpperCase()}
                   </Badge>
                 </div>
@@ -225,7 +230,7 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
                 {/* User */}
                 <div className="col-span-2">
                   <div className="flex items-center gap-2">
-                    <User className="h-3 w-3 text-muted-foreground" />
+                    <User className="size-3 text-muted-foreground" />
                     <span className="text-sm truncate">{file.userName}</span>
                   </div>
                 </div>
@@ -233,7 +238,7 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
                 {/* Date */}
                 <div className="col-span-1">
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Calendar className="h-3 w-3" />
+                    <Calendar className="size-3" />
                     <span>{formatDate(file.uploadedAt)}</span>
                   </div>
                 </div>
@@ -241,8 +246,13 @@ export default function TopFilesTable({ organizationId }: TopFilesTableProps) {
                 {/* Actions */}
                 <div className="col-span-1 flex justify-end">
                   <Link href={`/recordings/${file.id}`} target="_blank">
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label="Open recording in new tab">
-                      <ExternalLink className="h-3 w-3" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="size-8 p-0"
+                      aria-label="Open recording in new tab"
+                    >
+                      <ExternalLink className="size-3" />
                     </Button>
                   </Link>
                 </div>

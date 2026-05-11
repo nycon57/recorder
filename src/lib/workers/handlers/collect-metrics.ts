@@ -42,20 +42,24 @@ export async function handleCollectMetrics(job: Job): Promise<void> {
       return;
     }
 
-    logger.info(`Processing metrics for ${organizations.length} organization(s)`);
+    logger.info(
+      `Processing metrics for ${organizations.length} organization(s)`,
+    );
 
     // Process each organization
-    for (const org of organizations) {
-      try {
-        await collectMetricsForOrganization(supabase, org.id, org.name);
-      } catch (error) {
-        logger.error('Failed to collect metrics for organization', {
-          context: { organizationId: org.id, organizationName: org.name },
-          error: error as Error,
-        });
-        // Continue processing other organizations even if one fails
-      }
-    }
+    await Promise.all(
+      Array.from(organizations).map(async (org) => {
+        try {
+          await collectMetricsForOrganization(supabase, org.id, org.name);
+        } catch (error) {
+          logger.error('Failed to collect metrics for organization', {
+            context: { organizationId: org.id, organizationName: org.name },
+            error: error as Error,
+          });
+          // Continue processing other organizations even if one fails
+        }
+      }),
+    );
 
     logger.info('Metrics collection completed successfully');
   } catch (error) {
@@ -67,7 +71,7 @@ export async function handleCollectMetrics(job: Job): Promise<void> {
 async function collectMetricsForOrganization(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  orgName: string
+  orgName: string,
 ): Promise<void> {
   logger.debug('Collecting metrics for organization', {
     context: { organizationId: orgId, organizationName: orgName },
@@ -76,7 +80,9 @@ async function collectMetricsForOrganization(
   // Fetch all recordings for this organization
   const { data: recordings, error: recordingsError } = await supabase
     .from('content')
-    .select('file_size, storage_tier, compression_stats, mime_type, content_type')
+    .select(
+      'file_size, storage_tier, compression_stats, mime_type, content_type',
+    )
     .eq('org_id', orgId)
     .is('deleted_at', null);
 
@@ -107,18 +113,21 @@ async function collectMetricsForOrganization(
   }
 
   // Calculate storage metrics by tier
-  const totalStorage = recordings.reduce((sum, r) => sum + (r.file_size || 0), 0);
+  const totalStorage = recordings.reduce(
+    (sum, r) => sum + (r.file_size || 0),
+    0,
+  );
 
   const hotStorage = recordings
-    .filter(r => r.storage_tier === 'hot')
+    .filter((r) => r.storage_tier === 'hot')
     .reduce((sum, r) => sum + (r.file_size || 0), 0);
 
   const warmStorage = recordings
-    .filter(r => r.storage_tier === 'warm')
+    .filter((r) => r.storage_tier === 'warm')
     .reduce((sum, r) => sum + (r.file_size || 0), 0);
 
   const coldStorage = recordings
-    .filter(r => r.storage_tier === 'cold')
+    .filter((r) => r.storage_tier === 'cold')
     .reduce((sum, r) => sum + (r.file_size || 0), 0);
 
   // Note: 'glacier' is not in StorageTier type, using 0 for now
@@ -140,15 +149,15 @@ async function collectMetricsForOrganization(
 
   // Calculate costs (per GB/month pricing)
   const tierPricing = {
-    hot: 0.021,    // Supabase Storage
-    warm: 0.015,   // Cloudflare R2 warm tier
-    cold: 0.010,   // Cloudflare R2 cold tier
+    hot: 0.021, // Supabase Storage
+    warm: 0.015, // Cloudflare R2 warm tier
+    cold: 0.01, // Cloudflare R2 cold tier
   };
 
   const storageCost = recordings.reduce((sum, r) => {
     const sizeGB = (r.file_size || 0) / 1e9;
     const tier = (r.storage_tier || 'hot') as 'hot' | 'warm' | 'cold';
-    return sum + (sizeGB * (tierPricing[tier] ?? 0));
+    return sum + sizeGB * (tierPricing[tier] ?? 0);
   }, 0);
 
   // Get processing costs from completed jobs (last hour)
@@ -162,11 +171,11 @@ async function collectMetricsForOrganization(
   // Estimate processing costs based on job types
   // These are example costs - adjust based on actual provider pricing
   const jobCosts: Record<string, number> = {
-    transcribe: 0.006,           // Per minute of audio
-    doc_generate: 0.002,         // Per document
+    transcribe: 0.006, // Per minute of audio
+    doc_generate: 0.002, // Per document
     generate_embeddings: 0.0001, // Per chunk
-    compress_video: 0.005,       // Per file
-    compress_audio: 0.002,       // Per file
+    compress_video: 0.005, // Per file
+    compress_audio: 0.002, // Per file
   };
 
   let processingCost = 0;
@@ -178,15 +187,19 @@ async function collectMetricsForOrganization(
 
   // Calculate compression metrics
   const compressedFiles = recordings.filter(
-    r => r.compression_stats && typeof r.compression_stats === 'object' && 'compression_ratio' in r.compression_stats
+    (r) =>
+      r.compression_stats &&
+      typeof r.compression_stats === 'object' &&
+      'compression_ratio' in r.compression_stats,
   );
 
-  const compressionRate = compressedFiles.length > 0
-    ? compressedFiles.reduce((sum, r) => {
-        const stats = r.compression_stats as any;
-        return sum + (stats.compression_ratio || 0);
-      }, 0) / compressedFiles.length
-    : 0;
+  const compressionRate =
+    compressedFiles.length > 0
+      ? compressedFiles.reduce((sum, r) => {
+          const stats = r.compression_stats as any;
+          return sum + (stats.compression_ratio || 0);
+        }, 0) / compressedFiles.length
+      : 0;
 
   // Calculate deduplication savings (from similarity_matches table if it exists)
   // Note: This table is created by ANALYTICS_TABLES_MIGRATION.sql
@@ -194,17 +207,28 @@ async function collectMetricsForOrganization(
   let deduplicationSavings = 0;
   const { data: similarityMatches, error: similarityError } = await supabase
     .from('similarity_matches')
-    .select('duplicate_file_size')
-    .eq('org_id', orgId);
+    .select('similar_content_id');
 
   if (similarityError) {
-    logger.debug('similarity_matches table not available, skipping deduplication metrics', {
-      error: new Error(similarityError.message),
-    });
-  } else if (similarityMatches) {
-    deduplicationSavings = similarityMatches.reduce(
-      (sum, m) => sum + (m.duplicate_file_size || 0),
-      0
+    logger.debug(
+      'similarity_matches table not available, skipping deduplication metrics',
+      {
+        error: new Error(similarityError.message),
+      },
+    );
+  } else if (similarityMatches && similarityMatches.length > 0) {
+    const duplicateIds = [
+      ...new Set(similarityMatches.map((match) => match.similar_content_id)),
+    ];
+    const { data: duplicateContent } = await supabase
+      .from('content')
+      .select('file_size')
+      .eq('org_id', orgId)
+      .in('id', duplicateIds);
+
+    deduplicationSavings = (duplicateContent ?? []).reduce(
+      (sum, content) => sum + (content.file_size ?? 0),
+      0,
     );
   }
 
@@ -252,7 +276,7 @@ interface MetricsData {
 async function insertMetrics(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  data: MetricsData
+  data: MetricsData,
 ): Promise<void> {
   // Note: storage_metrics table is created by ANALYTICS_TABLES_MIGRATION.sql
   // If the migration hasn't been run yet, this will fail with a clear error
@@ -279,7 +303,7 @@ async function insertMetrics(
       if (error.code === '42P01') {
         // Table doesn't exist
         throw new Error(
-          'storage_metrics table does not exist. Please run ANALYTICS_TABLES_MIGRATION.sql to create it.'
+          'storage_metrics table does not exist. Please run ANALYTICS_TABLES_MIGRATION.sql to create it.',
         );
       }
       throw new Error(`Failed to insert metrics: ${error.message}`);

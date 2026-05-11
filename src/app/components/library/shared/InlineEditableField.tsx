@@ -86,23 +86,21 @@ export default function InlineEditableField({
   required = false,
   maxLength,
 }: InlineEditableFieldProps) {
-  const [isEditing, setIsEditing] = React.useState(false);
-  const [editValue, setEditValue] = React.useState(value);
+  const [isEditing, setIsEditing] = React.useReducer(
+    (_state: boolean, nextState: boolean) => nextState,
+    false,
+  );
+  const [editValueDraft, setEditValueDraft] = React.useState<
+    string | undefined
+  >(undefined);
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const editValue = editValueDraft ?? value;
 
-  // Reset edit value when prop value changes
-  React.useEffect(() => {
-    if (!isEditing) {
-      setEditValue(value);
-    }
-  }, [value, isEditing]);
-
-  // Focus input when entering edit mode
-  React.useEffect(() => {
-    if (isEditing) {
+  const focusEditor = React.useCallback(() => {
+    requestAnimationFrame(() => {
       if (type === 'textarea') {
         textareaRef.current?.focus();
         textareaRef.current?.select();
@@ -110,16 +108,18 @@ export default function InlineEditableField({
         inputRef.current?.focus();
         inputRef.current?.select();
       }
-    }
-  }, [isEditing, type]);
+    });
+  }, [type]);
 
   const handleEdit = () => {
+    setEditValueDraft(value);
     setIsEditing(true);
     setError(null);
+    focusEditor();
   };
 
   const handleCancel = () => {
-    setEditValue(value);
+    setEditValueDraft(undefined);
     setIsEditing(false);
     setError(null);
   };
@@ -149,9 +149,11 @@ export default function InlineEditableField({
 
     try {
       await onSave(trimmedValue);
+      setEditValueDraft(undefined);
       setIsEditing(false);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to save';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to save';
       setError(errorMessage);
     } finally {
       setIsSaving(false);
@@ -161,7 +163,10 @@ export default function InlineEditableField({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       handleCancel();
-    } else if (e.key === 'Enter' && (type === 'text' || (type === 'textarea' && (e.metaKey || e.ctrlKey)))) {
+    } else if (
+      e.key === 'Enter' &&
+      (type === 'text' || (type === 'textarea' && (e.metaKey || e.ctrlKey)))
+    ) {
       e.preventDefault();
       handleSave();
     }
@@ -188,7 +193,7 @@ export default function InlineEditableField({
             <Textarea
               ref={textareaRef}
               value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
+              onChange={(e) => setEditValueDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               disabled={isSaving}
@@ -201,7 +206,7 @@ export default function InlineEditableField({
               ref={inputRef}
               type="text"
               value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
+              onChange={(e) => setEditValueDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               disabled={isSaving}
@@ -236,9 +241,7 @@ export default function InlineEditableField({
           </div>
         </div>
 
-        {error && (
-          <p className="text-xs text-destructive">{error}</p>
-        )}
+        {error && <p className="text-xs text-destructive">{error}</p>}
 
         {type === 'textarea' && maxLength && (
           <p className="text-xs text-muted-foreground text-right">
@@ -248,7 +251,8 @@ export default function InlineEditableField({
 
         {type === 'textarea' && (
           <p className="text-xs text-muted-foreground">
-            Press {navigator.platform.includes('Mac') ? 'Cmd' : 'Ctrl'}+Enter to save
+            Press {navigator.platform.includes('Mac') ? 'Cmd' : 'Ctrl'}+Enter to
+            save
           </p>
         )}
       </div>
@@ -259,7 +263,7 @@ export default function InlineEditableField({
     <div
       className={cn(
         'group relative inline-flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity',
-        className
+        className,
       )}
       onClick={handleEdit}
       role="button"
@@ -272,7 +276,12 @@ export default function InlineEditableField({
       }}
       aria-label={label ? `Edit ${label}` : 'Edit field'}
     >
-      <span className={cn(displayClasses[displayAs], !value && 'text-muted-foreground italic')}>
+      <span
+        className={cn(
+          displayClasses[displayAs],
+          !value && 'text-muted-foreground italic',
+        )}
+      >
         {value || placeholder}
       </span>
       <Edit2 className="size-3.5 opacity-0 group-hover:opacity-50 transition-opacity" />

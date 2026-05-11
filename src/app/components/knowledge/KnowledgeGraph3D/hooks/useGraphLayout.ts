@@ -5,7 +5,7 @@
  * Supports dynamic updates and warm-up for initial stabilization.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import type { Simulation } from 'd3-force-3d';
 
 import type { GraphNode, GraphEdge } from '@/lib/validations/knowledge';
@@ -13,10 +13,10 @@ import type { GraphNode, GraphEdge } from '@/lib/validations/knowledge';
 import type { GraphNode3D, GraphEdge3D } from '../types';
 
 interface UseGraphLayoutOptions {
-  strength?: number;          // Charge strength (negative = repulsion)
-  linkDistance?: number;      // Desired link length
-  centerStrength?: number;    // Force toward center
-  warmupTicks?: number;       // Initial simulation ticks
+  strength?: number; // Charge strength (negative = repulsion)
+  linkDistance?: number; // Desired link length
+  centerStrength?: number; // Force toward center
+  warmupTicks?: number; // Initial simulation ticks
   onLayoutComplete?: () => void;
 }
 
@@ -30,7 +30,11 @@ interface UseGraphLayoutResult {
 /**
  * Initialize node with 3D position
  */
-function initializeNode(node: GraphNode, index: number, total: number): GraphNode3D {
+function initializeNode(
+  node: GraphNode,
+  index: number,
+  total: number,
+): GraphNode3D {
   // If node has existing position, use it
   if (node.x !== undefined && node.y !== undefined) {
     return {
@@ -54,10 +58,48 @@ function initializeNode(node: GraphNode, index: number, total: number): GraphNod
   };
 }
 
+type GraphLayoutState = {
+  layoutNodes: GraphNode3D[];
+  layoutEdges: GraphEdge3D[];
+  isSimulating: boolean;
+};
+
+type GraphLayoutAction =
+  | { type: 'empty' }
+  | { type: 'layout-ready'; nodes: GraphNode3D[]; edges: GraphEdge3D[] }
+  | { type: 'tick'; nodes: GraphNode3D[] }
+  | { type: 'simulating'; isSimulating: boolean };
+
+const initialGraphLayoutState: GraphLayoutState = {
+  layoutNodes: [],
+  layoutEdges: [],
+  isSimulating: true,
+};
+
+function graphLayoutReducer(
+  state: GraphLayoutState,
+  action: GraphLayoutAction,
+): GraphLayoutState {
+  switch (action.type) {
+    case 'empty':
+      return { layoutNodes: [], layoutEdges: [], isSimulating: false };
+    case 'layout-ready':
+      return {
+        layoutNodes: action.nodes,
+        layoutEdges: action.edges,
+        isSimulating: true,
+      };
+    case 'tick':
+      return { ...state, layoutNodes: action.nodes };
+    case 'simulating':
+      return { ...state, isSimulating: action.isSimulating };
+  }
+}
+
 export function useGraphLayout(
   nodes: GraphNode[],
   edges: GraphEdge[],
-  options: UseGraphLayoutOptions = {}
+  options: UseGraphLayoutOptions = {},
 ): UseGraphLayoutResult {
   const {
     strength = -100,
@@ -67,15 +109,17 @@ export function useGraphLayout(
     onLayoutComplete,
   } = options;
 
-  const [layoutNodes, setLayoutNodes] = useState<GraphNode3D[]>([]);
-  const [layoutEdges, setLayoutEdges] = useState<GraphEdge3D[]>([]);
-  const [isSimulating, setIsSimulating] = useState(true);
+  const [state, dispatch] = useReducer(
+    graphLayoutReducer,
+    initialGraphLayoutState,
+  );
+  const { layoutNodes, layoutEdges, isSimulating } = state;
   const simulationRef = useRef<Simulation<GraphNode3D> | null>(null);
   const nodesRef = useRef<GraphNode3D[]>([]);
 
   // Convert edges to 3D format
   const edges3D = useMemo((): GraphEdge3D[] => {
-    return edges.map(edge => ({
+    return edges.map((edge) => ({
       ...edge,
       source: edge.source,
       target: edge.target,
@@ -84,23 +128,26 @@ export function useGraphLayout(
 
   // Initialize and run simulation
   useEffect(() => {
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
     if (nodes.length === 0) {
-      setLayoutNodes([]);
-      setLayoutEdges([]);
-      setIsSimulating(false);
+      dispatch({ type: 'empty' });
       return;
     }
 
     // Dynamically import d3-force-3d
     import('d3-force-3d').then((d3Force) => {
+      if (cancelled) return;
+
       // Initialize nodes with 3D positions
       const initialNodes: GraphNode3D[] = nodes.map((node, index) =>
-        initializeNode(node, index, nodes.length)
+        initializeNode(node, index, nodes.length),
       );
       nodesRef.current = initialNodes;
 
       // Prepare links for simulation
-      const links = edges.map(edge => ({
+      const links = edges.map((edge) => ({
         source: edge.source,
         target: edge.target,
         strength: edge.strength,
@@ -116,10 +163,16 @@ export function useGraphLayout(
             .forceLink<GraphNode3D>(links)
             .id((d) => d.id)
             .distance(linkDistance)
-            .strength((d) => (d as { strength?: number }).strength ?? 0.5)
+            .strength((d) => (d as { strength?: number }).strength ?? 0.5),
         )
-        .force('charge', d3Force.forceManyBody<GraphNode3D>().strength(strength))
-        .force('center', d3Force.forceCenter<GraphNode3D>(0, 0, 0).strength(centerStrength))
+        .force(
+          'charge',
+          d3Force.forceManyBody<GraphNode3D>().strength(strength),
+        )
+        .force(
+          'center',
+          d3Force.forceCenter<GraphNode3D>(0, 0, 0).strength(centerStrength),
+        )
         .force('z', d3Force.forceZ<GraphNode3D>(0).strength(0.01))
         .alphaDecay(0.02)
         .velocityDecay(0.3);
@@ -128,39 +181,55 @@ export function useGraphLayout(
       simulation.tick(warmupTicks);
 
       // Update state with positioned nodes
-      setLayoutNodes([...nodesRef.current]);
-      setLayoutEdges(edges3D);
+      dispatch({
+        type: 'layout-ready',
+        nodes: [...nodesRef.current],
+        edges: edges3D,
+      });
 
       // Continue simulation with tick updates
       simulation.on('tick', () => {
-        setLayoutNodes([...nodesRef.current]);
+        dispatch({ type: 'tick', nodes: [...nodesRef.current] });
       });
 
       // Handle simulation end
       simulation.on('end', () => {
-        setIsSimulating(false);
+        dispatch({ type: 'simulating', isSimulating: false });
         onLayoutComplete?.();
       });
 
       simulationRef.current = simulation;
 
       // Stop simulation after timeout to save resources
-      const timeout = setTimeout(() => {
+      timeout = setTimeout(() => {
         simulation.stop();
-        setIsSimulating(false);
+        dispatch({ type: 'simulating', isSimulating: false });
       }, 5000);
-
-      return () => {
-        clearTimeout(timeout);
-        simulation.stop();
-      };
     });
-  }, [nodes, edges, edges3D, strength, linkDistance, centerStrength, warmupTicks, onLayoutComplete]);
+
+    return () => {
+      cancelled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      simulationRef.current?.stop();
+      simulationRef.current = null;
+    };
+  }, [
+    nodes,
+    edges,
+    edges3D,
+    strength,
+    linkDistance,
+    centerStrength,
+    warmupTicks,
+    onLayoutComplete,
+  ]);
 
   // Reheat simulation (e.g., after user interaction)
   const reheat = useCallback(() => {
     if (simulationRef.current) {
-      setIsSimulating(true);
+      dispatch({ type: 'simulating', isSimulating: true });
       simulationRef.current.alpha(0.3).restart();
     }
   }, []);
@@ -172,5 +241,3 @@ export function useGraphLayout(
     reheat,
   };
 }
-
-export default useGraphLayout;

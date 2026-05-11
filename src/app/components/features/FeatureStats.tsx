@@ -65,7 +65,7 @@ export function FeatureStats({ stats }: FeatureStatsProps) {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
             {stats.map((stat, index) => (
               <motion.div
-                key={index}
+                key={JSON.stringify(stat)}
                 variants={itemVariants}
                 className={cn(
                   'text-center p-6 sm:p-8 rounded-2xl',
@@ -74,7 +74,7 @@ export function FeatureStats({ stats }: FeatureStatsProps) {
                   'transition-all duration-300',
                   'hover:border-accent/30',
                   'hover:shadow-[0_0_30px_rgba(0,223,130,0.1)]',
-                  'group'
+                  'group',
                 )}
               >
                 {/* Value */}
@@ -84,7 +84,7 @@ export function FeatureStats({ stats }: FeatureStatsProps) {
                     'bg-gradient-to-r from-accent via-secondary to-accent',
                     'bg-clip-text text-transparent',
                     'transition-all duration-300',
-                    'group-hover:drop-shadow-[0_0_20px_rgba(0,223,130,0.3)]'
+                    'group-hover:drop-shadow-[0_0_20px_rgba(0,223,130,0.3)]',
                   )}
                 >
                   {stat.value}

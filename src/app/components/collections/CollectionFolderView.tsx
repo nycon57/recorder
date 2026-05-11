@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { FileX2, FolderPlus } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import {
@@ -10,7 +10,10 @@ import {
   CollectionFolderCardSkeleton,
   CollectionFolder,
 } from '@/app/components/collections/CollectionFolderCard';
-import { CollectionHeader, CollectionHeaderSkeleton } from '@/app/components/collections/CollectionHeader';
+import {
+  CollectionHeader,
+  CollectionHeaderSkeleton,
+} from '@/app/components/collections/CollectionHeader';
 import { cn } from '@/lib/utils';
 
 interface BreadcrumbItem {
@@ -48,8 +51,8 @@ interface CollectionFolderViewProps {
   onSettings?: () => void;
   /** Maximum allowed depth (for disabling subcollection creation) */
   maxDepth?: number;
-  /** Custom renderer for content items */
-  renderContent: () => React.ReactNode;
+  /** Content items for the current collection */
+  content: React.ReactNode;
   className?: string;
 }
 
@@ -58,7 +61,7 @@ interface CollectionFolderViewProps {
  * View for displaying the contents of a collection:
  * - Collection header with breadcrumb and metadata
  * - Subcollections grid
- * - Content items (via renderContent prop)
+ * - Content items (via explicit content prop)
  */
 export function CollectionFolderView({
   collection,
@@ -73,7 +76,7 @@ export function CollectionFolderView({
   onDeleteCollection,
   onSettings,
   maxDepth = 2,
-  renderContent,
+  content,
   className,
 }: CollectionFolderViewProps) {
   // Animation variants for staggered children
@@ -99,10 +102,11 @@ export function CollectionFolderView({
   if (!collection) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-        <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
+        <FileX2 className="size-12 text-muted-foreground mb-4" />
         <h3 className="text-lg font-semibold mb-2">Collection Not Found</h3>
         <p className="text-sm text-muted-foreground mb-4">
-          This collection may have been deleted or you don&apos;t have access to it.
+          This collection may have been deleted or you don&apos;t have access to
+          it.
         </p>
         <Button variant="outline" onClick={onBack}>
           Go Back
@@ -125,7 +129,9 @@ export function CollectionFolderView({
         breadcrumb={breadcrumb}
         onBack={onBack}
         onBreadcrumbClick={onBreadcrumbClick}
-        onNewSubcollection={canCreateSubcollection ? onNewSubcollection : undefined}
+        onNewSubcollection={
+          canCreateSubcollection ? onNewSubcollection : undefined
+        }
         onSettings={onSettings}
         depth={collection.depth}
         maxDepth={maxDepth}
@@ -134,7 +140,7 @@ export function CollectionFolderView({
       {/* Subcollections Section */}
       <AnimatePresence mode="wait">
         {subcollections.length > 0 && (
-          <motion.section
+          <m.section
             key="subcollections"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -147,14 +153,14 @@ export function CollectionFolderView({
               </h2>
             </div>
 
-            <motion.div
+            <m.div
               variants={containerVariants}
               initial="hidden"
               animate="visible"
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
             >
               {subcollections.map((subcollection) => (
-                <motion.div key={subcollection.id} variants={itemVariants}>
+                <m.div key={subcollection.id} variants={itemVariants}>
                   <CollectionFolderCard
                     collection={subcollection}
                     onClick={() => onSubcollectionClick(subcollection.id)}
@@ -169,10 +175,10 @@ export function CollectionFolderView({
                         : undefined
                     }
                   />
-                </motion.div>
+                </m.div>
               ))}
-            </motion.div>
-          </motion.section>
+            </m.div>
+          </m.section>
         )}
       </AnimatePresence>
 
@@ -186,8 +192,7 @@ export function CollectionFolderView({
           </div>
         )}
 
-        {/* Render content items via prop */}
-        {renderContent()}
+        {content}
 
         {/* Empty state if no content and no subcollections */}
         {collection.item_count === 0 && subcollections.length === 0 && (
@@ -212,24 +217,28 @@ function EmptyCollection({
   onNewSubcollection: () => void;
 }) {
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col items-center justify-center py-16 px-4 border border-dashed rounded-lg bg-muted/30"
     >
-      <FileX2 className="h-12 w-12 text-muted-foreground/50 mb-4" />
+      <FileX2 className="size-12 text-muted-foreground/50 mb-4" />
       <h3 className="text-lg font-medium mb-2">This folder is empty</h3>
       <p className="text-sm text-muted-foreground text-center max-w-sm mb-4">
         Move items here or upload new content to this folder.
         {canCreateSubcollection && ' You can also create subfolders.'}
       </p>
       {canCreateSubcollection && (
-        <Button variant="outline" onClick={onNewSubcollection} className="gap-1.5">
-          <FolderPlus className="h-4 w-4" />
+        <Button
+          variant="outline"
+          onClick={onNewSubcollection}
+          className="gap-1.5"
+        >
+          <FolderPlus className="size-4" />
           Create Subfolder
         </Button>
       )}
-    </motion.div>
+    </m.div>
   );
 }
 

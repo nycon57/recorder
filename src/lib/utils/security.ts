@@ -10,7 +10,7 @@ import DOMPurify from 'isomorphic-dompurify';
 /**
  * PII Patterns for detection and redaction
  */
-export const PII_PATTERNS = {
+const PII_PATTERNS = {
   ssn: /\b\d{3}-?\d{2}-?\d{4}\b/g,
   creditCard: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
   email: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
@@ -234,7 +234,7 @@ export function sanitizeMaxFrames(maxFrames: number | undefined): number {
 /**
  * Sanitize error messages before exposing to users
  */
-export function sanitizeErrorMessage(message: string, maxLength: number = 500): string {
+function sanitizeErrorMessage(message: string, maxLength: number = 500): string {
   if (!message) {
     return 'An error occurred';
   }
@@ -257,7 +257,7 @@ export function sanitizeErrorMessage(message: string, maxLength: number = 500): 
 /**
  * Rate limit key generator for consistent naming
  */
-export function getRateLimitKey(
+function getRateLimitKey(
   operation: string,
   identifier: string
 ): string {

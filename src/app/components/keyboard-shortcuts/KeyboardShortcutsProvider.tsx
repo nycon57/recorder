@@ -1,10 +1,12 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, use, useState, useCallback, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+
 import { useKeyboardShortcuts, COMMON_SHORTCUTS, type Shortcut } from '@/app/hooks/useKeyboardShortcuts';
-import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
 import { toast } from '@/app/components/ui/use-toast';
+
+import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
 
 interface KeyboardShortcutsContextType {
   showHelp: () => void;
@@ -15,8 +17,8 @@ interface KeyboardShortcutsContextType {
 
 const KeyboardShortcutsContext = createContext<KeyboardShortcutsContextType | undefined>(undefined);
 
-export function useKeyboardShortcutsContext() {
-  const context = useContext(KeyboardShortcutsContext);
+function useKeyboardShortcutsContext() {
+  const context = use(KeyboardShortcutsContext);
   if (!context) {
     throw new Error('useKeyboardShortcutsContext must be used within KeyboardShortcutsProvider');
   }
@@ -40,7 +42,7 @@ export function KeyboardShortcutsProvider({
   onRecord,
   onToggleFavorites,
 }: KeyboardShortcutsProviderProps) {
-  const router = useRouter();
+  const { push } = useRouter();
   const pathname = usePathname();
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
@@ -57,7 +59,7 @@ export function KeyboardShortcutsProvider({
           onSearch();
         } else {
           // Default: navigate to search page
-          router.push('/search');
+          push('/search');
         }
       },
     },
@@ -98,7 +100,7 @@ export function KeyboardShortcutsProvider({
         if (onRecord) {
           onRecord();
         } else {
-          router.push('/record');
+          push('/record');
         }
       },
     },
@@ -140,25 +142,25 @@ export function KeyboardShortcutsProvider({
         const listener = (event: KeyboardEvent) => {
           switch (event.key) {
             case 'h':
-              router.push('/dashboard');
+              push('/dashboard');
               break;
             case 'r':
-              router.push('/recordings');
+              push('/recordings');
               break;
             case 's':
-              router.push('/search');
+              push('/search');
               break;
             case 'a':
-              router.push('/analytics');
+              push('/analytics');
               break;
             case 'l':
-              router.push('/library');
+              push('/library');
               break;
             case 'c':
-              router.push('/collections');
+              push('/collections');
               break;
             case 't':
-              router.push('/assistant');
+              push('/assistant');
               break;
           }
           window.removeEventListener('keyup', listener);
@@ -176,27 +178,27 @@ export function KeyboardShortcutsProvider({
     {
       key: '1',
       alt: true,
-      handler: () => router.push('/dashboard'),
+      handler: () => push('/dashboard'),
     },
     {
       key: '2',
       alt: true,
-      handler: () => router.push('/recordings'),
+      handler: () => push('/recordings'),
     },
     {
       key: '3',
       alt: true,
-      handler: () => router.push('/search'),
+      handler: () => push('/search'),
     },
     {
       key: '4',
       alt: true,
-      handler: () => router.push('/assistant'),
+      handler: () => push('/assistant'),
     },
     {
       key: '5',
       alt: true,
-      handler: () => router.push('/analytics'),
+      handler: () => push('/analytics'),
     },
   ];
 

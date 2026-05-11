@@ -1,11 +1,9 @@
 ---
-slug: vendor-sources/preview-and-health
 title: Preview and health affordances
 description: How to use the page preview, health table, and failure log to inspect and maintain vendor source quality.
 audience: system-admin
 section: vendor-sources
 order: 50
-updatedAt: "2026-04-20"
 related:
   - vendor-sources/failure-handling
   - vendor-sources/governance

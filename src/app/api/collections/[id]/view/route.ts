@@ -24,15 +24,20 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 export const GET = apiHandler(
   async (
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
   ) => {
-    const { orgId } = await requireOrg();
-    const { id: collectionId } = await params;
+    const [{ orgId }, { id: collectionId }] = await Promise.all([
+      requireOrg(),
+      params,
+    ]);
     const supabase = supabaseAdmin;
 
     // Parse query params
     const url = new URL(request.url);
-    const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
+    const limit = Math.min(
+      parseInt(url.searchParams.get('limit') || '50'),
+      100,
+    );
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const sort = url.searchParams.get('sort') || 'recent';
 
@@ -50,24 +55,28 @@ export const GET = apiHandler(
     }
 
     // 2. Build breadcrumb path from root to current collection
-    const breadcrumb = await buildBreadcrumb(supabase, collection, orgId);
-
-    // 3. Fetch subcollections
-    const { data: subcollections, error: subError } = await supabase
-      .from('collections')
-      .select('id, name, description, color, icon, depth, created_at')
-      .eq('org_id', orgId)
-      .eq('parent_id', collectionId)
-      .is('deleted_at', null)
-      .order('name', { ascending: true });
+    const [breadcrumb, { data: subcollections, error: subError }] =
+      await Promise.all([
+        buildBreadcrumb(supabase, collection, orgId),
+        supabase
+          .from('collections')
+          .select('id, name, description, color, icon, depth, created_at')
+          .eq('org_id', orgId)
+          .eq('parent_id', collectionId)
+          .is('deleted_at', null)
+          .order('name', { ascending: true }),
+      ]);
 
     if (subError) {
-      console.error('[GET /api/collections/[id]/view] Subcollections error:', subError);
+      console.error(
+        '[GET /api/collections/[id]/view] Subcollections error:',
+        subError,
+      );
       throw new Error('Failed to fetch subcollections');
     }
 
     // Get item counts for subcollections
-    const subcollectionIds = subcollections?.map(s => s.id) || [];
+    const subcollectionIds = subcollections?.map((s) => s.id) || [];
     let subcollectionsWithCounts = subcollections || [];
 
     if (subcollectionIds.length > 0) {
@@ -79,16 +88,18 @@ export const GET = apiHandler(
         .in('collection_id', subcollectionIds);
 
       const countMap: Record<string, number> = {};
-      itemCounts?.forEach(item => {
+      itemCounts?.forEach((item) => {
         if (item.collection_id) {
-          countMap[item.collection_id] = (countMap[item.collection_id] || 0) + 1;
+          countMap[item.collection_id] =
+            (countMap[item.collection_id] || 0) + 1;
         }
       });
 
-      subcollectionsWithCounts = subcollections?.map(sub => ({
-        ...sub,
-        item_count: countMap[sub.id] || 0,
-      })) || [];
+      subcollectionsWithCounts =
+        subcollections?.map((sub) => ({
+          ...sub,
+          item_count: countMap[sub.id] || 0,
+        })) || [];
     }
 
     // 4. Fetch content items in this collection
@@ -105,10 +116,16 @@ export const GET = apiHandler(
         contentQuery = contentQuery.order('created_at', { ascending: true });
         break;
       case 'name-asc':
-        contentQuery = contentQuery.order('title', { ascending: true, nullsFirst: false });
+        contentQuery = contentQuery.order('title', {
+          ascending: true,
+          nullsFirst: false,
+        });
         break;
       case 'name-desc':
-        contentQuery = contentQuery.order('title', { ascending: false, nullsFirst: false });
+        contentQuery = contentQuery.order('title', {
+          ascending: false,
+          nullsFirst: false,
+        });
         break;
       case 'recent':
       default:
@@ -116,11 +133,17 @@ export const GET = apiHandler(
         break;
     }
 
-    const { data: items, error: itemsError, count } = await contentQuery
-      .range(offset, offset + limit - 1);
+    const {
+      data: items,
+      error: itemsError,
+      count,
+    } = await contentQuery.range(offset, offset + limit - 1);
 
     if (itemsError) {
-      console.error('[GET /api/collections/[id]/view] Items error:', itemsError);
+      console.error(
+        '[GET /api/collections/[id]/view] Items error:',
+        itemsError,
+      );
       throw new Error('Failed to fetch content items');
     }
 
@@ -140,7 +163,7 @@ export const GET = apiHandler(
         hasMore: (count || 0) > offset + limit,
       },
     });
-  }
+  },
 );
 
 /**
@@ -149,24 +172,27 @@ export const GET = apiHandler(
 async function buildBreadcrumb(
   supabase: typeof supabaseAdmin,
   collection: { id: string; name: string; parent_id: string | null },
-  orgId: string
+  orgId: string,
 ): Promise<Array<{ id: string; name: string }>> {
-  const path: Array<{ id: string; name: string }> = [];
-  let current: { id: string; name: string; parent_id: string | null } | null = collection;
-  const visited = new Set<string>();
+  const climb = async (
+    current: { id: string; name: string; parent_id: string | null } | null,
+    path: Array<{ id: string; name: string }> = [],
+    visited = new Set<string>(),
+  ): Promise<Array<{ id: string; name: string }>> => {
+    if (!current || path.length >= 10) {
+      return path;
+    }
 
-  // Traverse up to root (max 10 iterations for safety)
-  while (current && path.length < 10) {
     // Check for circular reference
     if (visited.has(current.id)) {
       console.warn('[buildBreadcrumb] Circular reference detected');
-      break;
+      return path;
     }
     visited.add(current.id);
 
-    path.unshift({ id: current.id, name: current.name });
+    const nextPath = [{ id: current.id, name: current.name }, ...path];
 
-    if (!current.parent_id) break;
+    if (!current.parent_id) return nextPath;
 
     // Fetch parent
     const { data: parent } = await supabase
@@ -177,9 +203,14 @@ async function buildBreadcrumb(
       .is('deleted_at', null)
       .single();
 
-    current =
-      parent as { id: string; name: string; parent_id: string | null } | null;
-  }
+    current = parent as {
+      id: string;
+      name: string;
+      parent_id: string | null;
+    } | null;
 
-  return path;
+    return climb(current, nextPath, visited);
+  };
+
+  return climb(collection);
 }

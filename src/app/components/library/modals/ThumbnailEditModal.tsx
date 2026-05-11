@@ -10,7 +10,12 @@ import {
   ContentModalDescription,
   ContentModalBody,
 } from '@/app/components/ui/content-modal';
-import { ContentTabs, ContentTabsList, ContentTabsTrigger, ContentTabsContent } from '@/app/components/ui/content-tabs';
+import {
+  ContentTabs,
+  ContentTabsList,
+  ContentTabsTrigger,
+  ContentTabsContent,
+} from '@/app/components/ui/content-tabs';
 
 import { ThumbnailCropPane } from './ThumbnailCropPane';
 import { ThumbnailReplacePane } from './ThumbnailReplacePane';
@@ -52,18 +57,20 @@ export function ThumbnailEditModal({
 }: ThumbnailEditModalProps) {
   const hasThumbnail = !!thumbnailUrl;
   const defaultTab: TabValue = hasThumbnail ? 'crop' : 'replace';
+  const initialActiveTab = initialTab ?? defaultTab;
 
-  // Use controlled state so we can reset to initialTab when modal opens
-  const [activeTab, setActiveTab] = React.useState<TabValue>(initialTab ?? defaultTab);
+  const [activeTabOverride, setActiveTabOverride] =
+    React.useState<TabValue | null>(null);
+  const activeTab = activeTabOverride ?? initialActiveTab;
 
-  // Reset tab when modal opens with a new initialTab
-  React.useEffect(() => {
-    if (open) {
-      setActiveTab(initialTab ?? defaultTab);
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setActiveTabOverride(null);
     }
-  }, [open, initialTab, defaultTab]);
+    onOpenChange(nextOpen);
+  };
 
-  const handleClose = () => onOpenChange(false);
+  const handleClose = () => handleOpenChange(false);
 
   const handleChange = () => {
     onThumbnailChange?.();
@@ -73,7 +80,7 @@ export function ThumbnailEditModal({
   return (
     <ContentModal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       size="2xl"
       glass={true}
       glow={true}
@@ -86,33 +93,40 @@ export function ThumbnailEditModal({
       </ContentModalHeader>
 
       <ContentModalBody className="p-0 max-h-[70vh]">
-        <ContentTabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full">
+        <ContentTabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTabOverride(v as TabValue)}
+          className="w-full"
+        >
           <div className="px-6 pt-2">
             <ContentTabsList>
               <ContentTabsTrigger
                 value="crop"
                 disabled={!hasThumbnail}
-                icon={<Crop className="h-4 w-4" />}
+                icon={<Crop className="size-4" />}
               >
                 Crop
               </ContentTabsTrigger>
               <ContentTabsTrigger
                 value="replace"
-                icon={<Upload className="h-4 w-4" />}
+                icon={<Upload className="size-4" />}
               >
                 Replace
               </ContentTabsTrigger>
               <ContentTabsTrigger
                 value="delete"
                 disabled={!hasThumbnail}
-                icon={<Trash2 className="h-4 w-4" />}
+                icon={<Trash2 className="size-4" />}
               >
                 Delete
               </ContentTabsTrigger>
             </ContentTabsList>
           </div>
 
-          <ContentTabsContent value="crop" className="mt-0 animate-none data-[state=inactive]:hidden">
+          <ContentTabsContent
+            value="crop"
+            className="mt-0 animate-none data-[state=inactive]:hidden"
+          >
             {hasThumbnail && (
               <ThumbnailCropPane
                 thumbnailUrl={thumbnailUrl}
@@ -123,7 +137,10 @@ export function ThumbnailEditModal({
             )}
           </ContentTabsContent>
 
-          <ContentTabsContent value="replace" className="mt-0 animate-none data-[state=inactive]:hidden">
+          <ContentTabsContent
+            value="replace"
+            className="mt-0 animate-none data-[state=inactive]:hidden"
+          >
             <ThumbnailReplacePane
               recordingId={recordingId}
               onClose={handleClose}
@@ -131,7 +148,10 @@ export function ThumbnailEditModal({
             />
           </ContentTabsContent>
 
-          <ContentTabsContent value="delete" className="mt-0 animate-none data-[state=inactive]:hidden">
+          <ContentTabsContent
+            value="delete"
+            className="mt-0 animate-none data-[state=inactive]:hidden"
+          >
             {hasThumbnail && (
               <ThumbnailDeletePane
                 recordingId={recordingId}
@@ -145,5 +165,3 @@ export function ThumbnailEditModal({
     </ContentModal>
   );
 }
-
-export default ThumbnailEditModal;

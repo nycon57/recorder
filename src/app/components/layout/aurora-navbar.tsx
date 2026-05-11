@@ -259,7 +259,7 @@ export default function AuroraNavbar() {
             <div
               className={cn(
                 'relative flex items-center justify-center',
-                'w-8 h-8 rounded-lg',
+                'size-8 rounded-lg',
                 'bg-gradient-to-br from-accent to-secondary',
                 'transition-all duration-300',
                 'group-hover:shadow-[0_0_20px_rgba(0,223,130,0.4)]',
@@ -322,7 +322,7 @@ export default function AuroraNavbar() {
                 >
                   <Link href="/sign-up">
                     Get Started
-                    <ArrowRight className="ml-1 h-4 w-4" />
+                    <ArrowRight className="ml-1 size-4" />
                   </Link>
                 </Button>
               </>
@@ -340,7 +340,7 @@ export default function AuroraNavbar() {
               >
                 <Link href="/dashboard">
                   Dashboard
-                  <ArrowRight className="ml-1 h-4 w-4" />
+                  <ArrowRight className="ml-1 size-4" />
                 </Link>
               </Button>
             )}
@@ -358,7 +358,7 @@ export default function AuroraNavbar() {
                     'hover:bg-accent/10 hover:text-accent'
                   )}
                 >
-                  <Menu className="h-5 w-5" />
+                  <Menu className="size-5" />
                   <span className="sr-only">Open menu</span>
                 </Button>
               </SheetTrigger>
@@ -384,7 +384,7 @@ export default function AuroraNavbar() {
                         >
                           <motion.div
                             className={cn(
-                              'w-8 h-8 rounded-lg',
+                              'size-8 rounded-lg',
                               'bg-gradient-to-br from-accent to-secondary',
                               'flex items-center justify-center',
                               'transition-shadow duration-300',
@@ -406,7 +406,7 @@ export default function AuroraNavbar() {
                     <SheetClose asChild>
                       <motion.button
                         className={cn(
-                          'w-11 h-11 rounded-full',
+                          'size-11 rounded-full',
                           'flex items-center justify-center',
                           'hover:bg-accent/10 transition-colors',
                           'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent'
@@ -415,7 +415,7 @@ export default function AuroraNavbar() {
                         whileTap={{ scale: 0.95 }}
                         aria-label="Close menu"
                       >
-                        <X className="h-5 w-5" />
+                        <X className="size-5" />
                       </motion.button>
                     </SheetClose>
                   </div>
@@ -478,7 +478,7 @@ export default function AuroraNavbar() {
                         >
                           <Link href="/sign-up">
                             Get Started
-                            <ArrowRight className="ml-2 h-4 w-4" />
+                            <ArrowRight className="ml-2 size-4" />
                           </Link>
                         </Button>
                       </>
@@ -497,7 +497,7 @@ export default function AuroraNavbar() {
                       >
                         <Link href="/dashboard">
                           Dashboard
-                          <ArrowRight className="ml-2 h-4 w-4" />
+                          <ArrowRight className="ml-2 size-4" />
                         </Link>
                       </Button>
                     )}
@@ -634,7 +634,7 @@ function DesktopMenuItem({ item }: DesktopMenuItemProps) {
                   <span>View all features</span>
                   <ArrowRight
                     className={cn(
-                      'h-3.5 w-3.5',
+                      'size-3.5',
                       'transition-transform duration-300',
                       'group-hover:translate-x-1'
                     )}
@@ -699,7 +699,7 @@ function MobileMenuItem({ item, index, onNavigate }: MobileMenuItemProps) {
           </span>
           <ArrowRight
             className={cn(
-              'h-4 w-4 text-muted-foreground/40',
+              'size-4 text-muted-foreground/40',
               'opacity-0 -translate-x-2',
               'group-hover:opacity-100 group-hover:translate-x-0',
               'transition-all duration-200'

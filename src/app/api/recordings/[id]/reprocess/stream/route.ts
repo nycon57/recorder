@@ -26,7 +26,7 @@ const logger = createLogger({ endpoint: 'reprocess-stream' });
 type JobType = Database['public']['Tables']['jobs']['Row']['type'];
 
 interface ReprocessParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /**
@@ -36,7 +36,7 @@ interface ReprocessParams {
 export const POST = apiHandler(
   async (request: NextRequest, context: ReprocessParams) => {
     const requestId = request.headers.get('x-request-id') || 'unknown';
-    const recordingId = context.params.id;
+    const { id: recordingId } = await context.params;
 
     logger.info('Streaming reprocess request initiated', {
       context: { recordingId, requestId },
@@ -61,7 +61,7 @@ export const POST = apiHandler(
     // Verify recording exists and belongs to org
     const { data: recording, error: recordingError } = await supabaseAdmin
       .from('content')
-      .select('id, org_id, status, title, storage_path')
+      .select('id, org_id, status, title, storage_path_raw')
       .eq('id', recordingId)
       .eq('org_id', orgId)
       .single();
@@ -99,7 +99,7 @@ export const POST = apiHandler(
 
       // Add type-specific payload data
       if (type === 'transcribe') {
-        payload.storagePath = recording.storage_path;
+        payload.storagePath = recording.storage_path_raw;
       }
 
       return {
@@ -205,7 +205,7 @@ export const POST = apiHandler(
  */
 export const GET = apiHandler(
   async (request: NextRequest, context: ReprocessParams) => {
-    const recordingId = context.params.id;
+    const { id: recordingId } = await context.params;
 
     // Authenticate and get org context
     const { orgId } = await requireOrg();

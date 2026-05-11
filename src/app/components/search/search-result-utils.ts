@@ -19,11 +19,16 @@ export function getQueryTerms(query: string) {
   return query
     .trim()
     .split(/\s+/)
-    .map((term) => term.trim())
-    .filter(Boolean);
+    .flatMap((__item, __index, __array) => {
+      const __mapped = __item.trim();
+      return __mapped ? [__mapped] : [];
+    });
 }
 
-export function getHighlightParts(text: string, query: string): HighlightPart[] {
+export function getHighlightParts(
+  text: string,
+  query: string,
+): HighlightPart[] {
   const terms = getQueryTerms(query);
   if (!text || terms.length === 0) {
     return [{ text, highlighted: false }];
@@ -33,13 +38,16 @@ export function getHighlightParts(text: string, query: string): HighlightPart[] 
   const splitRegex = new RegExp(`(${pattern})`, 'gi');
   const exactTermRegex = new RegExp(`^(?:${pattern})$`, 'i');
 
-  return text
-    .split(splitRegex)
-    .filter((part) => part.length > 0)
-    .map((part) => ({
-      text: part,
-      highlighted: exactTermRegex.test(part),
-    }));
+  return text.split(splitRegex).flatMap((__item, __index, __array) =>
+    __item.length > 0
+      ? [
+          {
+            text: __item,
+            highlighted: exactTermRegex.test(__item),
+          },
+        ]
+      : [],
+  );
 }
 
 export function getResultPageNumber(result: SearchResultItem): number | null {

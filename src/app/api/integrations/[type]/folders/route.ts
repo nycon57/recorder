@@ -183,7 +183,7 @@ export async function GET(
 
     try {
       const typedConnectorConfig = connectorConfig as ConnectorConfigRow;
-      connector = ConnectorRegistry.create(
+      connector = ConnectorRegistry.instantiate(
         connectorType,
         typedConnectorConfig.credentials as Record<string, unknown>,
         {
@@ -371,7 +371,7 @@ export async function POST(
 
     try {
       const typedConnectorConfig = connectorConfig as ConnectorConfigRow;
-      connector = ConnectorRegistry.create(
+      connector = ConnectorRegistry.instantiate(
         connectorType,
         typedConnectorConfig.credentials as Record<string, unknown>,
         {

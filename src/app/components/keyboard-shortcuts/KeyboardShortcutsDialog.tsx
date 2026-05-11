@@ -1,5 +1,8 @@
 'use client';
 
+import { Keyboard, Search, Printer } from 'lucide-react';
+import { useState, useMemo } from 'react';
+
 import {
   Dialog,
   DialogContent,
@@ -8,12 +11,18 @@ import {
   DialogTitle,
 } from '@/app/components/ui/dialog';
 import { Badge } from '@/app/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/app/components/ui/tabs';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
-import { Keyboard, Search, Printer } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { formatShortcut, COMMON_SHORTCUTS } from '@/app/hooks/useKeyboardShortcuts';
+import {
+  formatShortcut,
+  COMMON_SHORTCUTS,
+} from '@/app/hooks/useKeyboardShortcuts';
 import { cn } from '@/lib/utils';
 
 interface KeyboardShortcutsDialogProps {
@@ -53,7 +62,10 @@ const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
     name: 'Navigation',
     shortcuts: [
       { keys: COMMON_SHORTCUTS.NEXT, description: 'Navigate to next item' },
-      { keys: COMMON_SHORTCUTS.PREVIOUS, description: 'Navigate to previous item' },
+      {
+        keys: COMMON_SHORTCUTS.PREVIOUS,
+        description: 'Navigate to previous item',
+      },
       { keys: { key: 'ArrowUp' }, description: 'Move selection up' },
       { keys: { key: 'ArrowDown' }, description: 'Move selection down' },
       { keys: { key: 'Home' }, description: 'Go to first item' },
@@ -68,16 +80,28 @@ const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
     shortcuts: [
       { keys: COMMON_SHORTCUTS.SELECT_ALL, description: 'Select all items' },
       { keys: { key: 'd', ctrl: true }, description: 'Deselect all' },
-      { keys: COMMON_SHORTCUTS.MULTI_SELECT, description: 'Toggle multi-select' },
-      { keys: { key: 'ArrowDown', shift: true }, description: 'Extend selection down' },
-      { keys: { key: 'ArrowUp', shift: true }, description: 'Extend selection up' },
+      {
+        keys: COMMON_SHORTCUTS.MULTI_SELECT,
+        description: 'Toggle multi-select',
+      },
+      {
+        keys: { key: 'ArrowDown', shift: true },
+        description: 'Extend selection down',
+      },
+      {
+        keys: { key: 'ArrowUp', shift: true },
+        description: 'Extend selection up',
+      },
       { keys: { key: 'Click', ctrl: true }, description: 'Add to selection' },
     ],
   },
   {
     name: 'Actions',
     shortcuts: [
-      { keys: COMMON_SHORTCUTS.FAVORITES, description: 'Toggle favorites filter' },
+      {
+        keys: COMMON_SHORTCUTS.FAVORITES,
+        description: 'Toggle favorites filter',
+      },
       { keys: { key: 'e', ctrl: true }, description: 'Export selected items' },
       { keys: COMMON_SHORTCUTS.DELETE, description: 'Delete selected items' },
       { keys: { key: 'r', ctrl: true }, description: 'Rename selected item' },
@@ -122,18 +146,21 @@ export function KeyboardShortcutsDialog({
     if (!searchQuery) {
       return selectedCategory === 'all'
         ? SHORTCUT_CATEGORIES
-        : SHORTCUT_CATEGORIES.filter(cat => cat.name === selectedCategory);
+        : SHORTCUT_CATEGORIES.filter((cat) => cat.name === selectedCategory);
     }
 
     const query = searchQuery.toLowerCase();
-    return SHORTCUT_CATEGORIES.map(category => ({
-      ...category,
-      shortcuts: category.shortcuts.filter(
-        shortcut =>
-          shortcut.description.toLowerCase().includes(query) ||
-          formatShortcut(shortcut.keys).toLowerCase().includes(query)
-      ),
-    })).filter(category => category.shortcuts.length > 0);
+    return SHORTCUT_CATEGORIES.flatMap((__item, __index, __array) => {
+      const __mapped = {
+        ...__item,
+        shortcuts: __item.shortcuts.filter(
+          (shortcut) =>
+            shortcut.description.toLowerCase().includes(query) ||
+            formatShortcut(shortcut.keys).toLowerCase().includes(query),
+        ),
+      };
+      return __mapped.shortcuts.length > 0 ? [__mapped] : [];
+    });
   }, [searchQuery, selectedCategory]);
 
   const handlePrint = () => {
@@ -147,7 +174,7 @@ export function KeyboardShortcutsDialog({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
-                <Keyboard className="h-5 w-5 text-primary" />
+                <Keyboard className="size-5 text-primary" />
               </div>
               <div>
                 <DialogTitle>Keyboard Shortcuts</DialogTitle>
@@ -162,14 +189,14 @@ export function KeyboardShortcutsDialog({
               onClick={handlePrint}
               className="print:hidden"
             >
-              <Printer className="h-4 w-4" />
+              <Printer className="size-4" />
             </Button>
           </div>
         </DialogHeader>
 
         {/* Search Bar */}
         <div className="relative print:hidden">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Search shortcuts..."
@@ -188,7 +215,7 @@ export function KeyboardShortcutsDialog({
         >
           <TabsList className="w-full justify-start overflow-x-auto print:hidden">
             <TabsTrigger value="all">All</TabsTrigger>
-            {SHORTCUT_CATEGORIES.map(cat => (
+            {SHORTCUT_CATEGORIES.map((cat) => (
               <TabsTrigger key={cat.name} value={cat.name}>
                 {cat.name}
               </TabsTrigger>
@@ -205,7 +232,7 @@ export function KeyboardShortcutsDialog({
                 No shortcuts found matching "{searchQuery}"
               </div>
             ) : (
-              filteredCategories.map(category => (
+              filteredCategories.map((category) => (
                 <div key={category.name} className="space-y-3">
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                     {category.name}
@@ -213,11 +240,11 @@ export function KeyboardShortcutsDialog({
                   <div className="grid gap-2">
                     {category.shortcuts.map((shortcut, index) => (
                       <div
-                        key={index}
+                        key={JSON.stringify(shortcut)}
                         className={cn(
                           'flex items-center justify-between p-3 rounded-lg',
                           'hover:bg-muted/50 transition-colors',
-                          'print:border print:p-2'
+                          'print:border print:p-2',
                         )}
                       >
                         <span className="text-sm">{shortcut.description}</span>
@@ -239,7 +266,9 @@ export function KeyboardShortcutsDialog({
         <div className="flex items-center justify-between pt-4 border-t text-xs text-muted-foreground print:hidden">
           <div className="flex items-center gap-4">
             <Badge variant="secondary" className="font-normal">
-              {navigator?.platform?.toUpperCase().indexOf('MAC') >= 0 ? 'macOS' : 'Windows/Linux'}
+              {navigator?.platform?.toUpperCase().indexOf('MAC') >= 0
+                ? 'macOS'
+                : 'Windows/Linux'}
             </Badge>
             <span>Press ? anytime to show this dialog</span>
           </div>

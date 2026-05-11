@@ -24,9 +24,9 @@ const updateCommentSchema = z.object({
 type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // ============================================================================
@@ -45,15 +45,21 @@ interface RouteParams {
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
     const { userId, orgId } = await requireOrg();
-    const commentId = params.id;
+    const { id: commentId } = await params;
 
     // Validate UUID
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(commentId)) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        commentId,
+      )
+    ) {
       throw errors.badRequest('Invalid comment ID');
     }
 
-    const body = await parseBody<UpdateCommentInput>(request, updateCommentSchema);
-    const supabase = await createClient();
+    const [body, supabase] = await Promise.all([
+      parseBody<UpdateCommentInput>(request, updateCommentSchema),
+      createClient(),
+    ]);
 
     // Fetch the comment and verify ownership
     const { data: existingComment, error: fetchError } = await supabase
@@ -95,7 +101,7 @@ export const PATCH = apiHandler(
     }
 
     return successResponse({ comment: updatedComment });
-  }
+  },
 );
 
 // ============================================================================
@@ -114,10 +120,14 @@ export const PATCH = apiHandler(
 export const DELETE = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
     const { userId, orgId } = await requireOrg();
-    const commentId = params.id;
+    const { id: commentId } = await params;
 
     // Validate UUID
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(commentId)) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        commentId,
+      )
+    ) {
       throw errors.badRequest('Invalid comment ID');
     }
 
@@ -153,5 +163,5 @@ export const DELETE = apiHandler(
     }
 
     return successResponse({ success: true });
-  }
+  },
 );

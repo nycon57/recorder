@@ -10,6 +10,7 @@
  */
 
 import type { ContentType, CompressionProfile } from '@/lib/types/database';
+
 import {
   classifyVideoContent,
   extractVideoFeatures,
@@ -20,7 +21,7 @@ import {
 /**
  * Audio content features
  */
-export interface AudioContentFeatures {
+interface AudioContentFeatures {
   /** Audio codec */
   codec?: string;
   /** Sample rate in Hz */
@@ -42,7 +43,7 @@ export interface AudioContentFeatures {
 /**
  * Audio classification result
  */
-export interface AudioClassification {
+interface AudioClassification {
   /** Detected audio type */
   audioType: 'voice' | 'music' | 'mixed' | 'ambient' | 'silent';
   /** Audio quality assessment */
@@ -64,7 +65,7 @@ export interface AudioClassification {
 /**
  * Scene complexity analysis
  */
-export interface SceneComplexity {
+interface SceneComplexity {
   /** Overall complexity score (0-1, 0=static, 1=complex) */
   complexity: number;
   /** Estimated number of scene changes */
@@ -80,7 +81,7 @@ export interface SceneComplexity {
 /**
  * Content category for specialized processing
  */
-export type ContentCategory =
+type ContentCategory =
   | 'tutorial'          // Educational content with narration
   | 'presentation'      // Slide deck presentation
   | 'code_demo'         // Programming/coding demonstration
@@ -127,7 +128,7 @@ export interface ContentAnalysisResult {
 /**
  * Analyze audio content
  */
-export function analyzeAudioContent(features: AudioContentFeatures): AudioClassification {
+function analyzeAudioContent(features: AudioContentFeatures): AudioClassification {
   let voiceScore = 0;
   let musicScore = 0;
   let ambientScore = 0;
@@ -239,7 +240,7 @@ export function analyzeAudioContent(features: AudioContentFeatures): AudioClassi
 /**
  * Analyze scene complexity
  */
-export function analyzeSceneComplexity(
+function analyzeSceneComplexity(
   videoFeatures: VideoContentFeatures,
   videoClassification: VideoClassification
 ): SceneComplexity {
@@ -304,7 +305,7 @@ export function analyzeSceneComplexity(
 /**
  * Determine content category
  */
-export function determineContentCategory(
+function determineContentCategory(
   contentType: ContentType,
   videoClassification?: VideoClassification,
   audioClassification?: AudioClassification,
@@ -359,7 +360,7 @@ export function determineContentCategory(
  * Estimate processing cost in credits
  * (1 credit = $0.01 USD)
  */
-export function estimateProcessingCost(
+function estimateProcessingCost(
   category: ContentCategory,
   duration: number,
   fileSize: number
@@ -392,7 +393,7 @@ export function estimateProcessingCost(
  * 1 = highest (process immediately)
  * 5 = lowest (can wait)
  */
-export function determineProcessingPriority(
+function determineProcessingPriority(
   category: ContentCategory,
   fileSize: number,
   orgPlan: 'free' | 'pro' | 'enterprise' = 'free'
@@ -431,7 +432,7 @@ export function determineProcessingPriority(
 /**
  * Determine which processing steps to skip
  */
-export function determineProcessingSteps(
+function determineProcessingSteps(
   category: ContentCategory,
   duration: number,
   audioClassification?: AudioClassification
@@ -457,7 +458,7 @@ export function determineProcessingSteps(
 /**
  * Select optimal transcription provider
  */
-export function selectTranscriptionProvider(
+function selectTranscriptionProvider(
   category: ContentCategory,
   audioClassification?: AudioClassification
 ): ContentAnalysisResult['transcriptionProvider'] {
@@ -488,7 +489,7 @@ export function selectTranscriptionProvider(
  * Comprehensive content analysis
  * Main entry point for Phase 3 content-aware processing
  */
-export async function analyzeContent(
+async function analyzeContent(
   contentType: ContentType,
   metadata: any,
   fileSize: number,

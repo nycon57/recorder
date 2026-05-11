@@ -64,7 +64,7 @@ const invalidRow = {
 };
 
 /** Build a chainable Supabase-like query mock that resolves to `result`. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 function buildListMock(result: { data: any; error: any }) {
   return {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -79,7 +79,7 @@ function buildListMock(result: { data: any; error: any }) {
 }
 
 /** Build a chainable Supabase-like query mock for maybeSingle queries. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 function buildSingleMock(result: { data: any; error: any }) {
   return {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

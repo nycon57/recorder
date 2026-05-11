@@ -418,8 +418,10 @@ export async function mergeTranscripts(job: Job): Promise<void> {
       }
 
       segmentResults = segmentJobs
-        .map((j) => parseSegmentResult(j.result))
-        .filter((result): result is SegmentResult => result !== null)
+        .flatMap((__item, __index, __array) => {
+          const __mapped = parseSegmentResult(__item.result);
+          return __mapped !== null ? [__mapped] : [];
+        })
         .sort((a, b) => a.segmentIndex - b.segmentIndex);
     }
 

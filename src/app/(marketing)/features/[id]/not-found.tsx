@@ -49,12 +49,12 @@ export default function FeatureNotFound() {
 
         {/* Aurora orbs */}
         <div
-          className="absolute top-[20%] right-[20%] w-[400px] h-[400px] rounded-full
+          className="absolute top-[20%] right-[20%] size-[400px] rounded-full
             bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.08)_0%,transparent_70%)]
             blur-[80px] animate-float"
         />
         <div
-          className="absolute bottom-[30%] left-[10%] w-[300px] h-[300px] rounded-full
+          className="absolute bottom-[30%] left-[10%] size-[300px] rounded-full
             bg-[radial-gradient(ellipse_at_center,rgba(44,194,149,0.06)_0%,transparent_70%)]
             blur-[60px] animate-float"
           style={{ animationDelay: '2s' }}
@@ -76,7 +76,7 @@ export default function FeatureNotFound() {
                 bg-accent/5 backdrop-blur-sm
                 border-accent/30"
             >
-              <Search className="h-4 w-4 mr-2 text-accent" />
+              <Search className="size-4 mr-2 text-accent" />
               <span className="text-sm font-medium text-accent">
                 Feature Not Found
               </span>
@@ -89,10 +89,7 @@ export default function FeatureNotFound() {
             className="mb-6"
           >
             <span
-              className="text-8xl sm:text-9xl font-outfit font-light
-                bg-gradient-to-r from-accent via-secondary to-primary
-                bg-clip-text text-transparent
-                drop-shadow-[0_0_40px_rgba(0,223,130,0.3)]"
+              className="text-8xl sm:text-9xl font-outfit font-light drop-shadow-[0_0_40px_rgba(0,223,130,0.3)] text-primary"
             >
               404
             </span>
@@ -135,7 +132,7 @@ export default function FeatureNotFound() {
                     hover:shadow-[0_0_40px_rgba(0,223,130,0.5)]
                     transition-shadow duration-300"
                 >
-                  <Sparkles className="h-5 w-5 mr-2" />
+                  <Sparkles className="size-5 mr-2" />
                   View All Features
                 </Button>
               </motion.div>
@@ -156,7 +153,7 @@ export default function FeatureNotFound() {
                     hover:bg-accent/5
                     transition-all duration-300"
                 >
-                  <ArrowLeft className="h-5 w-5 mr-2" />
+                  <ArrowLeft className="size-5 mr-2" />
                   Back to Home
                 </Button>
               </motion.div>

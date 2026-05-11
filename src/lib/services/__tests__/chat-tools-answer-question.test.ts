@@ -26,22 +26,18 @@ jest.mock('../compiled-memory-answer-context', () => ({
   ),
 }));
 
-const { resolveCompiledMemoryAnswerContext } = require(
+const { executeAnswerQuestion } =
+  jest.requireActual<typeof import('../chat-tools')>('../chat-tools');
+const { resolveCompiledMemoryAnswerContext } = jest.requireMock(
   '../compiled-memory-answer-context',
 ) as {
-  resolveCompiledMemoryAnswerContext: jest.MockedFunction<any>;
+  resolveCompiledMemoryAnswerContext: jest.MockedFunction<
+    (...args: unknown[]) => Promise<unknown>
+  >;
 };
-const { executeAnswerQuestion } = require('../chat-tools') as {
-  executeAnswerQuestion: (
-    args: {
-      question: string;
-      app?: string;
-      screen?: string;
-      limit?: number;
-    },
-    context: { orgId: string; userId: string }
-  ) => Promise<unknown>;
-};
+
+const mockResolveCompiledMemoryAnswerContext =
+  resolveCompiledMemoryAnswerContext;
 
 describe('executeAnswerQuestion', () => {
   beforeEach(() => {
@@ -49,7 +45,7 @@ describe('executeAnswerQuestion', () => {
   });
 
   it('returns compiled-memory answer context with ordered citations', async () => {
-    resolveCompiledMemoryAnswerContext.mockResolvedValue({
+    mockResolveCompiledMemoryAnswerContext.mockResolvedValue({
       context:
         "SOURCE PRECEDENCE:\n- Prefer YOUR TEAM'S KNOWLEDGE.\n\nYOUR TEAM'S KNOWLEDGE:\n[1] Deal routing\nEnterprise leads skip the SDR queue.",
       sources: [
@@ -71,7 +67,7 @@ describe('executeAnswerQuestion', () => {
       { orgId: 'org-123', userId: 'user-123' },
     );
 
-    expect(resolveCompiledMemoryAnswerContext).toHaveBeenCalledWith({
+    expect(mockResolveCompiledMemoryAnswerContext).toHaveBeenCalledWith({
       orgId: 'org-123',
       userId: 'user-123',
       question: 'How do enterprise leads route?',

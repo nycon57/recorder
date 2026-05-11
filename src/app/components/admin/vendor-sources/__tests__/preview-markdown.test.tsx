@@ -16,9 +16,11 @@
  * TRIB-152
  */
 
-import { describe, expect, test } from '@jest/globals';
 import { execFileSync } from 'child_process';
+import { existsSync } from 'fs';
 import { resolve } from 'path';
+
+import { describe, expect, test } from '@jest/globals';
 
 // ---- Schema shape tests (pure data, no ESM import) -------------------------
 
@@ -66,7 +68,6 @@ describe('PreviewMarkdown sanitize schema', () => {
 // the __dirname-based calculation.
 const WORKTREE_ROOT = (() => {
   // Walk up from __dirname until we find a node_modules that has rehype-sanitize
-  const { existsSync } = require('fs') as typeof import('fs');
   let dir = __dirname;
   for (let i = 0; i < 15; i++) {
     dir = resolve(dir, '..');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ComponentType } from 'react';
+import { useReducer, type ComponentType } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -19,11 +19,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Progress } from '@/app/components/ui/progress';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-} from '@/app/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/app/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -92,7 +88,13 @@ const GOAL_TEMPLATES: GoalTemplate[] = [
   },
 ];
 
-const STATUS_CONFIG: Record<AgentGoalStatus, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
+const STATUS_CONFIG: Record<
+  AgentGoalStatus,
+  {
+    label: string;
+    variant: 'default' | 'secondary' | 'outline' | 'destructive';
+  }
+> = {
   active: { label: 'Active', variant: 'default' },
   paused: { label: 'Paused', variant: 'secondary' },
   achieved: { label: 'Achieved', variant: 'outline' },
@@ -132,7 +134,9 @@ function computeProgress(goal: AgentGoal): number {
   if (goal.goal_type === 'freshness') {
     if (current <= 0) return 100;
     if (current >= goal.target_value) return 0;
-    return Math.round(((goal.target_value - current) / goal.target_value) * 100);
+    return Math.round(
+      ((goal.target_value - current) / goal.target_value) * 100,
+    );
   }
 
   // For coverage/quality, higher current is better
@@ -172,10 +176,19 @@ interface GoalCardProps {
   isUpdating: boolean;
 }
 
-function GoalCard({ goal, inactive, onEdit, onToggleStatus, isUpdating }: GoalCardProps) {
+function GoalCard({
+  goal,
+  inactive,
+  onEdit,
+  onToggleStatus,
+  isUpdating,
+}: GoalCardProps) {
   const pct = computeProgress(goal);
   const statusCfg = getGoalStatusConfig(goal.status);
-  const canResume = goal.status === 'active' || goal.status === 'paused' || goal.status === 'failed';
+  const canResume =
+    goal.status === 'active' ||
+    goal.status === 'paused' ||
+    goal.status === 'failed';
 
   return (
     <Card className={cn(inactive && 'opacity-60')}>
@@ -184,7 +197,9 @@ function GoalCard({ goal, inactive, onEdit, onToggleStatus, isUpdating }: GoalCa
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
-              <Badge variant="outline">{getGoalTypeLabel(goal.goal_type)}</Badge>
+              <Badge variant="outline">
+                {getGoalTypeLabel(goal.goal_type)}
+              </Badge>
             </div>
             <p className="text-sm mt-1.5">{goal.goal_description}</p>
           </div>
@@ -196,7 +211,7 @@ function GoalCard({ goal, inactive, onEdit, onToggleStatus, isUpdating }: GoalCa
                 onClick={() => onEdit(goal)}
                 aria-label="Edit goal"
               >
-                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                <Pencil className="size-3.5" aria-hidden="true" />
               </Button>
             )}
             {canResume && (
@@ -205,12 +220,14 @@ function GoalCard({ goal, inactive, onEdit, onToggleStatus, isUpdating }: GoalCa
                 variant="ghost"
                 onClick={() => onToggleStatus(goal)}
                 disabled={isUpdating}
-                aria-label={goal.status === 'active' ? 'Pause goal' : 'Resume goal'}
+                aria-label={
+                  goal.status === 'active' ? 'Pause goal' : 'Resume goal'
+                }
               >
                 {goal.status === 'active' ? (
-                  <Pause className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Pause className="size-3.5" aria-hidden="true" />
                 ) : (
-                  <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Play className="size-3.5" aria-hidden="true" />
                 )}
               </Button>
             )}
@@ -236,25 +253,66 @@ function GoalCard({ goal, inactive, onEdit, onToggleStatus, isUpdating }: GoalCa
 // GoalsTab
 // ---------------------------------------------------------------------------
 
+interface GoalsTabState {
+  showAddDialog: boolean;
+  editingGoal: AgentGoal | null;
+  selectedTemplate: string;
+  targetValue: string;
+  customDescription: string;
+  customAgentType: string;
+  customMetric: string;
+  editTargetValue: string;
+  editDescription: string;
+}
+
+const initialGoalsTabState: GoalsTabState = {
+  showAddDialog: false,
+  editingGoal: null,
+  selectedTemplate: '',
+  targetValue: '',
+  customDescription: '',
+  customAgentType: 'curator',
+  customMetric: '',
+  editTargetValue: '',
+  editDescription: '',
+};
+
+const goalsTabReducer = (
+  state: GoalsTabState,
+  patch: Partial<GoalsTabState>,
+): GoalsTabState => ({
+  ...state,
+  ...patch,
+});
+
 export function GoalsTab() {
+  return useGoalsTabImplementation();
+}
+
+function useGoalsTabImplementation() {
   const queryClient = useQueryClient();
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [editingGoal, setEditingGoal] = useState<AgentGoal | null>(null);
-
-  // Add form state
-  const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [targetValue, setTargetValue] = useState('');
-  const [customDescription, setCustomDescription] = useState('');
-  const [customAgentType, setCustomAgentType] = useState('curator');
-  const [customMetric, setCustomMetric] = useState('');
-
-  // Edit form state
-  const [editTargetValue, setEditTargetValue] = useState('');
-  const [editDescription, setEditDescription] = useState('');
+  const [
+    {
+      showAddDialog,
+      editingGoal,
+      selectedTemplate,
+      targetValue,
+      customDescription,
+      customAgentType,
+      customMetric,
+      editTargetValue,
+      editDescription,
+    },
+    updateGoalsState,
+  ] = useReducer(goalsTabReducer, initialGoalsTabState);
 
   // --- Queries ---
 
-  const { data: goals, isLoading, isError } = useQuery<AgentGoal[]>({
+  const {
+    data: goals,
+    isLoading,
+    isError,
+  } = useQuery<AgentGoal[]>({
     queryKey: ['agent-goals'],
     queryFn: async () => {
       const res = await fetch('/api/organizations/agent-goals');
@@ -303,7 +361,7 @@ export function GoalsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent-goals'] });
       toast.success('Goal updated');
-      setEditingGoal(null);
+      updateGoalsState({ editingGoal: null });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -311,12 +369,14 @@ export function GoalsTab() {
   // --- Handlers ---
 
   function resetAddForm() {
-    setShowAddDialog(false);
-    setSelectedTemplate('');
-    setTargetValue('');
-    setCustomDescription('');
-    setCustomAgentType('curator');
-    setCustomMetric('');
+    updateGoalsState({
+      showAddDialog: false,
+      selectedTemplate: '',
+      targetValue: '',
+      customDescription: '',
+      customAgentType: 'curator',
+      customMetric: '',
+    });
   }
 
   function handleCreate() {
@@ -351,9 +411,11 @@ export function GoalsTab() {
   }
 
   function openEditDialog(goal: AgentGoal) {
-    setEditingGoal(goal);
-    setEditTargetValue(goal.target_value?.toString() ?? '');
-    setEditDescription(goal.goal_description);
+    updateGoalsState({
+      editingGoal: goal,
+      editTargetValue: goal.target_value?.toString() ?? '',
+      editDescription: goal.goal_description,
+    });
   }
 
   function handleSaveEdit() {
@@ -371,8 +433,11 @@ export function GoalsTab() {
     return (
       <div className="flex items-center justify-center py-12" role="status">
         <div className="text-center">
-          <div className="inline-flex h-6 w-6 animate-spin rounded-full border-2 border-solid border-current border-r-transparent" aria-hidden="true" />
-          <p className="mt-2 text-sm text-muted-foreground">Loading goals...</p>
+          <div
+            className="inline-flex size-6 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"
+            aria-hidden="true"
+          />
+          <p className="mt-2 text-sm text-muted-foreground">Loading goals…</p>
         </div>
       </div>
     );
@@ -399,10 +464,15 @@ export function GoalsTab() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Set goals to direct what agents prioritize. Agents query active goals and adjust behavior accordingly.
+          Set goals to direct what agents prioritize. Agents query active goals
+          and adjust behavior accordingly.
         </p>
-        <Button size="sm" onClick={() => setShowAddDialog(true)} className="self-start sm:self-auto shrink-0">
-          <Plus className="h-4 w-4 mr-1" aria-hidden="true" />
+        <Button
+          size="sm"
+          onClick={() => updateGoalsState({ showAddDialog: true })}
+          className="self-start sm:self-auto shrink-0"
+        >
+          <Plus className="size-4 mr-1" aria-hidden="true" />
           Add Goal
         </Button>
       </div>
@@ -411,7 +481,10 @@ export function GoalsTab() {
       {activeGoals.length === 0 && inactiveGoals.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
-            <Target className="mx-auto h-8 w-8 text-muted-foreground/50" aria-hidden="true" />
+            <Target
+              className="mx-auto size-8 text-muted-foreground/50"
+              aria-hidden="true"
+            />
             <p className="mt-3 text-sm text-muted-foreground">
               No goals set. Add a goal from a template or create a custom one.
             </p>
@@ -437,7 +510,9 @@ export function GoalsTab() {
       {/* Inactive Goals */}
       {inactiveGoals.length > 0 && (
         <div className="space-y-3 border-t border-border/50 pt-5 mt-5">
-          <h3 className="text-sm font-medium text-muted-foreground">Inactive goals</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">
+            Inactive goals
+          </h3>
           {inactiveGoals.map((goal) => (
             <GoalCard
               key={goal.id}
@@ -452,7 +527,12 @@ export function GoalsTab() {
       )}
 
       {/* Add Goal Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) resetAddForm(); }}>
+      <Dialog
+        open={showAddDialog}
+        onOpenChange={(open) => {
+          if (!open) resetAddForm();
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Goal</DialogTitle>
@@ -463,7 +543,11 @@ export function GoalsTab() {
 
           <div className="space-y-4 py-2">
             {/* Template Selection */}
-            <div className="space-y-2" role="radiogroup" aria-label="Goal template">
+            <div
+              className="space-y-2"
+              role="radiogroup"
+              aria-label="Goal template"
+            >
               {GOAL_TEMPLATES.map((template) => {
                 const Icon = template.icon;
                 const isSelected = selectedTemplate === template.id;
@@ -478,16 +562,23 @@ export function GoalsTab() {
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                       isSelected
                         ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
+                        : 'border-border hover:border-primary/50',
                     )}
                     onClick={() => {
-                      setSelectedTemplate(template.id);
-                      setTargetValue(String(template.default_target));
+                      updateGoalsState({
+                        selectedTemplate: template.id,
+                        targetValue: String(template.default_target),
+                      });
                     }}
                   >
-                    <Icon className="h-5 w-5 mt-0.5 text-muted-foreground" aria-hidden="true" />
+                    <Icon
+                      className="size-5 mt-0.5 text-muted-foreground"
+                      aria-hidden="true"
+                    />
                     <div>
-                      <div className="text-sm font-medium">{template.label}</div>
+                      <div className="text-sm font-medium">
+                        {template.label}
+                      </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {templateDescription(template, template.default_target)}
                       </div>
@@ -506,11 +597,14 @@ export function GoalsTab() {
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                   selectedTemplate === 'custom'
                     ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50'
+                    : 'border-border hover:border-primary/50',
                 )}
-                onClick={() => setSelectedTemplate('custom')}
+                onClick={() => updateGoalsState({ selectedTemplate: 'custom' })}
               >
-                <Settings2 className="h-5 w-5 mt-0.5 text-muted-foreground" aria-hidden="true" />
+                <Settings2
+                  className="size-5 mt-0.5 text-muted-foreground"
+                  aria-hidden="true"
+                />
                 <div>
                   <div className="text-sm font-medium">Custom goal</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
@@ -530,7 +624,9 @@ export function GoalsTab() {
                   id="target-value"
                   type="number"
                   value={targetValue}
-                  onChange={(e) => setTargetValue(e.target.value)}
+                  onChange={(e) =>
+                    updateGoalsState({ targetValue: e.target.value })
+                  }
                   className="mt-1"
                   min={1}
                 />
@@ -538,7 +634,7 @@ export function GoalsTab() {
                   <p className="text-xs text-muted-foreground mt-1">
                     {templateDescription(
                       GOAL_TEMPLATES.find((t) => t.id === selectedTemplate)!,
-                      Number(targetValue)
+                      Number(targetValue),
                     )}
                   </p>
                 )}
@@ -549,58 +645,85 @@ export function GoalsTab() {
             {selectedTemplate === 'custom' && (
               <div className="space-y-3">
                 <div>
-                  <label htmlFor="custom-description" className="text-sm font-medium">
+                  <label
+                    htmlFor="custom-description"
+                    className="text-sm font-medium"
+                  >
                     Goal description
                   </label>
                   <Textarea
                     id="custom-description"
                     value={customDescription}
-                    onChange={(e) => setCustomDescription(e.target.value)}
-                    placeholder="Describe what you want agents to achieve..."
+                    onChange={(e) =>
+                      updateGoalsState({ customDescription: e.target.value })
+                    }
+                    placeholder="Describe what you want agents to achieve…"
                     className="mt-1"
                     rows={2}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label htmlFor="custom-agent" className="text-sm font-medium">
+                    <label
+                      htmlFor="custom-agent"
+                      className="text-sm font-medium"
+                    >
                       Agent type
                     </label>
-                    <Select value={customAgentType} onValueChange={setCustomAgentType}>
+                    <Select
+                      value={customAgentType}
+                      onValueChange={(nextAgentType) =>
+                        updateGoalsState({ customAgentType: nextAgentType })
+                      }
+                    >
                       <SelectTrigger id="custom-agent" className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="curator">Curator</SelectItem>
-                        <SelectItem value="gap_intelligence">Gap Intelligence</SelectItem>
+                        <SelectItem value="gap_intelligence">
+                          Gap Intelligence
+                        </SelectItem>
                         <SelectItem value="onboarding">Onboarding</SelectItem>
                         <SelectItem value="digest">Digest</SelectItem>
-                        <SelectItem value="workflow_extraction">Workflow Extraction</SelectItem>
+                        <SelectItem value="workflow_extraction">
+                          Workflow Extraction
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <label htmlFor="custom-target" className="text-sm font-medium">
+                    <label
+                      htmlFor="custom-target"
+                      className="text-sm font-medium"
+                    >
                       Target value (optional)
                     </label>
                     <Input
                       id="custom-target"
                       type="number"
                       value={targetValue}
-                      onChange={(e) => setTargetValue(e.target.value)}
+                      onChange={(e) =>
+                        updateGoalsState({ targetValue: e.target.value })
+                      }
                       className="mt-1"
                       placeholder="e.g. 90"
                     />
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="custom-metric" className="text-sm font-medium">
+                  <label
+                    htmlFor="custom-metric"
+                    className="text-sm font-medium"
+                  >
                     Target metric (optional)
                   </label>
                   <Input
                     id="custom-metric"
                     value={customMetric}
-                    onChange={(e) => setCustomMetric(e.target.value)}
+                    onChange={(e) =>
+                      updateGoalsState({ customMetric: e.target.value })
+                    }
                     className="mt-1"
                     placeholder="e.g. response_time_hours"
                   />
@@ -629,7 +752,12 @@ export function GoalsTab() {
       </Dialog>
 
       {/* Edit Goal Dialog */}
-      <Dialog open={!!editingGoal} onOpenChange={(open) => { if (!open) setEditingGoal(null); }}>
+      <Dialog
+        open={!!editingGoal}
+        onOpenChange={(open) => {
+          if (!open) updateGoalsState({ editingGoal: null });
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Goal</DialogTitle>
@@ -646,7 +774,9 @@ export function GoalsTab() {
               <Textarea
                 id="edit-description"
                 value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
+                onChange={(e) =>
+                  updateGoalsState({ editDescription: e.target.value })
+                }
                 className="mt-1"
                 rows={2}
               />
@@ -659,14 +789,19 @@ export function GoalsTab() {
                 id="edit-target"
                 type="number"
                 value={editTargetValue}
-                onChange={(e) => setEditTargetValue(e.target.value)}
+                onChange={(e) =>
+                  updateGoalsState({ editTargetValue: e.target.value })
+                }
                 className="mt-1"
               />
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingGoal(null)}>
+            <Button
+              variant="outline"
+              onClick={() => updateGoalsState({ editingGoal: null })}
+            >
               Cancel
             </Button>
             <Button

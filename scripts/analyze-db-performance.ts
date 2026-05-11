@@ -67,9 +67,8 @@ async function analyzeSlowQueries() {
   console.log('\n🐌 Top 20 Slowest Queries:');
   console.log('='.repeat(100));
 
-  const { data, error } = await supabase
-    .rpc('exec_sql', {
-      query: `
+  const { data, error } = await supabase.rpc('exec_sql', {
+    query: `
         SELECT
           LEFT(query, 100) as query,
           calls,
@@ -82,11 +81,13 @@ async function analyzeSlowQueries() {
           AND query NOT LIKE '%information_schema%'
         ORDER BY mean_exec_time DESC
         LIMIT 20;
-      `
-    });
+      `,
+  });
 
   if (error) {
-    console.log('⚠️  pg_stat_statements extension not available. Enable it with:');
+    console.log(
+      '⚠️  pg_stat_statements extension not available. Enable it with:',
+    );
     console.log('   CREATE EXTENSION IF NOT EXISTS pg_stat_statements;');
     return;
   }
@@ -96,7 +97,12 @@ async function analyzeSlowQueries() {
     return;
   }
 
-  console.log('\nQuery'.padEnd(70), 'Calls'.padEnd(8), 'Mean (ms)'.padEnd(12), 'Total (ms)');
+  console.log(
+    '\nQuery'.padEnd(70),
+    'Calls'.padEnd(8),
+    'Mean (ms)'.padEnd(12),
+    'Total (ms)',
+  );
   console.log('-'.repeat(100));
 
   data.forEach((stat: QueryStats) => {
@@ -105,7 +111,7 @@ async function analyzeSlowQueries() {
       queryPreview.padEnd(70),
       stat.calls.toString().padEnd(8),
       stat.mean_time.toFixed(2).padEnd(12),
-      stat.total_time.toFixed(2)
+      stat.total_time.toFixed(2),
     );
   });
 }
@@ -114,9 +120,8 @@ async function analyzeIndexUsage() {
   console.log('\n\n📊 Index Usage Statistics:');
   console.log('='.repeat(100));
 
-  const { data, error } = await supabase
-    .rpc('exec_sql', {
-      query: `
+  const { data, error } = await supabase.rpc('exec_sql', {
+    query: `
         SELECT
           schemaname,
           tablename,
@@ -128,15 +133,20 @@ async function analyzeIndexUsage() {
         FROM pg_stat_user_indexes
         WHERE schemaname = 'public'
         ORDER BY idx_scan DESC;
-      `
-    });
+      `,
+  });
 
   if (error) {
     console.error('Error fetching index statistics:', error);
     return;
   }
 
-  console.log('\nTable'.padEnd(25), 'Index'.padEnd(35), 'Scans'.padEnd(10), 'Size');
+  console.log(
+    '\nTable'.padEnd(25),
+    'Index'.padEnd(35),
+    'Scans'.padEnd(10),
+    'Size',
+  );
   console.log('-'.repeat(100));
 
   data?.forEach((idx: IndexUsage & { index_size: string }) => {
@@ -144,7 +154,7 @@ async function analyzeIndexUsage() {
       idx.tablename.padEnd(25),
       idx.indexname.padEnd(35),
       idx.idx_scan.toString().padEnd(10),
-      idx.index_size
+      idx.index_size,
     );
   });
 
@@ -167,9 +177,8 @@ async function analyzeMissingIndexes() {
   console.log('\n\n🔍 Potential Missing Indexes (Sequential Scans):');
   console.log('='.repeat(100));
 
-  const { data, error } = await supabase
-    .rpc('exec_sql', {
-      query: `
+  const { data, error } = await supabase.rpc('exec_sql', {
+    query: `
         SELECT
           schemaname,
           relname as tablename,
@@ -188,15 +197,21 @@ async function analyzeMissingIndexes() {
           AND seq_scan > 0
         ORDER BY seq_scan DESC
         LIMIT 20;
-      `
-    });
+      `,
+  });
 
   if (error) {
     console.error('Error fetching sequential scan statistics:', error);
     return;
   }
 
-  console.log('\nTable'.padEnd(25), 'Rows'.padEnd(10), 'SeqScans'.padEnd(12), 'IdxScans'.padEnd(12), 'SeqScan%');
+  console.log(
+    '\nTable'.padEnd(25),
+    'Rows'.padEnd(10),
+    'SeqScans'.padEnd(12),
+    'IdxScans'.padEnd(12),
+    'SeqScan%',
+  );
   console.log('-'.repeat(100));
 
   data?.forEach((table: SequentialScanStats) => {
@@ -206,20 +221,21 @@ async function analyzeMissingIndexes() {
       table.rows.toString().padEnd(10),
       table.seq_scan.toString().padEnd(12),
       table.idx_scan.toString().padEnd(12),
-      `${table.seq_scan_pct}%`
+      `${table.seq_scan_pct}%`,
     );
   });
 
-  console.log('\n💡 Tables with >50% sequential scans may benefit from additional indexes.');
+  console.log(
+    '\n💡 Tables with >50% sequential scans may benefit from additional indexes.',
+  );
 }
 
 async function analyzeTableBloat() {
   console.log('\n\n💾 Table Bloat Analysis:');
   console.log('='.repeat(100));
 
-  const { data, error } = await supabase
-    .rpc('exec_sql', {
-      query: `
+  const { data, error } = await supabase.rpc('exec_sql', {
+    query: `
         SELECT
           tablename,
           pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as total_size,
@@ -236,15 +252,21 @@ async function analyzeTableBloat() {
         WHERE schemaname = 'public'
           AND n_live_tup > 0
         ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
-      `
-    });
+      `,
+  });
 
   if (error) {
     console.error('Error fetching table bloat:', error);
     return;
   }
 
-  console.log('\nTable'.padEnd(25), 'Total Size'.padEnd(12), 'Live Rows'.padEnd(12), 'Dead Rows'.padEnd(12), 'Dead%');
+  console.log(
+    '\nTable'.padEnd(25),
+    'Total Size'.padEnd(12),
+    'Live Rows'.padEnd(12),
+    'Dead Rows'.padEnd(12),
+    'Dead%',
+  );
   console.log('-'.repeat(100));
 
   data?.forEach((table: TableBloatStats) => {
@@ -254,7 +276,7 @@ async function analyzeTableBloat() {
       table.total_size.padEnd(12),
       table.live_rows.toString().padEnd(12),
       table.dead_rows.toString().padEnd(12),
-      `${table.dead_row_pct}%`
+      `${table.dead_row_pct}%`,
     );
   });
 
@@ -265,9 +287,8 @@ async function analyzeRLSPolicies() {
   console.log('\n\n🔒 RLS Policy Analysis:');
   console.log('='.repeat(100));
 
-  const { data, error } = await supabase
-    .rpc('exec_sql', {
-      query: `
+  const { data, error } = await supabase.rpc('exec_sql', {
+    query: `
         SELECT
           tablename,
           policyname,
@@ -278,8 +299,8 @@ async function analyzeRLSPolicies() {
         FROM pg_policies
         WHERE schemaname = 'public'
         ORDER BY tablename, policyname;
-      `
-    });
+      `,
+  });
 
   if (error) {
     console.error('Error fetching RLS policies:', error);
@@ -287,11 +308,14 @@ async function analyzeRLSPolicies() {
   }
 
   const policies = (data ?? []) as RlsPolicyStats[];
-  const policiesByTable = policies.reduce<Record<string, RlsPolicyStats[]>>((acc, policy) => {
-    if (!acc[policy.tablename]) acc[policy.tablename] = [];
-    acc[policy.tablename].push(policy);
-    return acc;
-  }, {});
+  const policiesByTable = policies.reduce<Record<string, RlsPolicyStats[]>>(
+    (acc, policy) => {
+      if (!acc[policy.tablename]) acc[policy.tablename] = [];
+      acc[policy.tablename].push(policy);
+      return acc;
+    },
+    {},
+  );
 
   Object.entries(policiesByTable || {}).forEach(([table, policies]) => {
     console.log(`\n${table}: (${policies.length} policies)`);
@@ -304,16 +328,17 @@ async function analyzeRLSPolicies() {
     });
   });
 
-  console.log('\n💡 Ensure RLS policies use indexed columns (org_id, user_id) for best performance.');
+  console.log(
+    '\n💡 Ensure RLS policies use indexed columns (org_id, user_id) for best performance.',
+  );
 }
 
 async function analyzeVectorIndexes() {
   console.log('\n\n🎯 Vector Index Configuration:');
   console.log('='.repeat(100));
 
-  const { data, error } = await supabase
-    .rpc('exec_sql', {
-      query: `
+  const { data, error } = await supabase.rpc('exec_sql', {
+    query: `
         SELECT
           tablename,
           indexname,
@@ -322,8 +347,8 @@ async function analyzeVectorIndexes() {
         WHERE schemaname = 'public'
           AND indexdef LIKE '%ivfflat%'
         ORDER BY tablename;
-      `
-    });
+      `,
+  });
 
   if (error) {
     console.error('Error fetching vector indexes:', error);
@@ -331,7 +356,9 @@ async function analyzeVectorIndexes() {
   }
 
   if (!data || data.length === 0) {
-    console.log('⚠️  No vector indexes found. Consider creating IVFFlat indexes for vector columns.');
+    console.log(
+      '⚠️  No vector indexes found. Consider creating IVFFlat indexes for vector columns.',
+    );
     return;
   }
 
@@ -341,15 +368,14 @@ async function analyzeVectorIndexes() {
   });
 
   // Check row count for vector tables
-  const { data: rowCounts } = await supabase
-    .rpc('exec_sql', {
-      query: `
+  const { data: rowCounts } = await supabase.rpc('exec_sql', {
+    query: `
         SELECT
           'transcript_chunks' as table_name,
           COUNT(*) as row_count
         FROM transcript_chunks;
-      `
-    });
+      `,
+  });
 
   if (rowCounts && rowCounts.length > 0) {
     const rowCount = (rowCounts[0] as RowCountStats).row_count;
@@ -357,10 +383,14 @@ async function analyzeVectorIndexes() {
 
     console.log(`\n💡 Vector Index Recommendations:`);
     console.log(`   Current rows: ${rowCount}`);
-    console.log(`   Recommended lists parameter: ${recommendedLists} (sqrt of row count)`);
+    console.log(
+      `   Recommended lists parameter: ${recommendedLists} (sqrt of row count)`,
+    );
 
     if (rowCount > 100000) {
-      console.log(`   ⚠️  Consider increasing lists parameter for better performance on large datasets.`);
+      console.log(
+        `   ⚠️  Consider increasing lists parameter for better performance on large datasets.`,
+      );
     }
   }
 }
@@ -371,12 +401,19 @@ async function generateSummaryReport() {
   console.log(`Generated: ${new Date().toISOString()}`);
   console.log(`Database: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`);
 
-  await analyzeSlowQueries();
-  await analyzeIndexUsage();
-  await analyzeMissingIndexes();
-  await analyzeTableBloat();
-  await analyzeRLSPolicies();
-  await analyzeVectorIndexes();
+  await [
+    analyzeSlowQueries,
+    analyzeIndexUsage,
+    analyzeMissingIndexes,
+    analyzeTableBloat,
+    analyzeRLSPolicies,
+    analyzeVectorIndexes,
+  ]
+    .reduce<Promise<unknown>>(
+      (chain, step) => chain.then(() => step()),
+      Promise.resolve(),
+    )
+    .then(() => undefined);
 
   console.log('\n\n📋 Action Items:');
   console.log('='.repeat(100));

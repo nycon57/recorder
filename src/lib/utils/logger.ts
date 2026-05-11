@@ -26,8 +26,8 @@ interface LogOptions {
 // ANSI color codes for terminal output
 const colors = {
   DEBUG: '\x1b[36m', // Cyan
-  INFO: '\x1b[32m',  // Green
-  WARN: '\x1b[33m',  // Yellow
+  INFO: '\x1b[32m', // Green
+  WARN: '\x1b[33m', // Yellow
   ERROR: '\x1b[31m', // Red
   RESET: '\x1b[0m',
   DIM: '\x1b[2m',
@@ -52,20 +52,26 @@ function formatContext(context?: LogContext): string {
   const parts: string[] = [];
 
   // Priority order for common fields
-  const priorityFields = ['recordingId', 'jobId', 'orgId', 'userId', 'requestId'];
+  const priorityFields = [
+    'recordingId',
+    'jobId',
+    'orgId',
+    'userId',
+    'requestId',
+  ];
 
-  priorityFields.forEach(field => {
+  priorityFields.forEach((field) => {
     if (context[field]) {
       parts.push(`${field}=${context[field]}`);
     }
   });
 
   // Add remaining fields
-  Object.keys(context)
-    .filter(key => !priorityFields.includes(key))
-    .forEach(key => {
+  Object.keys(context).forEach((key) => {
+    if (!priorityFields.includes(key)) {
       parts.push(`${key}=${context[key]}`);
-    });
+    }
+  });
 
   return parts.length > 0 ? ` [${parts.join(' ')}]` : '';
 }
@@ -108,7 +114,12 @@ function log(level: LogLevel, message: string, options: LogOptions = {}): void {
 
   // Log additional data if provided
   if (options.data !== undefined) {
-    console.log(`${dim}Data:${reset}`, typeof options.data === 'object' ? JSON.stringify(options.data, null, 2) : options.data);
+    console.log(
+      `${dim}Data:${reset}`,
+      typeof options.data === 'object'
+        ? JSON.stringify(options.data, null, 2)
+        : options.data,
+    );
   }
 }
 
@@ -175,7 +186,11 @@ export class Logger {
   /**
    * Log with custom level
    */
-  log(level: LogLevel, message: string, options: Omit<LogOptions, 'level'> = {}): void {
+  log(
+    level: LogLevel,
+    message: string,
+    options: Omit<LogOptions, 'level'> = {},
+  ): void {
     log(level, message, {
       ...options,
       context: { ...this.defaultContext, ...options.context },
@@ -198,7 +213,11 @@ export const logger = new Logger();
 /**
  * Convenience functions for global logging
  */
-export const logDebug = (message: string, options?: Omit<LogOptions, 'level'>) => logger.debug(message, options);
-export const logInfo = (message: string, options?: Omit<LogOptions, 'level'>) => logger.info(message, options);
-export const logWarn = (message: string, options?: Omit<LogOptions, 'level'>) => logger.warn(message, options);
-export const logError = (message: string, options?: Omit<LogOptions, 'level'>) => logger.error(message, options);
+const logDebug = (message: string, options?: Omit<LogOptions, 'level'>) =>
+  logger.debug(message, options);
+const logInfo = (message: string, options?: Omit<LogOptions, 'level'>) =>
+  logger.info(message, options);
+const logWarn = (message: string, options?: Omit<LogOptions, 'level'>) =>
+  logger.warn(message, options);
+const logError = (message: string, options?: Omit<LogOptions, 'level'>) =>
+  logger.error(message, options);

@@ -48,7 +48,7 @@ export type FileType =
  * Content processing status (applies to all content types).
  * Flow: uploading → uploaded → transcribing → transcribed → doc_generating → completed
  */
-export type ContentStatus =
+type ContentStatus =
   | 'uploading'
   | 'uploaded'
   | 'transcribing'
@@ -68,7 +68,7 @@ export type UserStatus = 'active' | 'inactive' | 'pending' | 'suspended';
 
 export type OrganizationPlan = 'free' | 'pro' | 'enterprise';
 
-export type Visibility = 'private' | 'department' | 'org' | 'public';
+type Visibility = 'private' | 'department' | 'org' | 'public';
 
 // ─── Job Types ─────────────────────────────────────────────────────────────
 
@@ -210,7 +210,7 @@ export type AgentGoalStatus = 'active' | 'paused' | 'achieved' | 'failed';
 
 export type KnowledgeGapSeverity = 'low' | 'medium' | 'high' | 'critical';
 
-export type KnowledgeGapStatus = 'open' | 'acknowledged' | 'resolved' | 'dismissed';
+type KnowledgeGapStatus = 'open' | 'acknowledged' | 'resolved' | 'dismissed';
 
 export type WorkflowStatus = 'draft' | 'published' | 'outdated' | 'archived';
 
@@ -269,18 +269,18 @@ export interface Tag {
   updated_at: string;
 }
 
-export interface ContentTag {
+interface ContentTag {
   content_id: string;
   tag_id: string;
   created_at: string;
 }
 
 /** @deprecated Use ContentTag instead */
-export type RecordingTag = ContentTag;
+type RecordingTag = ContentTag;
 
 // ─── Comments ──────────────────────────────────────────────────────────────
 
-export interface Comment {
+interface Comment {
   id: string;
   content_id: string;
   user_id: string;
@@ -303,7 +303,7 @@ export interface CommentWithUser extends Omit<Comment, 'org_id' | 'deleted_at'> 
 
 export type BlogPostCategory = 'product' | 'insights' | 'tutorials' | 'general';
 
-export type BlogPostStatus = 'draft' | 'published' | 'archived';
+type BlogPostStatus = 'draft' | 'published' | 'archived';
 
 export interface BlogPostCard {
   id: string;
@@ -383,25 +383,25 @@ export interface VendorApiKey {
 
 // ─── Session / Activity Types ──────────────────────────────────────────────
 
-export type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
+type SessionStatus = 'active' | 'paused' | 'completed' | 'failed';
 
-export type OnboardingPlanStatus = 'active' | 'completed' | 'paused' | 'expired';
+type OnboardingPlanStatus = 'active' | 'completed' | 'paused' | 'expired';
 
-export type SyncStatus = 'idle' | 'syncing' | 'error';
+type SyncStatus = 'idle' | 'syncing' | 'error';
 
-export type ImportedDocumentStatus =
+type ImportedDocumentStatus =
   | 'pending'
   | 'processing'
   | 'completed'
   | 'error';
 
-export type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
+type DocumentStatus = 'generating' | 'generated' | 'edited' | 'error';
 
-export type ShareTargetType = 'recording' | 'document';
+type ShareTargetType = 'recording' | 'document';
 
-export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
+type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
 
-export type ConnectorType =
+type ConnectorType =
   | 'google_drive'
   | 'notion'
   | 'confluence'
@@ -409,11 +409,11 @@ export type ConnectorType =
   | 'url_import'
   | 'slack';
 
-export type SearchMode = 'standard' | 'agentic' | 'hybrid' | 'hierarchical';
+type SearchMode = 'standard' | 'agentic' | 'hybrid' | 'hierarchical';
 
-export type WebhookStatus = 'healthy' | 'degraded' | 'failing' | 'disabled';
+type WebhookStatus = 'healthy' | 'degraded' | 'failing' | 'disabled';
 
-export type JobStatus =
+type JobStatus =
   | 'pending'
   | 'processing'
   | 'completed'

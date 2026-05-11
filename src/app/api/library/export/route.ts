@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { Readable } from 'stream';
+
+import { NextRequest, NextResponse } from 'next/server';
 import archiver from 'archiver';
 import Papa from 'papaparse';
+import { z } from 'zod';
 
 import {
   apiHandler,
@@ -12,22 +14,24 @@ import {
   generateRequestId,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { z } from 'zod';
 
 // Export request schema
 const exportRequestSchema = z.object({
   format: z.enum(['zip', 'json', 'csv']),
-  options: z.object({
-    includeTranscripts: z.boolean().optional().default(true),
-    includeDocuments: z.boolean().optional().default(true),
-    includeMetadata: z.boolean().optional().default(true),
-    includeMedia: z.boolean().optional().default(true),
-  }).optional().default({
-    includeTranscripts: true,
-    includeDocuments: true,
-    includeMetadata: true,
-    includeMedia: true,
-  }),
+  options: z
+    .object({
+      includeTranscripts: z.boolean().optional().default(true),
+      includeDocuments: z.boolean().optional().default(true),
+      includeMetadata: z.boolean().optional().default(true),
+      includeMedia: z.boolean().optional().default(true),
+    })
+    .optional()
+    .default({
+      includeTranscripts: true,
+      includeDocuments: true,
+      includeMetadata: true,
+      includeMedia: true,
+    }),
   recordingIds: z.array(z.string()).optional(),
 });
 
@@ -53,11 +57,13 @@ export async function POST(request: NextRequest) {
     // Get recordings to export
     let query = supabaseAdmin
       .from('content')
-      .select(`
+      .select(
+        `
         *,
         transcripts!content_id (*),
         documents!content_id (*)
-      `)
+      `,
+      )
       .eq('org_id', orgId)
       .is('deleted_at', null);
 
@@ -84,7 +90,12 @@ export async function POST(request: NextRequest) {
       case 'csv':
         return await exportAsCSV(recordings, requestId);
       case 'zip':
-        return await exportAsZIP(recordings, exportData.options, orgId, requestId);
+        return await exportAsZIP(
+          recordings,
+          exportData.options,
+          orgId,
+          requestId,
+        );
       default:
         return errors.badRequest('Invalid export format', undefined, requestId);
     }
@@ -106,11 +117,15 @@ export async function POST(request: NextRequest) {
 /**
  * Export as JSON
  */
-async function exportAsJSON(recordings: any[], options: any, requestId: string) {
+async function exportAsJSON(
+  recordings: any[],
+  options: any,
+  requestId: string,
+) {
   const exportData = {
     exportedAt: new Date().toISOString(),
     totalItems: recordings.length,
-    items: recordings.map(recording => {
+    items: recordings.map((recording) => {
       const item: any = {
         id: recording.id,
         title: recording.title,
@@ -159,7 +174,7 @@ async function exportAsJSON(recordings: any[], options: any, requestId: string) 
  * Export as CSV
  */
 async function exportAsCSV(recordings: any[], requestId: string) {
-  const csvData = recordings.map(recording => ({
+  const csvData = recordings.map((recording) => ({
     ID: recording.id,
     Title: recording.title || '',
     Description: recording.description || '',
@@ -195,7 +210,12 @@ async function exportAsCSV(recordings: any[], requestId: string) {
  * - GET /api/library/export/:id/status returns progress
  * - GET /api/library/export/:id/download returns the final file
  */
-async function exportAsZIP(recordings: any[], options: any, orgId: string, requestId: string) {
+async function exportAsZIP(
+  recordings: any[],
+  options: any,
+  orgId: string,
+  requestId: string,
+) {
   const archive = archiver('zip', {
     zlib: { level: 9 }, // Maximum compression
   });
@@ -211,7 +231,7 @@ async function exportAsZIP(recordings: any[], options: any, orgId: string, reque
     const metadata = {
       exportedAt: new Date().toISOString(),
       totalItems: recordings.length,
-      items: recordings.map(r => ({
+      items: recordings.map((r) => ({
         id: r.id,
         title: r.title,
         description: r.description,
@@ -222,7 +242,9 @@ async function exportAsZIP(recordings: any[], options: any, orgId: string, reque
       })),
     };
 
-    archive.append(JSON.stringify(metadata, null, 2), { name: 'metadata.json' });
+    archive.append(JSON.stringify(metadata, null, 2), {
+      name: 'metadata.json',
+    });
   }
 
   // Add transcripts
@@ -249,25 +271,30 @@ async function exportAsZIP(recordings: any[], options: any, orgId: string, reque
 
   // Add media files
   if (options.includeMedia) {
-    for (const recording of recordings) {
-      if (recording.storage_path_raw) {
-        try {
-          // Download file from Supabase Storage
-          const { data: fileData, error } = await supabaseAdmin.storage
-            .from('content')
-            .download(recording.storage_path_raw);
+    await Promise.all(
+      Array.from(recordings).map(async (recording) => {
+        if (recording.storage_path_raw) {
+          try {
+            // Download file from Supabase Storage
+            const { data: fileData, error } = await supabaseAdmin.storage
+              .from('content')
+              .download(recording.storage_path_raw);
 
-          if (!error && fileData) {
-            const buffer = Buffer.from(await fileData.arrayBuffer());
-            const extension = recording.file_type || 'mp4';
-            const filename = `media/${recording.id}-${recording.title || 'untitled'}.${extension}`;
-            archive.append(buffer, { name: filename });
+            if (!error && fileData) {
+              const buffer = Buffer.from(await fileData.arrayBuffer());
+              const extension = recording.file_type || 'mp4';
+              const filename = `media/${recording.id}-${recording.title || 'untitled'}.${extension}`;
+              archive.append(buffer, { name: filename });
+            }
+          } catch (error) {
+            console.error(
+              `[Export] Failed to download file for ${recording.id}:`,
+              error,
+            );
           }
-        } catch (error) {
-          console.error(`[Export] Failed to download file for ${recording.id}:`, error);
         }
-      }
-    }
+      }),
+    );
   }
 
   // Finalize archive
@@ -318,7 +345,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
       // Calculate estimated size based on format
       if (format === 'zip' && includeMedia) {
         // Include actual file sizes
-        estimatedSize = recordings.reduce((sum, r) => sum + (r.file_size || 0), 0);
+        estimatedSize = recordings.reduce(
+          (sum, r) => sum + (r.file_size || 0),
+          0,
+        );
       } else if (format === 'json') {
         // Rough estimate: 5KB per recording for JSON
         estimatedSize = recordings.length * 5 * 1024;

@@ -20,7 +20,7 @@ import type { CSSProperties } from 'react';
  * getContrastColor('#00df82') // Returns '#000000' (black text on bright green)
  * getContrastColor('#03624c') // Returns '#ffffff' (white text on dark green)
  */
-export function getContrastColor(hexColor: string): string {
+function getContrastColor(hexColor: string): string {
   const hex = hexColor.replace('#', '');
 
   // Handle shorthand hex (e.g., #abc -> #aabbcc)
@@ -68,7 +68,7 @@ export function generateColorVars(bgColor: string): CSSProperties {
  * @param hexColor - Hex color string
  * @returns true if the color is dark (luminance <= 0.5)
  */
-export function isDarkColor(hexColor: string): boolean {
+function isDarkColor(hexColor: string): boolean {
   return getContrastColor(hexColor) === '#ffffff';
 }
 
@@ -78,7 +78,7 @@ export function isDarkColor(hexColor: string): boolean {
  * @param hexColor - Hex color string
  * @returns true if the color is light (luminance > 0.5)
  */
-export function isLightColor(hexColor: string): boolean {
+function isLightColor(hexColor: string): boolean {
   return getContrastColor(hexColor) === '#000000';
 }
 
@@ -92,7 +92,7 @@ export function isLightColor(hexColor: string): boolean {
  * @example
  * withOpacity('#00df82', 0.15) // Returns 'rgba(0, 223, 130, 0.15)'
  */
-export function withOpacity(hexColor: string, opacity: number): string {
+function withOpacity(hexColor: string, opacity: number): string {
   const hex = hexColor.replace('#', '');
   const fullHex =
     hex.length === 3
@@ -113,7 +113,7 @@ export function withOpacity(hexColor: string, opacity: number): string {
  * Tribora brand colors for reference
  * Use these constants instead of hardcoding color values
  */
-export const BRAND_COLORS = {
+const BRAND_COLORS = {
   /** Primary brand color - Bangladesh Green */
   primary: '#03624c',
   /** Secondary supporting green - Mountain Meadow */
@@ -133,7 +133,7 @@ export const BRAND_COLORS = {
 /**
  * Default colors for tags by category (optional predefined palette)
  */
-export const TAG_COLORS = [
+const TAG_COLORS = [
   '#3b82f6', // Blue
   '#8b5cf6', // Purple
   '#ec4899', // Pink

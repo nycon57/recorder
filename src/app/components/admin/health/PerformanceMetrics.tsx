@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Activity, Clock, Zap, TrendingUp } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Skeleton } from '@/app/components/ui/skeleton';
 
 interface PerformanceData {
@@ -14,65 +20,43 @@ interface PerformanceData {
 }
 
 export default function PerformanceMetrics() {
-  const [metrics, setMetrics] = useState<PerformanceData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: metrics,
+    isLoading,
+    error,
+  } = useQuery<PerformanceData, Error>({
+    queryKey: ['analytics', 'metrics', 'performance'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        '/api/analytics/metrics?includeHealth=true',
+        { signal },
+      );
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let interval: NodeJS.Timeout | null = null;
-
-    const fetchMetrics = async () => {
-      try {
-        const response = await fetch('/api/analytics/metrics?includeHealth=true', {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch performance metrics');
-        }
-
-        const { data } = await response.json();
-
-        setMetrics({
-          apiResponseTime: data.performance?.apiResponseTime || 0,
-          jobProcessingTime: data.performance?.jobProcessingTime || 0,
-          storageLatency: data.performance?.storageLatency || 0,
-          throughput: data.performance?.throughput || 0,
-        });
-        setError(null);
-      } catch (err) {
-        // Ignore abort errors
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-
-        console.error('Error fetching performance metrics:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load metrics');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch performance metrics');
       }
-    };
 
-    fetchMetrics();
+      const { data } = await response.json();
 
-    // Auto-refresh every 30 seconds
-    interval = setInterval(fetchMetrics, 30000);
-
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-      controller.abort();
-    };
-  }, []);
+      return {
+        apiResponseTime: data.performance?.apiResponseTime || 0,
+        jobProcessingTime: data.performance?.jobProcessingTime || 0,
+        storageLatency: data.performance?.storageLatency || 0,
+        throughput: data.performance?.throughput || 0,
+      };
+    },
+    refetchInterval: 30000,
+  });
 
   const formatTime = (ms: number): string => {
     if (ms < 1000) return `${ms.toFixed(0)}ms`;
     return `${(ms / 1000).toFixed(2)}s`;
   };
 
-  const getPerformanceStatus = (value: number, thresholds: { good: number; ok: number }): 'good' | 'ok' | 'poor' => {
+  const getPerformanceStatus = (
+    value: number,
+    thresholds: { good: number; ok: number },
+  ): 'good' | 'ok' | 'poor' => {
     if (value <= thresholds.good) return 'good';
     if (value <= thresholds.ok) return 'ok';
     return 'poor';
@@ -91,7 +75,7 @@ export default function PerformanceMetrics() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -100,8 +84,13 @@ export default function PerformanceMetrics() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-32 w-full" />
+            {[
+              'performance-metric-1',
+              'performance-metric-2',
+              'performance-metric-3',
+              'performance-metric-4',
+            ].map((skeletonId) => (
+              <Skeleton key={skeletonId} className="h-32 w-full" />
             ))}
           </div>
         </CardContent>
@@ -113,7 +102,9 @@ export default function PerformanceMetrics() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading performance metrics: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading performance metrics: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -123,9 +114,18 @@ export default function PerformanceMetrics() {
     return null;
   }
 
-  const apiStatus = getPerformanceStatus(metrics.apiResponseTime, { good: 100, ok: 300 });
-  const jobStatus = getPerformanceStatus(metrics.jobProcessingTime, { good: 60000, ok: 180000 });
-  const storageStatus = getPerformanceStatus(metrics.storageLatency, { good: 50, ok: 150 });
+  const apiStatus = getPerformanceStatus(metrics.apiResponseTime, {
+    good: 100,
+    ok: 300,
+  });
+  const jobStatus = getPerformanceStatus(metrics.jobProcessingTime, {
+    good: 60000,
+    ok: 180000,
+  });
+  const storageStatus = getPerformanceStatus(metrics.storageLatency, {
+    good: 50,
+    ok: 150,
+  });
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -133,12 +133,10 @@ export default function PerformanceMetrics() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
+            <Activity className="size-5" />
             Performance Metrics
           </CardTitle>
-          <CardDescription>
-            Real-time performance measurements
-          </CardDescription>
+          <CardDescription>Real-time performance measurements</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
@@ -146,19 +144,23 @@ export default function PerformanceMetrics() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-muted-foreground" />
+                  <Zap className="size-4 text-muted-foreground" />
                   <span className="text-sm font-medium">API Response Time</span>
                 </div>
-                <span className={`text-sm font-bold ${getStatusColor(apiStatus)}`}>
+                <span
+                  className={`text-sm font-bold ${getStatusColor(apiStatus)}`}
+                >
                   {formatTime(metrics.apiResponseTime)}
                 </span>
               </div>
               <div className="w-full bg-muted rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all ${
-                    apiStatus === 'good' ? 'bg-green-600' :
-                    apiStatus === 'ok' ? 'bg-yellow-600' :
-                    'bg-red-600'
+                    apiStatus === 'good'
+                      ? 'bg-green-600'
+                      : apiStatus === 'ok'
+                        ? 'bg-yellow-600'
+                        : 'bg-red-600'
                   }`}
                   style={{
                     width: `${Math.min((metrics.apiResponseTime / 500) * 100, 100)}%`,
@@ -174,19 +176,25 @@ export default function PerformanceMetrics() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Avg. Job Processing Time</span>
+                  <Clock className="size-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">
+                    Avg. Job Processing Time
+                  </span>
                 </div>
-                <span className={`text-sm font-bold ${getStatusColor(jobStatus)}`}>
+                <span
+                  className={`text-sm font-bold ${getStatusColor(jobStatus)}`}
+                >
                   {formatTime(metrics.jobProcessingTime)}
                 </span>
               </div>
               <div className="w-full bg-muted rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all ${
-                    jobStatus === 'good' ? 'bg-green-600' :
-                    jobStatus === 'ok' ? 'bg-yellow-600' :
-                    'bg-red-600'
+                    jobStatus === 'good'
+                      ? 'bg-green-600'
+                      : jobStatus === 'ok'
+                        ? 'bg-yellow-600'
+                        : 'bg-red-600'
                   }`}
                   style={{
                     width: `${Math.min((metrics.jobProcessingTime / 300000) * 100, 100)}%`,
@@ -202,19 +210,23 @@ export default function PerformanceMetrics() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-muted-foreground" />
+                  <Activity className="size-4 text-muted-foreground" />
                   <span className="text-sm font-medium">Storage Latency</span>
                 </div>
-                <span className={`text-sm font-bold ${getStatusColor(storageStatus)}`}>
+                <span
+                  className={`text-sm font-bold ${getStatusColor(storageStatus)}`}
+                >
                   {formatTime(metrics.storageLatency)}
                 </span>
               </div>
               <div className="w-full bg-muted rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all ${
-                    storageStatus === 'good' ? 'bg-green-600' :
-                    storageStatus === 'ok' ? 'bg-yellow-600' :
-                    'bg-red-600'
+                    storageStatus === 'good'
+                      ? 'bg-green-600'
+                      : storageStatus === 'ok'
+                        ? 'bg-yellow-600'
+                        : 'bg-red-600'
                   }`}
                   style={{
                     width: `${Math.min((metrics.storageLatency / 300) * 100, 100)}%`,
@@ -233,7 +245,7 @@ export default function PerformanceMetrics() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
+            <TrendingUp className="size-5" />
             Capacity Planning
           </CardTitle>
           <CardDescription>
@@ -246,7 +258,9 @@ export default function PerformanceMetrics() {
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium">Current Throughput</span>
-                <span className="text-sm font-bold">{metrics.throughput.toFixed(0)} req/s</span>
+                <span className="text-sm font-bold">
+                  {metrics.throughput.toFixed(0)} req/s
+                </span>
               </div>
               <div className="w-full bg-muted rounded-full h-2">
                 <div
@@ -281,7 +295,8 @@ export default function PerformanceMetrics() {
                       API Performance
                     </p>
                     <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                      Response times are elevated. Review database query performance.
+                      Response times are elevated. Review database query
+                      performance.
                     </p>
                   </div>
                 )}

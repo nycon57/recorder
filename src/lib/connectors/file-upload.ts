@@ -57,6 +57,9 @@ const FILE_CATEGORIES = {
   ],
   data: ['application/json', 'text/csv'],
 };
+const FILE_CATEGORY_ENTRIES = Object.entries(FILE_CATEGORIES).map(
+  ([category, types]) => [category, new Set(types)] as const,
+);
 
 // Max file size: 50MB (Supabase limit)
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -227,43 +230,45 @@ export class FileUploadConnector implements Connector {
       }
 
       // Process each file
-      for (const file of filesToProcess) {
-        try {
-          filesProcessed++;
+      await Promise.all(
+        Array.from(filesToProcess).map(async (file) => {
+          try {
+            filesProcessed++;
 
-          // Generate storage path
-          const storagePath = this.batchId
-            ? `org_${this.orgId}/uploads/${this.batchId}/${file.id}-${file.name}`
-            : `org_${this.orgId}/uploads/${file.id}-${file.name}`;
+            // Generate storage path
+            const storagePath = this.batchId
+              ? `org_${this.orgId}/uploads/${this.batchId}/${file.id}-${file.name}`
+              : `org_${this.orgId}/uploads/${file.id}-${file.name}`;
 
-          // Upload to Supabase storage
-          const { error: uploadError } = await supabaseAdmin.storage
-            .from('recordings')
-            .upload(storagePath, file.buffer, {
-              contentType: file.mimeType,
-              upsert: false,
-              cacheControl: '3600',
+            // Upload to Supabase storage
+            const { error: uploadError } = await supabaseAdmin.storage
+              .from('recordings')
+              .upload(storagePath, file.buffer, {
+                contentType: file.mimeType,
+                upsert: false,
+                cacheControl: '3600',
+              });
+
+            if (uploadError) {
+              throw new Error(`Upload failed: ${uploadError.message}`);
+            }
+
+            filesUpdated++;
+
+            // Remove from memory after successful upload
+            this.uploadedFiles.delete(file.id);
+          } catch (error) {
+            filesFailed++;
+            errors.push({
+              fileId: file.id,
+              fileName: file.name,
+              error:
+                error instanceof Error ? error.message : 'Unknown upload error',
+              retryable: true,
             });
-
-          if (uploadError) {
-            throw new Error(`Upload failed: ${uploadError.message}`);
           }
-
-          filesUpdated++;
-
-          // Remove from memory after successful upload
-          this.uploadedFiles.delete(file.id);
-        } catch (error) {
-          filesFailed++;
-          errors.push({
-            fileId: file.id,
-            fileName: file.name,
-            error:
-              error instanceof Error ? error.message : 'Unknown upload error',
-            retryable: true,
-          });
-        }
-      }
+        }),
+      );
 
       return {
         success: filesFailed === 0,
@@ -342,8 +347,8 @@ export class FileUploadConnector implements Connector {
    * Helper: Determine file category from MIME type
    */
   private getFileCategory(mimeType: string): string {
-    for (const [category, types] of Object.entries(FILE_CATEGORIES)) {
-      if (types.includes(mimeType)) {
+    for (const [category, types] of FILE_CATEGORY_ENTRIES) {
+      if (types.has(mimeType)) {
         return category;
       }
     }
@@ -370,15 +375,19 @@ export class FileUploadConnector implements Connector {
   static getExtensions(category?: keyof typeof FILE_CATEGORIES): string[] {
     if (!category) {
       // Return all extensions
-      return Array.from(SUPPORTED_MIME_TYPES)
-        .map((type) => mime.extension(type))
-        .filter((ext): ext is string => ext !== false);
+      return Array.from(SUPPORTED_MIME_TYPES).flatMap(
+        (__item, __index, __array) => {
+          const __mapped = mime.extension(__item);
+          return __mapped !== false ? [__mapped] : [];
+        },
+      );
     }
 
     const types = FILE_CATEGORIES[category];
-    return types
-      .map((type) => mime.extension(type))
-      .filter((ext): ext is string => ext !== false);
+    return types.flatMap((__item, __index, __array) => {
+      const __mapped = mime.extension(__item);
+      return __mapped !== false ? [__mapped] : [];
+    });
   }
 
   /**

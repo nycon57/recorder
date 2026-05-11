@@ -18,6 +18,8 @@ import { join, relative } from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
+const SKIPPED_DIRECTORIES = new Set(['node_modules', '.next', '.git', 'dist', 'build']);
+
 // Color codes for terminal output
 const colors = {
   reset: '\x1b[0m',
@@ -73,7 +75,7 @@ function findFiles(dir: string, pattern: RegExp, files: string[] = []): string[]
 
         if (stat.isDirectory()) {
           // Skip node_modules, .next, .git, and other build/dependency directories
-          if (!['node_modules', '.next', '.git', 'dist', 'build'].includes(entry)) {
+          if (!SKIPPED_DIRECTORIES.has(entry)) {
             findFiles(fullPath, pattern, files);
           }
         } else if (pattern.test(fullPath)) {
@@ -254,13 +256,30 @@ function validateRule(rule: unknown, source: string): rule is MigrationRule {
  */
 async function loadRulesFromFile(filePath: string): Promise<MigrationRule[]> {
   try {
-    // Attempt to dynamically import the rules file
-    const module = await import(filePath);
+    let module: { default?: unknown; rules?: unknown };
+
+    switch (filePath) {
+      case './migrations/empty-states-rules.ts':
+        module = await import('./migrations/empty-states-rules');
+        break;
+      case './migrations/ai-chat-rules.ts':
+        module = await import('./migrations/ai-chat-rules');
+        break;
+      case './migrations/recording-ui-rules.ts':
+        module = await import('./migrations/recording-ui-rules');
+        break;
+      default:
+        throw Object.assign(new Error(`Unsupported migration rules file: ${filePath}`), {
+          code: 'ERR_MODULE_NOT_FOUND',
+        });
+    }
+
     const loadedRules = module.default || module.rules || [];
+    const rules = Array.isArray(loadedRules) ? loadedRules : [];
 
     // Validate each rule
-    const validRules = loadedRules.filter((rule: unknown) =>
-      validateRule(rule, filePath)
+    const validRules = rules.filter((rule: unknown) =>
+      validateRule(rule, filePath),
     );
 
     if (validRules.length > 0) {

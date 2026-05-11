@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 
 import {
   apiHandler,
@@ -8,13 +9,14 @@ import {
   parseBody,
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { z } from 'zod';
 
 /**
  * Track Recording View Schema
  */
 const trackViewSchema = z.object({
-  source: z.enum(['library', 'search', 'share', 'direct', 'assistant']).optional(),
+  source: z
+    .enum(['library', 'search', 'share', 'direct', 'assistant'])
+    .optional(),
   duration_sec: z.number().int().positive().optional(),
   session_id: z.string().optional(),
   referrer: z.string().optional(),
@@ -36,8 +38,10 @@ type TrackViewInput = z.infer<typeof trackViewSchema>;
  * @returns View tracking confirmation with view ID
  */
 export const POST = apiHandler(async (request: NextRequest, context: any) => {
-  const { userId } = await requireAuth();
-  const params = await context.params;
+  const [{ userId }, params] = await Promise.all([
+    requireAuth(),
+    context.params,
+  ]);
   const recordingId = params.id;
 
   // Validate request body
@@ -53,7 +57,10 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
     .single();
 
   if (userError || !user) {
-    console.error('[POST /api/recordings/:id/view] Error fetching user:', userError);
+    console.error(
+      '[POST /api/recordings/:id/view] Error fetching user:',
+      userError,
+    );
     return errors.notFound('User');
   }
 
@@ -73,9 +80,10 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
   }
 
   // Extract IP and user agent from request
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] ||
-             request.headers.get('x-real-ip') ||
-             null;
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0] ||
+    request.headers.get('x-real-ip') ||
+    null;
   const userAgent = request.headers.get('user-agent') || null;
 
   // Type assertion for parsed body
@@ -93,26 +101,29 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
       p_ip_address: ip,
       p_user_agent: userAgent,
       p_referrer: typedBody.referrer || null,
-    }
+    },
   );
 
   if (trackError) {
-    console.error('[POST /api/recordings/:id/view] Error tracking view:', trackError);
+    console.error(
+      '[POST /api/recordings/:id/view] Error tracking view:',
+      trackError,
+    );
     return errors.internalError();
   }
 
   // Optionally update view duration if provided
   if (typedBody.duration_sec && viewId) {
-    const { error: updateError } = await supabase.rpc(
-      'update_view_duration',
-      {
-        p_view_id: viewId,
-        p_duration_sec: typedBody.duration_sec,
-      }
-    );
+    const { error: updateError } = await supabase.rpc('update_view_duration', {
+      p_view_id: viewId,
+      p_duration_sec: typedBody.duration_sec,
+    });
 
     if (updateError) {
-      console.error('[POST /api/recordings/:id/view] Error updating duration:', updateError);
+      console.error(
+        '[POST /api/recordings/:id/view] Error updating duration:',
+        updateError,
+      );
       // Don't fail the request, just log the error
     }
   }
@@ -134,8 +145,10 @@ export const POST = apiHandler(async (request: NextRequest, context: any) => {
  * @returns View count and statistics
  */
 export const GET = apiHandler(async (request: NextRequest, context: any) => {
-  const { userId } = await requireAuth();
-  const params = await context.params;
+  const [{ userId }, params] = await Promise.all([
+    requireAuth(),
+    context.params,
+  ]);
   const recordingId = params.id;
 
   const supabase = supabaseAdmin;
@@ -148,7 +161,10 @@ export const GET = apiHandler(async (request: NextRequest, context: any) => {
     .single();
 
   if (userError || !user) {
-    console.error('[GET /api/recordings/:id/view] Error fetching user:', userError);
+    console.error(
+      '[GET /api/recordings/:id/view] Error fetching user:',
+      userError,
+    );
     return errors.notFound('User');
   }
 
@@ -170,19 +186,24 @@ export const GET = apiHandler(async (request: NextRequest, context: any) => {
   // Get view count using the database function
   const { data: viewCount, error: countError } = await supabase.rpc(
     'get_recording_view_count',
-    { p_content_id: recordingId }
+    { p_content_id: recordingId },
   );
 
   if (countError) {
-    console.error('[GET /api/recordings/:id/view] Error getting view count:', countError);
+    console.error(
+      '[GET /api/recordings/:id/view] Error getting view count:',
+      countError,
+    );
     return errors.internalError();
   }
 
   // Try to get detailed stats from materialized view
   const { data: viewStats } = await supabase
     .from('recording_view_counts')
-    .select('total_views, unique_viewers, last_viewed_at, avg_view_duration_sec')
-    .eq('content_id', recordingId)
+    .select(
+      'total_views, unique_viewers, last_viewed_at, avg_view_duration_sec',
+    )
+    .eq('recording_id', recordingId)
     .single();
 
   return successResponse({

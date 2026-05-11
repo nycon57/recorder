@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 import {
   AlertCircle,
   Wifi,
@@ -127,7 +127,7 @@ export default function ErrorRecoveryPanel({
   };
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       className={cn('space-y-6', className)}
@@ -135,34 +135,41 @@ export default function ErrorRecoveryPanel({
       {/* Error Alert */}
       <Alert variant="destructive" className="border-2">
         <div className="flex items-start gap-4">
-          <motion.div
-            initial={{ scale: 0 }}
+          <m.div
+            initial={{ scale: 0.95 }}
             animate={{ scale: [1, 1.2, 1] }}
             transition={{ duration: 0.5, times: [0, 0.5, 1] }}
             className="flex-shrink-0 text-destructive"
           >
             {getErrorIcon()}
-          </motion.div>
+          </m.div>
           <div className="flex-1 space-y-2">
-            <AlertTitle className="text-base font-semibold">{getErrorTitle()}</AlertTitle>
-            <AlertDescription className="text-sm">{error.message}</AlertDescription>
+            <AlertTitle className="text-base font-semibold">
+              {getErrorTitle()}
+            </AlertTitle>
+            <AlertDescription className="text-sm">
+              {error.message}
+            </AlertDescription>
 
             {/* Error Details */}
             {(error.code || error.details || error.timestamp) && (
               <div className="mt-3 space-y-1 text-xs text-muted-foreground">
                 {error.code && (
                   <p>
-                    <span className="font-semibold">Error Code:</span> {error.code}
+                    <span className="font-semibold">Error Code:</span>{' '}
+                    {error.code}
                   </p>
                 )}
                 {error.details && (
                   <p>
-                    <span className="font-semibold">Details:</span> {error.details}
+                    <span className="font-semibold">Details:</span>{' '}
+                    {error.details}
                   </p>
                 )}
                 {error.timestamp && (
                   <p>
-                    <span className="font-semibold">Time:</span> {formatTimestamp(error.timestamp)}
+                    <span className="font-semibold">Time:</span>{' '}
+                    {formatTimestamp(error.timestamp)}
                   </p>
                 )}
               </div>
@@ -179,16 +186,19 @@ export default function ErrorRecoveryPanel({
         </h3>
         <ul className="space-y-2.5">
           {getSuggestedActions().map((action, index) => (
-            <motion.li
-              key={index}
+            <m.li
+              key={JSON.stringify(action)}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.1 }}
               className="flex items-start gap-2 text-sm text-muted-foreground"
             >
-              <ChevronRight className="size-4 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-500" aria-hidden="true" />
+              <ChevronRight
+                className="size-4 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-500"
+                aria-hidden="true"
+              />
               <span>{action}</span>
-            </motion.li>
+            </m.li>
           ))}
         </ul>
       </div>
@@ -200,7 +210,11 @@ export default function ErrorRecoveryPanel({
         {/* Primary Actions */}
         <div className="flex flex-1 gap-3">
           {onRetry && (
-            <Button onClick={onRetry} className="flex-1 sm:flex-none" aria-label="Retry operation">
+            <Button
+              onClick={onRetry}
+              className="flex-1 sm:flex-none"
+              aria-label="Retry operation"
+            >
               <RefreshCw className="size-4 mr-2" aria-hidden="true" />
               Retry
             </Button>
@@ -236,7 +250,11 @@ export default function ErrorRecoveryPanel({
             className="flex-1 sm:flex-none"
             aria-label="Contact support"
           >
-            <a href="mailto:support@example.com" target="_blank" rel="noopener noreferrer">
+            <a
+              href="mailto:support@example.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <LifeBuoy className="size-4 mr-2" aria-hidden="true" />
               Contact Support
             </a>
@@ -258,21 +276,21 @@ export default function ErrorRecoveryPanel({
 
       {/* Additional Help */}
       {error.type === 'quota' && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
           className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 p-4"
         >
           <p className="text-sm text-blue-900 dark:text-blue-100">
-            <strong>Need more processing time?</strong> Upgrade your plan to increase your monthly quota and
-            unlock additional features.
+            <strong>Need more processing time?</strong> Upgrade your plan to
+            increase your monthly quota and unlock additional features.
           </p>
           <Button size="sm" className="mt-3" aria-label="View plans">
             View Plans
           </Button>
-        </motion.div>
+        </m.div>
       )}
-    </motion.div>
+    </m.div>
   );
 }

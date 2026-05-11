@@ -14,8 +14,14 @@ export function useFFmpeg() {
       try {
         const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
         await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+          coreURL: await toBlobURL(
+            `${baseURL}/ffmpeg-core.js`,
+            'text/javascript',
+          ),
+          wasmURL: await toBlobURL(
+            `${baseURL}/ffmpeg-core.wasm`,
+            'application/wasm',
+          ),
         });
         console.log('[FFmpeg] Loaded successfully');
         setIsLoaded(true);
@@ -40,23 +46,27 @@ export function useFFmpeg() {
     try {
       console.log('[FFmpeg] Converting WebM to MP4...');
 
-      // Write input file to FFmpeg's virtual file system
-      await ffmpeg.writeFile('input.webm', await fetchFile(blob));
-
-      // Run FFmpeg conversion
-      await ffmpeg.exec([
-        '-i', 'input.webm',
-        '-c:v', 'libx264',
-        '-preset', 'fast',
-        '-crf', '22',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        'output.mp4'
-      ]);
-
-      // Read the output file
-      const data = await ffmpeg.readFile('output.mp4');
-      const mp4Blob = new Blob([data], { type: 'video/mp4' });
+      const data = await fetchFile(blob)
+        .then((inputFile) => ffmpeg.writeFile('input.webm', inputFile))
+        .then(() =>
+          ffmpeg.exec([
+            '-i',
+            'input.webm',
+            '-c:v',
+            'libx264',
+            '-preset',
+            'fast',
+            '-crf',
+            '22',
+            '-c:a',
+            'aac',
+            '-b:a',
+            '128k',
+            'output.mp4',
+          ]),
+        )
+        .then(() => ffmpeg.readFile('output.mp4'));
+      const mp4Blob = new Blob([data as BlobPart], { type: 'video/mp4' });
 
       console.log('[FFmpeg] MP4 conversion successful');
       return mp4Blob;

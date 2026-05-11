@@ -10,7 +10,7 @@
 // =====================================================
 
 /** Status of a published document */
-export type PublishStatus =
+type PublishStatus =
   | 'pending'
   | 'published'
   | 'failed'
@@ -21,10 +21,10 @@ export type PublishStatus =
 export type PublishFormat = 'native' | 'markdown' | 'pdf' | 'html';
 
 /** Type of publish action for logging */
-export type PublishAction = 'publish' | 'update' | 'delete' | 'sync' | 'retry';
+type PublishAction = 'publish' | 'update' | 'delete' | 'sync' | 'retry';
 
 /** What triggered the publish action */
-export type PublishTrigger = 'manual' | 'auto' | 'webhook' | 'retry';
+type PublishTrigger = 'manual' | 'auto' | 'webhook' | 'retry';
 
 /** Supported publishing destinations */
 export type PublishDestination =
@@ -136,7 +136,7 @@ export interface PublishedDocumentRow {
 }
 
 /** Publish log entry - audit trail for publish operations */
-export interface PublishLog {
+interface PublishLog {
   id: string;
   publishedDocumentId?: string;
   contentId: string;
@@ -168,7 +168,7 @@ export interface PublishLog {
 }
 
 /** Database row representation for publish logs */
-export interface PublishLogRow {
+interface PublishLogRow {
   id: string;
   published_document_id: string | null;
   content_id: string;
@@ -195,7 +195,7 @@ export interface PublishLogRow {
 }
 
 /** Organization publish settings */
-export interface OrgPublishSettings {
+interface OrgPublishSettings {
   id: string;
   orgId: string;
 
@@ -247,7 +247,7 @@ export interface OrgPublishSettingsRow {
 // =====================================================
 
 /** Request to publish a document */
-export interface PublishRequest {
+interface PublishRequest {
   destination: PublishDestination;
   connectorId?: string;
   folderId?: string;
@@ -258,7 +258,7 @@ export interface PublishRequest {
 }
 
 /** Response from publish operation */
-export interface PublishResponse {
+interface PublishResponse {
   success: boolean;
   publication: PublishedDocument;
   externalUrl: string;
@@ -308,7 +308,7 @@ export interface CreateFolderResponse {
 // =====================================================
 
 /** Connector configuration extensions for publishing */
-export interface PublishableConnectorConfig {
+interface PublishableConnectorConfig {
   supportsPublish: boolean;
   publishScopes?: string[];
   lastPublishAt?: Date;
@@ -502,7 +502,7 @@ export function mapPublishedDocumentRow(
 }
 
 /** Convert database row to PublishLog model */
-export function mapPublishLogRow(row: PublishLogRow): PublishLog {
+function mapPublishLogRow(row: PublishLogRow): PublishLog {
   return {
     id: row.id,
     publishedDocumentId: row.published_document_id ?? undefined,
@@ -526,7 +526,7 @@ export function mapPublishLogRow(row: PublishLogRow): PublishLog {
 }
 
 /** Convert database row to OrgPublishSettings model */
-export function mapOrgPublishSettingsRow(
+function mapOrgPublishSettingsRow(
   row: OrgPublishSettingsRow
 ): OrgPublishSettings {
   return {

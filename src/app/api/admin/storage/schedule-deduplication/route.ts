@@ -6,6 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import { apiHandler, successResponse, errors } from '@/lib/utils/api';
 import { scheduleDeduplicationForAll } from '@/lib/workers/handlers/deduplicate-file';
 import { createClient } from '@/lib/supabase/admin';
@@ -34,7 +35,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   if (!expectedSecret) {
     throw new Error(
-      'CRON_SECRET not configured. Set CRON_SECRET environment variable.'
+      'CRON_SECRET not configured. Set CRON_SECRET environment variable.',
     );
   }
 
@@ -68,12 +69,16 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   console.log(
-    `[schedule-deduplication] Starting automatic deduplication scheduling (batch: ${batchSize})`
+    `[schedule-deduplication] Starting automatic deduplication scheduling (batch: ${batchSize})`,
   );
 
   try {
     // If specific org IDs are provided, process them individually
-    if (targetOrgIds && Array.isArray(targetOrgIds) && targetOrgIds.length > 0) {
+    if (
+      targetOrgIds &&
+      Array.isArray(targetOrgIds) &&
+      targetOrgIds.length > 0
+    ) {
       const supabase = createClient();
       const results: Array<{
         orgId: string;
@@ -116,41 +121,49 @@ export const POST = apiHandler(async (request: NextRequest) => {
       );
 
       // Process each organization
-      for (const org of organizations) {
-        console.log(`[schedule-deduplication] Processing org: ${org.name} (${org.id})`);
-
-        try {
-          const deduplicationResult = await handleBatchDeduplicate({
-            orgId: org.id,
-            batchSize,
-          });
-
-          results.push({
-            orgId: org.id,
-            orgName: org.name,
-            success: deduplicationResult.success,
-            processed: deduplicationResult.processed,
-            duplicatesFound: deduplicationResult.duplicatesFound,
-            spaceSaved: deduplicationResult.spaceSaved,
-            errors: deduplicationResult.errors,
-          });
-
+      await Promise.all(
+        Array.from(organizations).map(async (org) => {
           console.log(
-            `[schedule-deduplication] Org ${org.name}: ${deduplicationResult.processed} files processed, ${deduplicationResult.duplicatesFound} duplicates found, ${(deduplicationResult.spaceSaved / 1024 / 1024).toFixed(2)} MB saved`
+            `[schedule-deduplication] Processing org: ${org.name} (${org.id})`,
           );
-        } catch (error) {
-          console.error(`[schedule-deduplication] Error processing org ${org.name}:`, error);
-          results.push({
-            orgId: org.id,
-            orgName: org.name,
-            success: false,
-            processed: 0,
-            duplicatesFound: 0,
-            spaceSaved: 0,
-            errors: [error instanceof Error ? error.message : 'Unknown error'],
-          });
-        }
-      }
+          try {
+            const deduplicationResult = await handleBatchDeduplicate({
+              orgId: org.id,
+              batchSize,
+            });
+
+            results.push({
+              orgId: org.id,
+              orgName: org.name,
+              success: deduplicationResult.success,
+              processed: deduplicationResult.processed,
+              duplicatesFound: deduplicationResult.duplicatesFound,
+              spaceSaved: deduplicationResult.spaceSaved,
+              errors: deduplicationResult.errors,
+            });
+
+            console.log(
+              `[schedule-deduplication] Org ${org.name}: ${deduplicationResult.processed} files processed, ${deduplicationResult.duplicatesFound} duplicates found, ${(deduplicationResult.spaceSaved / 1024 / 1024).toFixed(2)} MB saved`,
+            );
+          } catch (error) {
+            console.error(
+              `[schedule-deduplication] Error processing org ${org.name}:`,
+              error,
+            );
+            results.push({
+              orgId: org.id,
+              orgName: org.name,
+              success: false,
+              processed: 0,
+              duplicatesFound: 0,
+              spaceSaved: 0,
+              errors: [
+                error instanceof Error ? error.message : 'Unknown error',
+              ],
+            });
+          }
+        }),
+      );
 
       // Calculate summary statistics
       const summary = {
@@ -163,7 +176,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
         failedOrgs: results.filter((r) => !r.success).length,
       };
 
-      console.log('[schedule-deduplication] Deduplication scheduling complete:', summary);
+      console.log(
+        '[schedule-deduplication] Deduplication scheduling complete:',
+        summary,
+      );
 
       return successResponse({
         message: 'Deduplication scheduling completed',
@@ -181,7 +197,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
       totalProcessed: result.totalProcessed,
       totalDuplicates: result.totalDuplicates,
       totalSpaceSaved: result.totalSpaceSaved,
-      totalSpaceSavedMB: Math.round((result.totalSpaceSaved / 1024 / 1024) * 100) / 100,
+      totalSpaceSavedMB:
+        Math.round((result.totalSpaceSaved / 1024 / 1024) * 100) / 100,
       totalErrors: result.errors.length,
     };
 
@@ -194,9 +211,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('[schedule-deduplication] Deduplication scheduling failed:', error);
+    console.error(
+      '[schedule-deduplication] Deduplication scheduling failed:',
+      error,
+    );
     throw new Error(
-      `Deduplication scheduling failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Deduplication scheduling failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 });
@@ -221,35 +241,40 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const supabase = createClient();
 
   // Get deduplication statistics across all orgs
-  const { data: orgCount } = await supabase
-    .from('organizations')
-    .select('id', { count: 'exact' })
-    .is('deleted_at', null);
-
-  const { data: filesWithHash } = await supabase
-    .from('content')
-    .select('id', { count: 'exact' })
-    .not('file_hash', 'is', null)
-    .is('deleted_at', null);
-
-  const { data: filesWithoutHash } = await supabase
-    .from('content')
-    .select('id', { count: 'exact' })
-    .is('file_hash', null)
-    .is('deleted_at', null);
-
-  const { data: deduplicatedFiles } = await supabase
-    .from('content')
-    .select('id', { count: 'exact' })
-    .eq('is_deduplicated', true)
-    .is('deleted_at', null);
+  const [
+    { data: orgCount },
+    { data: filesWithHash },
+    { data: filesWithoutHash },
+    { data: deduplicatedFiles },
+  ] = await Promise.all([
+    supabase
+      .from('organizations')
+      .select('id', { count: 'exact' })
+      .is('deleted_at', null),
+    supabase
+      .from('content')
+      .select('id', { count: 'exact' })
+      .not('file_hash', 'is', null)
+      .is('deleted_at', null),
+    supabase
+      .from('content')
+      .select('id', { count: 'exact' })
+      .is('file_hash', null)
+      .is('deleted_at', null),
+    supabase
+      .from('content')
+      .select('id', { count: 'exact' })
+      .eq('is_deduplicated', true)
+      .is('deleted_at', null),
+  ]);
 
   return successResponse({
     status: 'healthy',
     configuration: {
       cronSecretConfigured: !!expectedSecret,
       supabaseConfigured: !!(
-        process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+        process.env.NEXT_PUBLIC_SUPABASE_URL &&
+        process.env.SUPABASE_SERVICE_ROLE_KEY
       ),
     },
     statistics: {

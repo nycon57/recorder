@@ -324,7 +324,7 @@ export function KnowledgeInsightsCard({
 /**
  * Loading skeleton for the card
  */
-export function KnowledgeInsightsCardSkeleton({ className }: { className?: string }) {
+function KnowledgeInsightsCardSkeleton({ className }: { className?: string }) {
   return (
     <Card className={cn('overflow-hidden', className)}>
       <CardHeader>

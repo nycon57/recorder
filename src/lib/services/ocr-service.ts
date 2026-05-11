@@ -15,7 +15,7 @@ export interface OCRResult {
   blocks: OCRBlock[];
 }
 
-export interface OCRBlock {
+interface OCRBlock {
   text: string;
   confidence: number;
   bbox: {
@@ -29,7 +29,7 @@ export interface OCRBlock {
 /**
  * Perform OCR on image
  */
-export async function extractText(imagePath: string): Promise<OCRResult> {
+async function extractText(imagePath: string): Promise<OCRResult> {
   const worker = await Tesseract.createWorker('eng');
 
   try {

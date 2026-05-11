@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useReducer } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow, format } from 'date-fns';
+import { format } from 'date-fns';
 import {
   Shield,
   Activity,
@@ -67,6 +67,7 @@ import { SessionsTable } from '@/app/components/shared/SessionsTable';
 import { AuditLogEntry } from '@/app/components/shared/AuditLogEntry';
 import { DateRangePicker } from '@/app/components/shared/DateRangePicker';
 import { UserAvatar } from '@/app/components/shared/UserAvatar';
+import { formatStableDateTime } from '@/lib/utils/formatting';
 
 // Types
 type AuditLog = {
@@ -117,31 +118,69 @@ type UserSession = {
   isActive?: boolean;
 };
 
+interface SecurityPageState {
+  activeTab: string;
+  auditSearch: string;
+  auditDateFrom: Date | undefined;
+  auditDateTo: Date | undefined;
+  auditActionFilter: string;
+  auditResourceFilter: string;
+  auditPage: number;
+  sessionDeviceFilter: string;
+  sessionActiveFilter: 'all' | 'active' | 'inactive';
+  sessionPage: number;
+  sessionToRevoke: UserSession | null;
+}
+
+type SecurityPageAction =
+  | Partial<SecurityPageState>
+  | ((state: SecurityPageState) => SecurityPageState);
+
+const initialSecurityPageState: SecurityPageState = {
+  activeTab: 'audit-logs',
+  auditSearch: '',
+  auditDateFrom: undefined,
+  auditDateTo: undefined,
+  auditActionFilter: '',
+  auditResourceFilter: '',
+  auditPage: 1,
+  sessionDeviceFilter: '',
+  sessionActiveFilter: 'all',
+  sessionPage: 1,
+  sessionToRevoke: null,
+};
+
+const securityPageReducer = (
+  state: SecurityPageState,
+  action: SecurityPageAction,
+): SecurityPageState =>
+  typeof action === 'function' ? action(state) : { ...state, ...action };
+
 export default function SecurityPage() {
-  const [activeTab, setActiveTab] = useState('audit-logs');
+  return useSecurityPageImplementation();
+}
+
+function useSecurityPageImplementation() {
+  const queryClient = useQueryClient();
+  const [
+    {
+      activeTab,
+      auditSearch,
+      auditDateFrom,
+      auditDateTo,
+      auditActionFilter,
+      auditResourceFilter,
+      auditPage,
+      sessionDeviceFilter,
+      sessionActiveFilter,
+      sessionPage,
+      sessionToRevoke,
+    },
+    updateSecurityState,
+  ] = useReducer(securityPageReducer, initialSecurityPageState);
   const { toast } = useToast();
-
-  // Audit log filters
-  const [auditSearch, setAuditSearch] = useState('');
-  const [auditDateFrom, setAuditDateFrom] = useState<Date | undefined>();
-  const [auditDateTo, setAuditDateTo] = useState<Date | undefined>();
-  const [auditUserFilter] = useState('');
-  const [auditActionFilter, setAuditActionFilter] = useState('');
-  const [auditResourceFilter, setAuditResourceFilter] = useState('');
-  const [auditPage, setAuditPage] = useState(1);
-
-  // Session filters
-  const [sessionUserFilter] = useState('');
-  const [sessionDeviceFilter, setSessionDeviceFilter] = useState('');
-  const [sessionActiveFilter, setSessionActiveFilter] = useState<
-    'all' | 'active' | 'inactive'
-  >('all');
-  const [sessionPage, setSessionPage] = useState(1);
-
-  // Revoke session dialog
-  const [sessionToRevoke, setSessionToRevoke] = useState<UserSession | null>(
-    null,
-  );
+  const auditUserFilter = '';
+  const sessionUserFilter = '';
 
   // Fetch audit logs
   const {
@@ -234,6 +273,7 @@ export default function SecurityPage() {
       return response.json();
     },
     onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
       // Convert to CSV
       const csv = convertToCSV(data.data);
       const blob = new Blob([csv], { type: 'text/csv' });
@@ -276,7 +316,8 @@ export default function SecurityPage() {
         description: 'Session revoked successfully',
       });
       refetchSessions();
-      setSessionToRevoke(null);
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      updateSecurityState({ sessionToRevoke: null });
     },
     onError: () => {
       toast({
@@ -304,6 +345,7 @@ export default function SecurityPage() {
         description: data.message,
       });
       refetchSessions();
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: () => {
       toast({
@@ -370,9 +412,9 @@ export default function SecurityPage() {
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           {row.original.device_type === 'mobile' ? (
-            <Smartphone className="h-4 w-4 text-muted-foreground" />
+            <Smartphone className="size-4 text-muted-foreground" />
           ) : (
-            <Monitor className="h-4 w-4 text-muted-foreground" />
+            <Monitor className="size-4 text-muted-foreground" />
           )}
           <div>
             <div className="text-sm">{row.original.browser || 'Unknown'}</div>
@@ -388,7 +430,7 @@ export default function SecurityPage() {
       header: 'Location',
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-muted-foreground" />
+          <Globe className="size-4 text-muted-foreground" />
           <div>
             <div className="text-sm">
               {row.original.ip_address || 'Unknown'}
@@ -409,9 +451,7 @@ export default function SecurityPage() {
       enableSorting: true,
       cell: ({ row }) => (
         <div className="text-sm">
-          {formatDistanceToNow(new Date(row.original.last_active_at), {
-            addSuffix: true,
-          })}
+          {formatStableDateTime(row.original.last_active_at)}
         </div>
       ),
     },
@@ -434,11 +474,11 @@ export default function SecurityPage() {
           variant="ghost"
           onClick={(e) => {
             e.stopPropagation();
-            setSessionToRevoke(row.original);
+            updateSecurityState({ sessionToRevoke: row.original });
           }}
           disabled={!row.original.isActive}
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
           Revoke
         </Button>
       ),
@@ -455,22 +495,25 @@ export default function SecurityPage() {
           </p>
         </div>
         <div className="trbd-icon-chip" aria-hidden="true">
-          <Shield className="h-5 w-5" />
+          <Shield className="size-5" />
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(nextTab) => updateSecurityState({ activeTab: nextTab })}
+      >
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="audit-logs" className="flex items-center gap-2">
-            <Activity className="h-4 w-4" />
+            <Activity className="size-4" />
             Audit Logs
           </TabsTrigger>
           <TabsTrigger value="sessions" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
+            <Users className="size-4" />
             Active Sessions
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
+            <Shield className="size-4" />
             Security Settings
           </TabsTrigger>
         </TabsList>
@@ -493,7 +536,7 @@ export default function SecurityPage() {
                     disabled={auditLoading}
                   >
                     <RefreshCw
-                      className={`h-4 w-4 mr-2 ${auditLoading ? 'animate-spin' : ''}`}
+                      className={`size-4 mr-2 ${auditLoading ? 'animate-spin' : ''}`}
                     />
                     Refresh
                   </Button>
@@ -502,7 +545,7 @@ export default function SecurityPage() {
                     onClick={() => exportAuditMutation.mutate()}
                     disabled={exportAuditMutation.isPending}
                   >
-                    <Download className="h-4 w-4 mr-2" />
+                    <Download className="size-4 mr-2" />
                     Export CSV
                   </Button>
                 </div>
@@ -512,11 +555,13 @@ export default function SecurityPage() {
               {/* Filters */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                   <Input
                     placeholder="Search actions..."
                     value={auditSearch}
-                    onChange={(e) => setAuditSearch(e.target.value)}
+                    onChange={(e) =>
+                      updateSecurityState({ auditSearch: e.target.value })
+                    }
                     className="pl-9"
                   />
                 </div>
@@ -525,15 +570,19 @@ export default function SecurityPage() {
                   from={auditDateFrom}
                   to={auditDateTo}
                   onDateChange={(from, to) => {
-                    setAuditDateFrom(from);
-                    setAuditDateTo(to);
+                    updateSecurityState({
+                      auditDateFrom: from,
+                      auditDateTo: to,
+                    });
                   }}
                 />
 
                 <Select
                   value={auditActionFilter || 'all'}
                   onValueChange={(value) =>
-                    setAuditActionFilter(value === 'all' ? '' : value)
+                    updateSecurityState({
+                      auditActionFilter: value === 'all' ? '' : value,
+                    })
                   }
                 >
                   <SelectTrigger>
@@ -552,7 +601,9 @@ export default function SecurityPage() {
                 <Select
                   value={auditResourceFilter || 'all'}
                   onValueChange={(value) =>
-                    setAuditResourceFilter(value === 'all' ? '' : value)
+                    updateSecurityState({
+                      auditResourceFilter: value === 'all' ? '' : value,
+                    })
                   }
                 >
                   <SelectTrigger>
@@ -573,8 +624,14 @@ export default function SecurityPage() {
               <div className="border rounded-lg">
                 {auditLoading ? (
                   <div className="p-6 space-y-4">
-                    {[...Array(5)].map((_, i) => (
-                      <Skeleton key={i} className="h-16 w-full" />
+                    {[
+                      'audit-log-1',
+                      'audit-log-2',
+                      'audit-log-3',
+                      'audit-log-4',
+                      'audit-log-5',
+                    ].map((skeletonId) => (
+                      <Skeleton key={skeletonId} className="h-16 w-full" />
                     ))}
                   </div>
                 ) : auditData?.logs?.length === 0 ? (
@@ -601,7 +658,12 @@ export default function SecurityPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                      onClick={() =>
+                        updateSecurityState((state) => ({
+                          ...state,
+                          auditPage: Math.max(1, state.auditPage - 1),
+                        }))
+                      }
                       disabled={auditPage === 1}
                     >
                       Previous
@@ -609,7 +671,12 @@ export default function SecurityPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setAuditPage((p) => p + 1)}
+                      onClick={() =>
+                        updateSecurityState((state) => ({
+                          ...state,
+                          auditPage: state.auditPage + 1,
+                        }))
+                      }
                       disabled={auditPage === auditData.pagination.totalPages}
                     >
                       Next
@@ -646,7 +713,7 @@ export default function SecurityPage() {
                         className="text-destructive"
                         onClick={() => bulkRevokeMutation.mutate({ all: true })}
                       >
-                        <AlertTriangle className="h-4 w-4 mr-2" />
+                        <AlertTriangle className="size-4 mr-2" />
                         Revoke All Sessions
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -660,7 +727,7 @@ export default function SecurityPage() {
                 <Select
                   value={sessionActiveFilter}
                   onValueChange={(value: 'all' | 'active' | 'inactive') =>
-                    setSessionActiveFilter(value)
+                    updateSecurityState({ sessionActiveFilter: value })
                   }
                 >
                   <SelectTrigger className="w-[180px]">
@@ -677,7 +744,9 @@ export default function SecurityPage() {
                   <Select
                     value={sessionDeviceFilter || 'all'}
                     onValueChange={(value) =>
-                      setSessionDeviceFilter(value === 'all' ? '' : value)
+                      updateSecurityState({
+                        sessionDeviceFilter: value === 'all' ? '' : value,
+                      })
                     }
                   >
                     <SelectTrigger className="w-[180px]">
@@ -716,7 +785,10 @@ export default function SecurityPage() {
                         size="sm"
                         variant="outline"
                         onClick={() =>
-                          setSessionPage((p) => Math.max(1, p - 1))
+                          updateSecurityState((state) => ({
+                            ...state,
+                            sessionPage: Math.max(1, state.sessionPage - 1),
+                          }))
                         }
                         disabled={sessionPage === 1}
                       >
@@ -725,7 +797,12 @@ export default function SecurityPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setSessionPage((p) => p + 1)}
+                        onClick={() =>
+                          updateSecurityState((state) => ({
+                            ...state,
+                            sessionPage: state.sessionPage + 1,
+                          }))
+                        }
                         disabled={
                           sessionPage === sessionData.pagination.totalPages
                         }
@@ -749,7 +826,7 @@ export default function SecurityPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <Alert>
-                <AlertTriangle className="h-4 w-4" />
+                <AlertTriangle className="size-4" />
                 <AlertDescription>
                   Advanced security settings are coming soon. These will
                   include:
@@ -759,7 +836,7 @@ export default function SecurityPage() {
               <div className="space-y-4">
                 <div className="border rounded-lg p-4 opacity-50">
                   <div className="flex items-start gap-3">
-                    <Lock className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <Lock className="size-5 text-muted-foreground mt-0.5" />
                     <div className="space-y-1">
                       <div className="font-medium">
                         Two-Factor Authentication
@@ -776,7 +853,7 @@ export default function SecurityPage() {
 
                 <div className="border rounded-lg p-4 opacity-50">
                   <div className="flex items-start gap-3">
-                    <Key className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <Key className="size-5 text-muted-foreground mt-0.5" />
                     <div className="space-y-1">
                       <div className="font-medium">Password Policy</div>
                       <div className="text-sm text-muted-foreground">
@@ -791,7 +868,7 @@ export default function SecurityPage() {
 
                 <div className="border rounded-lg p-4 opacity-50">
                   <div className="flex items-start gap-3">
-                    <Globe className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <Globe className="size-5 text-muted-foreground mt-0.5" />
                     <div className="space-y-1">
                       <div className="font-medium">IP Allowlist</div>
                       <div className="text-sm text-muted-foreground">
@@ -806,7 +883,7 @@ export default function SecurityPage() {
 
                 <div className="border rounded-lg p-4 opacity-50">
                   <div className="flex items-start gap-3">
-                    <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <Clock className="size-5 text-muted-foreground mt-0.5" />
                     <div className="space-y-1">
                       <div className="font-medium">Session Timeout</div>
                       <div className="text-sm text-muted-foreground">
@@ -827,7 +904,7 @@ export default function SecurityPage() {
       {/* Revoke session confirmation dialog */}
       <AlertDialog
         open={!!sessionToRevoke}
-        onOpenChange={() => setSessionToRevoke(null)}
+        onOpenChange={() => updateSecurityState({ sessionToRevoke: null })}
       >
         <AlertDialogContent>
           <AlertDialogHeader>

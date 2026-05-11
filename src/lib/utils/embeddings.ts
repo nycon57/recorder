@@ -52,29 +52,33 @@ export interface EmbeddingsStatus {
  */
 export async function checkEmbeddingsStatus(
   recordingId: string,
-  thresholdHours: number = 168
+  orgId?: string,
+  thresholdHours: number = 168,
 ): Promise<EmbeddingsStatus> {
   const supabase = supabaseAdmin;
-
-  // Get content embeddings timestamp
-  const { data: content } = await supabase
+  let contentQuery = supabase
     .from('content')
     .select('embeddings_updated_at')
-    .eq('id', recordingId)
-    .single();
+    .eq('id', recordingId);
 
-  // Get document info
-  const { data: document } = await supabase
-    .from('documents')
-    .select('updated_at, needs_embeddings_refresh')
-    .eq('content_id', recordingId)
-    .single();
+  if (orgId) {
+    contentQuery = contentQuery.eq('org_id', orgId);
+  }
 
-  // Count existing chunks
-  const { count: chunkCount } = await supabase
-    .from('transcript_chunks')
-    .select('id', { count: 'exact', head: true })
-    .eq('content_id', recordingId);
+  // Get content embeddings timestamp
+  const [{ data: content }, { data: document }, { count: chunkCount }] =
+    await Promise.all([
+      contentQuery.single(),
+      supabase
+        .from('documents')
+        .select('updated_at, needs_embeddings_refresh')
+        .eq('content_id', recordingId)
+        .single(),
+      supabase
+        .from('transcript_chunks')
+        .select('id', { count: 'exact', head: true })
+        .eq('content_id', recordingId),
+    ]);
 
   const embeddingsUpdated = content?.embeddings_updated_at
     ? new Date(content.embeddings_updated_at)
@@ -143,7 +147,7 @@ export function getStalenessMessage(status: EmbeddingsStatus): string {
 
   if (staleness.tooOld && lastUpdated) {
     const daysOld = Math.floor(
-      (Date.now() - lastUpdated.getTime()) / (1000 * 60 * 60 * 24)
+      (Date.now() - lastUpdated.getTime()) / (1000 * 60 * 60 * 24),
     );
     return `Embeddings are ${daysOld} days old and may be outdated`;
   }
@@ -157,27 +161,30 @@ export function getStalenessMessage(status: EmbeddingsStatus): string {
  */
 export async function triggerEmbeddingsRefresh(
   recordingId: string,
-  orgId: string
+  orgId: string,
 ): Promise<{ jobId: string; message: string }> {
   const supabase = supabaseAdmin;
 
   // Get transcript and document IDs
-  const { data: transcript } = await supabase
-    .from('transcripts')
-    .select('id')
-    .eq('content_id', recordingId)
-    .eq('superseded', false)
-    .single();
-
-  const { data: document } = await supabase
-    .from('documents')
-    .select('id')
-    .eq('content_id', recordingId)
-    .eq('org_id', orgId)
-    .single();
+  const [{ data: transcript }, { data: document }] = await Promise.all([
+    supabase
+      .from('transcripts')
+      .select('id')
+      .eq('content_id', recordingId)
+      .eq('superseded', false)
+      .single(),
+    supabase
+      .from('documents')
+      .select('id')
+      .eq('content_id', recordingId)
+      .eq('org_id', orgId)
+      .single(),
+  ]);
 
   if (!transcript || !document) {
-    throw new Error('Recording must have transcript and document to refresh embeddings');
+    throw new Error(
+      'Recording must have transcript and document to refresh embeddings',
+    );
   }
 
   // Delete existing chunks
@@ -216,9 +223,9 @@ export async function triggerEmbeddingsRefresh(
 /**
  * Check staleness using Postgres function (more efficient for bulk checks)
  */
-export async function checkEmbeddingsStalenessDB(
+async function checkEmbeddingsStalenessDB(
   recordingId: string,
-  thresholdHours: number = 24
+  thresholdHours: number = 24,
 ): Promise<boolean> {
   const supabase = supabaseAdmin;
 
@@ -238,9 +245,9 @@ export async function checkEmbeddingsStalenessDB(
 /**
  * Get recordings with stale embeddings (for background refresh jobs)
  */
-export async function getRecordingsWithStaleEmbeddings(
+async function getRecordingsWithStaleEmbeddings(
   orgId: string,
-  limit: number = 50
+  limit: number = 50,
 ): Promise<Array<{ id: string; title: string; lastUpdated: Date | null }>> {
   const supabase = supabaseAdmin;
 
@@ -256,13 +263,13 @@ export async function getRecordingsWithStaleEmbeddings(
         updated_at,
         needs_embeddings_refresh
       )
-    `
+    `,
     )
     .eq('org_id', orgId)
     .eq('status', 'completed')
     .or(
       'embeddings_updated_at.is.null,documents.needs_embeddings_refresh.eq.true',
-      { foreignTable: 'documents' }
+      { foreignTable: 'documents' },
     )
     .limit(limit);
 
@@ -273,6 +280,8 @@ export async function getRecordingsWithStaleEmbeddings(
   return contentItems.map((r: any) => ({
     id: r.id,
     title: r.title,
-    lastUpdated: r.embeddings_updated_at ? new Date(r.embeddings_updated_at) : null,
+    lastUpdated: r.embeddings_updated_at
+      ? new Date(r.embeddings_updated_at)
+      : null,
   }));
 }

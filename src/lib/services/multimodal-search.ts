@@ -16,6 +16,7 @@ import {
   MultimodalSearchResult,
   MultimodalSearchMode,
 } from '@/lib/types/video-frames';
+
 import { vectorSearch } from './vector-search-google';
 
 /**
@@ -51,7 +52,7 @@ export async function visualSearch(
     includeOcr?: boolean;
     dateFrom?: Date;
     dateTo?: Date;
-  }
+  },
 ): Promise<VisualSearchResult[]> {
   const {
     orgId,
@@ -90,11 +91,7 @@ export async function visualSearch(
       AND 1 - (vf.visual_embedding <=> $1::vector) >= $3
   `;
 
-  const params: any[] = [
-    `[${queryEmbedding.join(',')}]`,
-    orgId,
-    threshold,
-  ];
+  const params: any[] = [`[${queryEmbedding.join(',')}]`, orgId, threshold];
   let paramIndex = 4;
 
   // Filter by recording IDs
@@ -154,17 +151,19 @@ export async function visualSearch(
   }));
 
   // Generate presigned URLs for frames
-  for (const result of results) {
-    if (result.frameUrl) {
-      const { data: urlData } = await supabaseAdmin.storage
-        .from('frames')
-        .createSignedUrl(result.frameUrl, 3600); // 1 hour expiry
+  await Promise.all(
+    Array.from(results).map(async (result) => {
+      if (result.frameUrl) {
+        const { data: urlData } = await supabaseAdmin.storage
+          .from('frames')
+          .createSignedUrl(result.frameUrl, 3600); // 1 hour expiry
 
-      if (urlData?.signedUrl) {
-        result.frameUrl = urlData.signedUrl;
+        if (urlData?.signedUrl) {
+          result.frameUrl = urlData.signedUrl;
+        }
       }
-    }
-  }
+    }),
+  );
 
   return results;
 }
@@ -188,7 +187,7 @@ export async function visualSearch(
  */
 export async function multimodalSearch(
   query: string,
-  options: MultimodalSearchOptions
+  options: MultimodalSearchOptions,
 ): Promise<MultimodalSearchResult> {
   const startTime = Date.now();
 
@@ -210,7 +209,10 @@ export async function multimodalSearch(
   } = options;
 
   // Extract contentIds if provided
-  const contentIds: string[] | undefined = 'contentIds' in options ? (options as { contentIds?: string[] }).contentIds : undefined;
+  const contentIds: string[] | undefined =
+    'contentIds' in options
+      ? (options as { contentIds?: string[] }).contentIds
+      : undefined;
 
   // Validate weights sum to 1
   if (Math.abs(audioWeight + visualWeight - 1) > 0.001) {
@@ -259,7 +261,7 @@ export async function multimodalSearch(
       visualResults,
       audioWeight,
       visualWeight,
-      limit
+      limit,
     );
   }
 
@@ -268,28 +270,29 @@ export async function multimodalSearch(
   return {
     query,
     mode,
-    audioResults: mode === 'multimodal' ? audioResults.map(r => ({
-      id: r.id,
-      recordingId: r.content_id,
-      chunkText: r.chunk_text,
-      similarity: r.similarity ?? 0,
-      startTimeSec: r.start_time_sec,
-      endTimeSec: r.end_time_sec,
-    })) : audioResults.slice(0, limit).map(r => ({
-      id: r.id,
-      recordingId: r.content_id,
-      chunkText: r.chunk_text,
-      similarity: r.similarity ?? 0,
-      startTimeSec: r.start_time_sec,
-      endTimeSec: r.end_time_sec,
-    })),
+    audioResults:
+      mode === 'multimodal'
+        ? audioResults.map((r) => ({
+            id: r.id,
+            recordingId: r.content_id,
+            chunkText: r.chunk_text,
+            similarity: r.similarity ?? 0,
+            startTimeSec: r.start_time_sec,
+            endTimeSec: r.end_time_sec,
+          }))
+        : audioResults.slice(0, limit).map((r) => ({
+            id: r.id,
+            recordingId: r.content_id,
+            chunkText: r.chunk_text,
+            similarity: r.similarity ?? 0,
+            startTimeSec: r.start_time_sec,
+            endTimeSec: r.end_time_sec,
+          })),
     visualResults: mode === 'multimodal' ? visualResults : undefined,
     combinedResults: mode === 'multimodal' ? combinedResults : undefined,
     metadata: {
       totalResults:
-        mode === 'multimodal'
-          ? combinedResults.length
-          : audioResults.length,
+        mode === 'multimodal' ? combinedResults.length : audioResults.length,
       audioCount: audioResults.length,
       visualCount: visualResults.length,
       threshold,
@@ -323,7 +326,7 @@ async function searchTranscriptChunks(
     tagFilterMode?: 'AND' | 'OR';
     collectionId?: string;
     favoritesOnly?: boolean;
-  }
+  },
 ) {
   const {
     orgId,
@@ -375,7 +378,7 @@ function combineAndRerankResults(
   visualResults: VisualSearchResult[],
   audioWeight: number,
   visualWeight: number,
-  limit: number
+  limit: number,
 ): Array<{ type: 'audio' | 'visual'; score: number; data: any }> {
   // Transform audio results
   const audioScored = audioResults.map((result) => ({
@@ -402,9 +405,9 @@ function combineAndRerankResults(
 /**
  * Get frame count for a recording
  */
-export async function getFrameCount(
+async function getFrameCount(
   contentId: string,
-  orgId: string
+  orgId: string,
 ): Promise<number> {
   const { count, error } = await supabaseAdmin
     .from('video_frames')
@@ -423,9 +426,9 @@ export async function getFrameCount(
 /**
  * Check if frames have been extracted for a recording
  */
-export async function hasExtractedFrames(
+async function hasExtractedFrames(
   contentId: string,
-  orgId: string
+  orgId: string,
 ): Promise<boolean> {
   const count = await getFrameCount(contentId, orgId);
   return count > 0;

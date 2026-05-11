@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import parse from 'html-react-parser';
 
 import type { DocsPage } from '@/lib/docs';
 
@@ -40,7 +41,7 @@ export function DocsContent({ page, bodyHtml, related }: DocsContentProps) {
           <span>{AUDIENCE_LABEL[page.audience]}</span>
         </p>
 
-        <h1 className="mb-4 font-[family-name:var(--font-space-grotesk)] text-4xl font-bold leading-tight text-[color:var(--docs-text-primary)]">
+        <h1 className="mb-4 font-[family-name:var(--font-space-grotesk)] text-4xl font-semibold leading-tight text-[color:var(--docs-text-primary)]">
           {page.title}
         </h1>
 
@@ -79,11 +80,7 @@ export function DocsContent({ page, bodyHtml, related }: DocsContentProps) {
 
       {/* Body — pre-compiled and sanitised at build time */}
       {/* nosemgrep: react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml */}
-      <div
-        className="docs-prose"
-        // Safe: rehype-sanitize ran at build time; manifest validated at load
-        dangerouslySetInnerHTML={{ __html: bodyHtml }}
-      />
+      <div className="docs-prose">{parse(bodyHtml)}</div>
 
       {/* Related pages */}
       {related.length > 0 && (

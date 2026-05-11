@@ -18,13 +18,18 @@ interface DocsHeaderProps {
   breadcrumbs?: BreadcrumbSegment[];
 }
 
+const EMPTY_BREADCRUMBS: BreadcrumbSegment[] = [];
+
 /**
  * Utility bar: breadcrumbs left, audience badge + ⌘K search button right.
  *
  * Now a client component so it can call useDocsSearch() to open the dialog.
  * The search context is provided by DocsSearchProvider in the layout.
  */
-export function DocsHeader({ audience, breadcrumbs = [] }: DocsHeaderProps) {
+export function DocsHeader({
+  audience,
+  breadcrumbs = EMPTY_BREADCRUMBS,
+}: DocsHeaderProps) {
   const { open } = useDocsSearch();
 
   const handleSearchClick = useCallback(() => {

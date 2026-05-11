@@ -30,6 +30,7 @@ import {
   ExternalDocumentInfo,
   PublishFormat,
 } from '@/lib/types/publishing';
+import { mapBatchesSequentially } from '@/lib/utils/async';
 
 import {
   Connector,
@@ -169,7 +170,8 @@ interface GoogleDriveConfig {
 export class GoogleDriveConnector implements Connector, PublishableConnector {
   readonly type = ConnectorType.GOOGLE_DRIVE;
   readonly name = 'Google Drive';
-  readonly description = 'Sync documents from Google Drive including Docs, Sheets, Slides, and PDFs';
+  readonly description =
+    'Sync documents from Google Drive including Docs, Sheets, Slides, and PDFs';
 
   private oauth2Client: OAuth2Client;
   private drive: drive_v3.Drive | null = null;
@@ -190,7 +192,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
     this.oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
+      process.env.GOOGLE_REDIRECT_URI,
     );
 
     this.turndown = new TurndownService({
@@ -275,22 +277,23 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
 
     const refreshFn = createGoogleRefreshFunction(
       process.env.GOOGLE_CLIENT_ID!,
-      process.env.GOOGLE_CLIENT_SECRET!
+      process.env.GOOGLE_CLIENT_SECRET!,
     );
 
     const tokens: TokenSet = {
       accessToken: this.credentials.accessToken || '',
       refreshToken: this.credentials.refreshToken || '',
-      expiresAt: this.credentials.expiresAt instanceof Date
-        ? this.credentials.expiresAt
-        : new Date(this.credentials.expiresAt || 0),
+      expiresAt:
+        this.credentials.expiresAt instanceof Date
+          ? this.credentials.expiresAt
+          : new Date(this.credentials.expiresAt || 0),
       scopes: this.grantedScopes,
     };
 
     const validToken = await TokenManager.ensureValidToken(
       this.config.connectorId,
       tokens,
-      refreshFn
+      refreshFn,
     );
 
     // Update local credentials if token was refreshed
@@ -307,9 +310,10 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
    */
   private isTokenExpired(): boolean {
     if (!this.credentials.expiresAt) return true;
-    const expiresAt = this.credentials.expiresAt instanceof Date
-      ? this.credentials.expiresAt
-      : new Date(this.credentials.expiresAt);
+    const expiresAt =
+      this.credentials.expiresAt instanceof Date
+        ? this.credentials.expiresAt
+        : new Date(this.credentials.expiresAt);
     return expiresAt.getTime() < Date.now() + 5 * 60 * 1000; // 5 minute buffer
   }
 
@@ -337,7 +341,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
   async authenticate(credentials: ConnectorCredentials): Promise<AuthResult> {
     try {
       if (credentials.code) {
-        const { tokens } = await this.oauth2Client.getToken(credentials.code as string);
+        const { tokens } = await this.oauth2Client.getToken(
+          credentials.code as string,
+        );
 
         // Extract scopes from the token response
         const scopes = tokens.scope?.split(' ') || [];
@@ -345,7 +351,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
         this.credentials = {
           accessToken: tokens.access_token || undefined,
           refreshToken: tokens.refresh_token || undefined,
-          expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
+          expiresAt: tokens.expiry_date
+            ? new Date(tokens.expiry_date)
+            : undefined,
           scopes,
         };
 
@@ -382,7 +390,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       }
 
       const response = await this.withTokenRefresh(() =>
-        this.drive!.about.get({ fields: 'user,storageQuota' })
+        this.drive!.about.get({ fields: 'user,storageQuota' }),
       );
 
       const user = response.data.user;
@@ -408,51 +416,81 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
   }
 
   async sync(options?: SyncOptions): Promise<SyncResult> {
-    if (!this.drive) throw new Error('Not authenticated');
-
-    const errors: SyncError[] = [];
-    let filesProcessed = 0;
-    let filesUpdated = 0;
-    let filesFailed = 0;
+    const drive = this.drive;
+    if (!drive) throw new Error('Not authenticated');
 
     try {
       const query = this.buildQuery(options);
       const files = await this.withTokenRefresh(() =>
-        this.listAllFiles(query, options)
+        this.listAllFiles(query, options),
       );
 
       console.log(`[GoogleDrive] Found ${files.length} files to sync`);
 
       const batchSize = 10;
-      for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize);
+      const syncResults = await mapBatchesSequentially(
+        files,
+        batchSize,
+        (batch) =>
+          Promise.all(
+            batch.map(async (file) => {
+              try {
+                if (file.mimeType === GOOGLE_MIME_TYPES.FOLDER) {
+                  return {
+                    filesProcessed: 1,
+                    filesUpdated: 0,
+                    filesFailed: 0,
+                    errors: [] as SyncError[],
+                  };
+                }
 
-        await Promise.all(
-          batch.map(async (file) => {
-            try {
-              filesProcessed++;
+                const size = parseInt(file.size || '0');
+                if (size > (this.config.maxFileSizeBytes || 50 * 1024 * 1024)) {
+                  throw new Error(`File too large: ${size} bytes`);
+                }
 
-              if (file.mimeType === GOOGLE_MIME_TYPES.FOLDER) return;
-
-              const size = parseInt(file.size || '0');
-              if (size > (this.config.maxFileSizeBytes || 50 * 1024 * 1024)) {
-                throw new Error(`File too large: ${size} bytes`);
+                return {
+                  filesProcessed: 1,
+                  filesUpdated: 1,
+                  filesFailed: 0,
+                  errors: [] as SyncError[],
+                };
+              } catch (error: unknown) {
+                console.error(
+                  `[GoogleDrive] Failed to process file ${file.id}:`,
+                  error,
+                );
+                return {
+                  filesProcessed: 1,
+                  filesUpdated: 0,
+                  filesFailed: 1,
+                  errors: [
+                    {
+                      fileId: file.id!,
+                      fileName: file.name!,
+                      error: getErrorMessage(error, 'Unknown error'),
+                      retryable: getErrorCode(error) !== 404,
+                    },
+                  ],
+                };
               }
+            }),
+          ),
+      );
 
-              filesUpdated++;
-            } catch (error: unknown) {
-              console.error(`[GoogleDrive] Failed to process file ${file.id}:`, error);
-              filesFailed++;
-              errors.push({
-                fileId: file.id!,
-                fileName: file.name!,
-                error: getErrorMessage(error, 'Unknown error'),
-                retryable: getErrorCode(error) !== 404,
-              });
-            }
-          })
-        );
-      }
+      const filesProcessed = syncResults.reduce(
+        (total, result) => total + result.filesProcessed,
+        0,
+      );
+      const filesUpdated = syncResults.reduce(
+        (total, result) => total + result.filesUpdated,
+        0,
+      );
+      const filesFailed = syncResults.reduce(
+        (total, result) => total + result.filesFailed,
+        0,
+      );
+      const errors = syncResults.flatMap((result) => result.errors);
 
       return {
         success: filesFailed === 0,
@@ -474,7 +512,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
     try {
       const query = this.buildQuery();
       const files = await this.withTokenRefresh(() =>
-        this.listAllFiles(query, undefined, options?.limit)
+        this.listAllFiles(query, undefined, options?.limit),
       );
 
       return files.map((file) => this.mapDriveFileToConnectorFile(file));
@@ -510,7 +548,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
 
       // Search by name
       if (options?.search) {
-        queryConditions.push(`name contains '${escapeSearchTerm(options.search)}'`);
+        queryConditions.push(
+          `name contains '${escapeSearchTerm(options.search)}'`,
+        );
       }
 
       const query = queryConditions.join(' and ');
@@ -528,7 +568,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       });
 
       const files = (response.data.files || []).map((file) =>
-        this.mapDriveFileToConnectorFile(file)
+        this.mapDriveFileToConnectorFile(file),
       );
 
       return {
@@ -556,7 +596,8 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
     return this.withTokenRefresh(async () => {
       const fileResponse = await this.drive!.files.get({
         fileId,
-        fields: 'id,name,mimeType,size,modifiedTime,createdTime,webViewLink,owners',
+        fields:
+          'id,name,mimeType,size,modifiedTime,createdTime,webViewLink,owners',
       });
 
       const file = fileResponse.data;
@@ -566,15 +607,18 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       let exportMimeType = mimeType;
 
       if (mimeType in EXPORT_FORMATS) {
-        exportMimeType = EXPORT_FORMATS[mimeType as keyof typeof EXPORT_FORMATS];
+        exportMimeType =
+          EXPORT_FORMATS[mimeType as keyof typeof EXPORT_FORMATS];
 
         const response = await this.drive!.files.export(
           { fileId, mimeType: exportMimeType },
-          { responseType: 'arraybuffer' }
+          { responseType: 'arraybuffer' },
         );
 
         if (mimeType === GOOGLE_MIME_TYPES.DOCUMENT) {
-          const html = Buffer.from(response.data as ArrayBuffer).toString('utf-8');
+          const html = Buffer.from(response.data as ArrayBuffer).toString(
+            'utf-8',
+          );
           content = this.turndown.turndown(html);
           exportMimeType = 'text/markdown';
         } else {
@@ -583,7 +627,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       } else {
         const response = await this.drive!.files.get(
           { fileId, alt: 'media' },
-          { responseType: 'arraybuffer' }
+          { responseType: 'arraybuffer' },
         );
 
         content = Buffer.from(response.data as ArrayBuffer);
@@ -610,15 +654,20 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
     console.log('[GoogleDrive] Webhook received:', event.type);
   }
 
-  async refreshCredentials(credentials: ConnectorCredentials): Promise<ConnectorCredentials> {
+  async refreshCredentials(
+    credentials: ConnectorCredentials,
+  ): Promise<ConnectorCredentials> {
     try {
       if (!credentials.refreshToken) {
         throw new Error('No refresh token available');
       }
 
-      this.oauth2Client.setCredentials({ refresh_token: credentials.refreshToken });
+      this.oauth2Client.setCredentials({
+        refresh_token: credentials.refreshToken,
+      });
 
-      const { credentials: newCredentials } = await this.oauth2Client.refreshAccessToken();
+      const { credentials: newCredentials } =
+        await this.oauth2Client.refreshAccessToken();
 
       // Preserve existing scopes or extract from new token
       const scopes = newCredentials.scope?.split(' ') || this.grantedScopes;
@@ -626,7 +675,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       const refreshedCredentials: ConnectorCredentials = {
         accessToken: newCredentials.access_token || undefined,
         refreshToken: newCredentials.refresh_token || credentials.refreshToken,
-        expiresAt: newCredentials.expiry_date ? new Date(newCredentials.expiry_date) : undefined,
+        expiresAt: newCredentials.expiry_date
+          ? new Date(newCredentials.expiry_date)
+          : undefined,
         scopes,
       };
 
@@ -673,7 +724,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
 
       // Search by name
       if (options.search) {
-        queryConditions.push(`name contains '${escapeSearchTerm(options.search)}'`);
+        queryConditions.push(
+          `name contains '${escapeSearchTerm(options.search)}'`,
+        );
       }
 
       const query = queryConditions.join(' and ');
@@ -683,7 +736,8 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
         q: query,
         pageSize,
         pageToken: options.pageToken,
-        fields: 'nextPageToken, files(id, name, parents, webViewLink, modifiedTime, mimeType)',
+        fields:
+          'nextPageToken, files(id, name, parents, webViewLink, modifiedTime, mimeType)',
         includeItemsFromAllDrives: this.config.includeSharedDrives,
         supportsAllDrives: this.config.includeSharedDrives,
         orderBy: 'name',
@@ -710,10 +764,14 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
   /**
    * Create a new folder in Google Drive.
    */
-  async createFolder(options: CreateFolderRequest): Promise<CreateFolderResponse> {
+  async createFolder(
+    options: CreateFolderRequest,
+  ): Promise<CreateFolderResponse> {
     if (!this.drive) throw new Error('Not authenticated');
     if (!this.supportsPublish()) {
-      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+      throw new Error(
+        'Write permissions not granted. Please re-authenticate with publish permissions.',
+      );
     }
 
     return this.withTokenRefresh(async () => {
@@ -743,7 +801,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
         modifiedAt: file.modifiedTime ? new Date(file.modifiedTime) : undefined,
       };
 
-      console.log(`[GoogleDrive] Created folder: ${folder.name} (${folder.id})`);
+      console.log(
+        `[GoogleDrive] Created folder: ${folder.name} (${folder.id})`,
+      );
 
       return { folder };
     });
@@ -762,10 +822,14 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
    * If content is a string for binary formats, it will be treated as base64
    * and decoded to a Buffer.
    */
-  async publishDocument(options: ConnectorPublishOptions): Promise<ConnectorPublishResult> {
+  async publishDocument(
+    options: ConnectorPublishOptions,
+  ): Promise<ConnectorPublishResult> {
     if (!this.drive) throw new Error('Not authenticated');
     if (!this.supportsPublish()) {
-      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+      throw new Error(
+        'Write permissions not granted. Please re-authenticate with publish permissions.',
+      );
     }
 
     return this.withTokenRefresh(async () => {
@@ -793,7 +857,7 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
             acc[key] = String(value);
             return acc;
           },
-          {} as Record<string, string>
+          {} as Record<string, string>,
         );
       }
 
@@ -806,9 +870,10 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       };
 
       // For native format, we need to specify conversion
-      const requestBody = format === 'native'
-        ? { ...fileMetadata, mimeType: FORMAT_MIME_TYPES.native }
-        : fileMetadata;
+      const requestBody =
+        format === 'native'
+          ? { ...fileMetadata, mimeType: FORMAT_MIME_TYPES.native }
+          : fileMetadata;
 
       // Create the file
       const response = await this.drive!.files.create({
@@ -818,14 +883,19 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       });
 
       const file = response.data;
-      const webUrl = file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
+      const webUrl =
+        file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`;
 
-      console.log(`[GoogleDrive] Published document: ${file.name} (${file.id})`);
+      console.log(
+        `[GoogleDrive] Published document: ${file.name} (${file.id})`,
+      );
 
       return {
         externalId: file.id!,
         externalUrl: webUrl,
-        externalPath: file.parents?.[0] ? `/${file.parents[0]}/${file.name}` : `/${file.name}`,
+        externalPath: file.parents?.[0]
+          ? `/${file.parents[0]}/${file.name}`
+          : `/${file.name}`,
       };
     });
   }
@@ -840,7 +910,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
   async updateDocument(options: ConnectorUpdateOptions): Promise<void> {
     if (!this.drive) throw new Error('Not authenticated');
     if (!this.supportsPublish()) {
-      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+      throw new Error(
+        'Write permissions not granted. Please re-authenticate with publish permissions.',
+      );
     }
 
     return this.withTokenRefresh(async () => {
@@ -862,9 +934,8 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       // Update content if provided
       if (content !== undefined) {
         const mimeType = currentFile.data.mimeType || 'text/plain';
-        const uploadMimeType = mimeType === GOOGLE_MIME_TYPES.DOCUMENT
-          ? 'text/html'
-          : mimeType;
+        const uploadMimeType =
+          mimeType === GOOGLE_MIME_TYPES.DOCUMENT ? 'text/html' : mimeType;
 
         // Determine format based on MIME type for proper buffer handling
         const format = this.getFormatFromMimeType(mimeType);
@@ -877,7 +948,8 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
 
         await this.drive!.files.update({
           fileId: externalId,
-          requestBody: Object.keys(fileMetadata).length > 0 ? fileMetadata : undefined,
+          requestBody:
+            Object.keys(fileMetadata).length > 0 ? fileMetadata : undefined,
           media,
         });
       } else if (Object.keys(fileMetadata).length > 0) {
@@ -899,7 +971,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
   async deleteDocument(externalId: string): Promise<void> {
     if (!this.drive) throw new Error('Not authenticated');
     if (!this.supportsPublish()) {
-      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+      throw new Error(
+        'Write permissions not granted. Please re-authenticate with publish permissions.',
+      );
     }
 
     return this.withTokenRefresh(async () => {
@@ -922,7 +996,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
   async permanentlyDeleteDocument(externalId: string): Promise<void> {
     if (!this.drive) throw new Error('Not authenticated');
     if (!this.supportsPublish()) {
-      throw new Error('Write permissions not granted. Please re-authenticate with publish permissions.');
+      throw new Error(
+        'Write permissions not granted. Please re-authenticate with publish permissions.',
+      );
     }
 
     return this.withTokenRefresh(async () => {
@@ -956,15 +1032,21 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
           return {
             exists: false,
             title: file.name || undefined,
-            modifiedAt: file.modifiedTime ? new Date(file.modifiedTime) : undefined,
+            modifiedAt: file.modifiedTime
+              ? new Date(file.modifiedTime)
+              : undefined,
           };
         }
 
         return {
           exists: true,
           title: file.name || undefined,
-          modifiedAt: file.modifiedTime ? new Date(file.modifiedTime) : undefined,
-          webUrl: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
+          modifiedAt: file.modifiedTime
+            ? new Date(file.modifiedTime)
+            : undefined,
+          webUrl:
+            file.webViewLink ||
+            `https://drive.google.com/file/d/${file.id}/view`,
           version: file.version || undefined,
         };
       } catch (error: unknown) {
@@ -1021,7 +1103,10 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
    * @param format - The publish format
    * @returns A Buffer ready for upload
    */
-  private prepareContentBuffer(content: Buffer | string, format: PublishFormat): Buffer {
+  private prepareContentBuffer(
+    content: Buffer | string,
+    format: PublishFormat,
+  ): Buffer {
     // If content is already a Buffer, use it directly
     if (Buffer.isBuffer(content)) {
       return content;
@@ -1037,18 +1122,25 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
         try {
           const decoded = Buffer.from(trimmedContent, 'base64');
           // Verify it looks like a PDF by checking the magic bytes
-          if (decoded.length >= 4 && decoded.toString('ascii', 0, 4) === '%PDF') {
+          if (
+            decoded.length >= 4 &&
+            decoded.toString('ascii', 0, 4) === '%PDF'
+          ) {
             return decoded;
           }
           // If it doesn't look like a PDF but was valid base64, still use the decoded version
           // This handles cases where the PDF might be corrupted or a different binary format
           if (decoded.length > 0) {
-            console.warn('[GoogleDrive] Content decoded as base64 but does not have PDF magic bytes');
+            console.warn(
+              '[GoogleDrive] Content decoded as base64 but does not have PDF magic bytes',
+            );
             return decoded;
           }
         } catch {
           // If base64 decoding fails, fall through to UTF-8 encoding
-          console.warn('[GoogleDrive] Failed to decode content as base64, treating as UTF-8');
+          console.warn(
+            '[GoogleDrive] Failed to decode content as base64, treating as UTF-8',
+          );
         }
       }
     }
@@ -1085,7 +1177,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
 
     conditions.push('trashed = false');
 
-    const mimeConditions = SUPPORTED_MIME_TYPES.map((type) => `mimeType='${type}'`).join(' or ');
+    const mimeConditions = SUPPORTED_MIME_TYPES.map(
+      (type) => `mimeType='${type}'`,
+    ).join(' or ');
     conditions.push(`(${mimeConditions})`);
 
     if (options?.since) {
@@ -1106,19 +1200,23 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
   private async listAllFiles(
     query: string,
     syncOptions?: SyncOptions,
-    limit?: number
+    limit?: number,
   ): Promise<drive_v3.Schema$File[]> {
-    if (!this.drive) throw new Error('Not authenticated');
-
-    const files: drive_v3.Schema$File[] = [];
-    let pageToken: string | undefined;
+    const drive = this.drive;
+    if (!drive) throw new Error('Not authenticated');
 
     const maxResults = limit || syncOptions?.limit;
 
-    do {
-      const response = await this.drive.files.list({
+    const fetchPage = async (
+      pageToken?: string,
+      files: drive_v3.Schema$File[] = [],
+    ): Promise<drive_v3.Schema$File[]> => {
+      const response = await drive.files.list({
         q: query,
-        pageSize: Math.min(this.config.pageSize || 100, maxResults ? maxResults - files.length : 100),
+        pageSize: Math.min(
+          this.config.pageSize || 100,
+          maxResults ? maxResults - files.length : 100,
+        ),
         pageToken,
         fields:
           'nextPageToken, files(id, name, mimeType, size, modifiedTime, createdTime, parents, webViewLink, owners)',
@@ -1127,18 +1225,22 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       });
 
       if (response.data.files) {
-        files.push(...response.data.files);
+        files = files.concat(response.data.files);
       }
 
-      pageToken = response.data.nextPageToken || undefined;
+      const nextPageToken = response.data.nextPageToken || undefined;
 
-      if (maxResults && files.length >= maxResults) break;
-    } while (pageToken);
+      if (maxResults && files.length >= maxResults) return files;
+      return nextPageToken ? fetchPage(nextPageToken, files) : files;
+    };
 
-    return files;
+    return fetchPage();
   }
 
-  private async getUserInfo(): Promise<{ emailAddress?: string; displayName?: string }> {
+  private async getUserInfo(): Promise<{
+    emailAddress?: string;
+    displayName?: string;
+  }> {
     if (!this.drive) throw new Error('Not authenticated');
 
     const response = await this.drive.about.get({ fields: 'user' });
@@ -1149,7 +1251,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
     };
   }
 
-  private mapDriveFileToConnectorFile(file: drive_v3.Schema$File): ConnectorFile {
+  private mapDriveFileToConnectorFile(
+    file: drive_v3.Schema$File,
+  ): ConnectorFile {
     return {
       id: file.id!,
       name: file.name!,
@@ -1162,7 +1266,9 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
       parentId: file.parents?.[0] || undefined,
       metadata: {
         owners: file.owners,
-        isGoogleWorkspace: file.mimeType?.startsWith('application/vnd.google-apps.'),
+        isGoogleWorkspace: file.mimeType?.startsWith(
+          'application/vnd.google-apps.',
+        ),
       },
     };
   }
@@ -1176,8 +1282,16 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
 
     // Documents
     if (mimeType === 'application/pdf') return 'pdf';
-    if (mimeType.includes('wordprocessingml') || mimeType === 'application/msword') return 'word';
-    if (mimeType.includes('spreadsheetml') || mimeType === 'application/vnd.ms-excel') return 'excel';
+    if (
+      mimeType.includes('wordprocessingml') ||
+      mimeType === 'application/msword'
+    )
+      return 'word';
+    if (
+      mimeType.includes('spreadsheetml') ||
+      mimeType === 'application/vnd.ms-excel'
+    )
+      return 'excel';
     if (mimeType === 'text/csv') return 'csv';
     if (mimeType === 'text/markdown') return 'markdown';
     if (mimeType === 'text/html') return 'html';
@@ -1189,15 +1303,26 @@ export class GoogleDriveConnector implements Connector, PublishableConnector {
     if (mimeType.startsWith('image/')) return 'image';
 
     // Archives
-    if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed') return 'archive';
-    if (mimeType === 'application/x-rar-compressed' || mimeType === 'application/vnd.rar') return 'archive';
+    if (
+      mimeType === 'application/zip' ||
+      mimeType === 'application/x-zip-compressed'
+    )
+      return 'archive';
+    if (
+      mimeType === 'application/x-rar-compressed' ||
+      mimeType === 'application/vnd.rar'
+    )
+      return 'archive';
     if (mimeType === 'application/x-7z-compressed') return 'archive';
-    if (mimeType === 'application/gzip' || mimeType === 'application/x-tar') return 'archive';
+    if (mimeType === 'application/gzip' || mimeType === 'application/x-tar')
+      return 'archive';
 
     // Code files
     if (mimeType === 'application/json') return 'code';
-    if (mimeType === 'application/javascript' || mimeType === 'text/javascript') return 'code';
-    if (mimeType === 'application/xml' || mimeType === 'text/xml') return 'code';
+    if (mimeType === 'application/javascript' || mimeType === 'text/javascript')
+      return 'code';
+    if (mimeType === 'application/xml' || mimeType === 'text/xml')
+      return 'code';
 
     // Other text types
     if (mimeType.startsWith('text/')) return 'text';

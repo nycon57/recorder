@@ -21,10 +21,7 @@ const CLUSTER_CONTEXT_PER_CLUSTER = 2;
 const FRESHNESS_DURATION_REGEX =
   /^(\d+)\s*(minute|minutes|min|hour|hours|day|days|week|weeks)$/i;
 
-export type CompiledMemoryCitationLayer =
-  | 'vendor'
-  | 'vendor_training'
-  | 'org';
+export type CompiledMemoryCitationLayer = 'vendor' | 'vendor_training' | 'org';
 
 export interface CompiledMemoryCitation {
   sourceId: string;
@@ -85,7 +82,9 @@ export interface CompiledMemoryContext {
   citationsBySourceId: Record<string, CompiledMemoryCitation>;
 }
 
-function parseFreshnessTargetToMs(value: string | null | undefined): number | null {
+function parseFreshnessTargetToMs(
+  value: string | null | undefined,
+): number | null {
   if (!value) {
     return null;
   }
@@ -156,7 +155,12 @@ function computeFreshnessState(args: {
 
 function uniqueIds(values: Array<string | null | undefined>): string[] {
   return Array.from(
-    new Set(values.map((value) => value?.trim()).filter(Boolean)),
+    new Set(
+      values.flatMap((__item, __index, __array) => {
+        const __mapped = __item?.trim();
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   ) as string[];
 }
 
@@ -189,23 +193,27 @@ async function resolveContextMatchedVendorPages(
     );
     const byId = new Map(rows.map((row) => [row.id, row]));
 
-    return ids
-      .map((id) => byId.get(id))
-      .filter((page): page is VendorWikiPage => page != null)
-      .map((page) => ({
-        id: page.id,
-        vendorPageId: page.id,
-        vendorSourceId: page.vendor_source_id,
-        app: page.app,
-        screen: page.screen,
-        title: formatVendorKnowledgeTitle(page.app, page.screen),
-        content: page.content,
-        sourceUrl: page.source_url,
-        updatedAt: page.updated_at,
-        confidence: 0.98,
-        distance: 0.02,
-        matchType: 'exact',
-      }));
+    return ids.flatMap((__item, __index, __array) => {
+      const __mapped = byId.get(__item);
+      return __mapped != null
+        ? [
+            {
+              id: __mapped.id,
+              vendorPageId: __mapped.id,
+              vendorSourceId: __mapped.vendor_source_id,
+              app: __mapped.app,
+              screen: __mapped.screen,
+              title: formatVendorKnowledgeTitle(__mapped.app, __mapped.screen),
+              content: __mapped.content,
+              sourceUrl: __mapped.source_url,
+              updatedAt: __mapped.updated_at,
+              confidence: 0.98,
+              distance: 0.02,
+              matchType: 'exact',
+            },
+          ]
+        : [];
+    });
   } catch (error) {
     console.error(
       '[compiled-memory-context] context-matched vendor page lookup failed:',
@@ -252,30 +260,32 @@ async function resolveContextMatchedOrgPages(
     }
 
     const rows =
-      (data as
-        | Array<{
-            id: string;
-            app: string | null;
-            screen: string | null;
-            topic: string;
-            content: string;
-            confidence: number;
-          }>
-        | null) ?? [];
+      (data as Array<{
+        id: string;
+        app: string | null;
+        screen: string | null;
+        topic: string;
+        content: string;
+        confidence: number;
+      }> | null) ?? [];
     const byId = new Map(rows.map((row) => [row.id, row]));
 
-    return ids
-      .map((id) => byId.get(id))
-      .filter((page): page is NonNullable<typeof page> => page != null)
-      .map((page) => ({
-        id: page.id,
-        app: page.app,
-        screen: page.screen,
-        topic: page.topic,
-        content: page.content,
-        confidence: Math.max(page.confidence ?? 0, 0.98),
-        distance: 0.02,
-      }));
+    return ids.flatMap((__item, __index, __array) => {
+      const __mapped = byId.get(__item);
+      return __mapped != null
+        ? [
+            {
+              id: __mapped.id,
+              app: __mapped.app,
+              screen: __mapped.screen,
+              topic: __mapped.topic,
+              content: __mapped.content,
+              confidence: Math.max(__mapped.confidence ?? 0, 0.98),
+              distance: 0.02,
+            },
+          ]
+        : [];
+    });
   } catch (error) {
     console.error(
       '[compiled-memory-context] context-matched org page lookup failed:',
@@ -285,13 +295,16 @@ async function resolveContextMatchedOrgPages(
   }
 }
 
-async function resolveVendorTrainingPages(args: {
-  orgId: string;
-  app: string;
-  questionEmbedding: number[];
-  asOf?: string | null;
-  limit: number;
-}, deps: ResolveCompiledMemoryContextDeps = {}): Promise<ResolvedOrgWikiPage[]> {
+async function resolveVendorTrainingPages(
+  args: {
+    orgId: string;
+    app: string;
+    questionEmbedding: number[];
+    asOf?: string | null;
+    limit: number;
+  },
+  deps: ResolveCompiledMemoryContextDeps = {},
+): Promise<ResolvedOrgWikiPage[]> {
   const { orgId, app, questionEmbedding, asOf, limit } = args;
   const getVendorForOrgFn = deps.getVendorForOrg ?? getVendorForOrg;
   const resolveOrgWikiPagesByVectorFn =
@@ -331,13 +344,16 @@ async function resolveVendorTrainingPages(args: {
   }
 }
 
-async function resolveOrgKnowledge(args: {
-  orgId: string;
-  userId?: string;
-  questionEmbedding: number[];
-  asOf?: string | null;
-  limit: number;
-}, deps: ResolveCompiledMemoryContextDeps = {}): Promise<CompiledMemoryContext['orgKnowledge']> {
+async function resolveOrgKnowledge(
+  args: {
+    orgId: string;
+    userId?: string;
+    questionEmbedding: number[];
+    asOf?: string | null;
+    limit: number;
+  },
+  deps: ResolveCompiledMemoryContextDeps = {},
+): Promise<CompiledMemoryContext['orgKnowledge']> {
   const { orgId, userId, questionEmbedding, asOf, limit } = args;
   const resolveOrgWikiPagesByVectorFn =
     deps.resolveOrgWikiPagesByVector ?? resolveOrgWikiPagesByVector;
@@ -388,9 +404,9 @@ async function resolveOrgKnowledge(args: {
         .eq('org_id', orgId)
         .maybeSingle();
 
-      const settings = settingsRaw as
-        | { wiki_cluster_context_enabled: boolean | null }
-        | null;
+      const settings = settingsRaw as {
+        wiki_cluster_context_enabled: boolean | null;
+      } | null;
 
       const enabled = settings?.wiki_cluster_context_enabled !== false;
       if (enabled) {
@@ -440,9 +456,9 @@ async function resolveOrgKnowledge(args: {
 
       priorTopics = Array.from(
         new Set(
-          pages
-            .filter((page) => priorPageIds.has(page.id))
-            .map((page) => page.topic),
+          pages.flatMap((__item, __index, __array) =>
+            priorPageIds.has(__item.id) ? [__item.topic] : [],
+          ),
         ),
       );
     }
@@ -478,13 +494,11 @@ async function resolveOrgCitationLinks(
       .order('contributed_at', { ascending: true });
 
     const rows =
-      (data as
-        | Array<{
-            page_id: string;
-            source_id: string;
-            source_type: string;
-          }>
-        | null) ?? [];
+      (data as Array<{
+        page_id: string;
+        source_id: string;
+        source_type: string;
+      }> | null) ?? [];
 
     const links = new Map<string, string>();
     for (const row of rows) {
@@ -520,17 +534,15 @@ async function resolveOrgPageUpdatedAt(
       .in('id', pageIds);
 
     const rows =
-      (data as
-        | Array<{
-            id: string;
-            updated_at: string | null;
-          }>
-        | null) ?? [];
+      (data as Array<{
+        id: string;
+        updated_at: string | null;
+      }> | null) ?? [];
 
     return new Map(
-      rows
-        .filter((row) => row.updated_at)
-        .map((row) => [row.id, row.updated_at as string]),
+      rows.flatMap((row) =>
+        row.updated_at ? ([[row.id, row.updated_at]] as const) : [],
+      ),
     );
   } catch (error) {
     console.error(
@@ -572,16 +584,14 @@ async function resolveVendorSourceMetadata(
       .in('id', vendorSourceIds);
 
     const rows =
-      (data as
-        | Array<{
-            id: string;
-            source_kind: string | null;
-            source_url: string | null;
-            freshness_target: string | null;
-            last_success_at: string | null;
-            updated_at: string | null;
-          }>
-        | null) ?? [];
+      (data as Array<{
+        id: string;
+        source_kind: string | null;
+        source_url: string | null;
+        freshness_target: string | null;
+        last_success_at: string | null;
+        updated_at: string | null;
+      }> | null) ?? [];
 
     return new Map(rows.map((row) => [row.id, row]));
   } catch (error) {
@@ -593,39 +603,45 @@ async function resolveVendorSourceMetadata(
   }
 }
 
-async function buildCitationsBySourceId(args: {
-  vendorPage: VendorWikiPage | null;
-  vendorPages: VendorCorpusPageMatch[];
-  vendorTrainingPages: ResolvedOrgWikiPage[];
-  orgPages: ResolvedOrgWikiPage[];
-}, deps: ResolveCompiledMemoryContextDeps = {}): Promise<Record<string, CompiledMemoryCitation>> {
+async function buildCitationsBySourceId(
+  args: {
+    vendorPage: VendorWikiPage | null;
+    vendorPages: VendorCorpusPageMatch[];
+    vendorTrainingPages: ResolvedOrgWikiPage[];
+    orgPages: ResolvedOrgWikiPage[];
+  },
+  deps: ResolveCompiledMemoryContextDeps = {},
+): Promise<Record<string, CompiledMemoryCitation>> {
   const { vendorPage, vendorPages, vendorTrainingPages, orgPages } = args;
   const citationsBySourceId: Record<string, CompiledMemoryCitation> = {};
-  const orgPageFreshnessById = await resolveOrgPageUpdatedAt(
-    Array.from(
-      new Set([
-        ...vendorTrainingPages.map((page) => page.id),
-        ...orgPages.map((page) => page.id),
-      ]),
-    ),
-    deps,
-  );
-  const vendorSourceMetadataById = await resolveVendorSourceMetadata(
-    Array.from(
-      new Set(
-        [
-          vendorPage?.vendor_source_id ?? null,
-          ...vendorPages.map((page) => page.vendorSourceId),
-        ].filter((value): value is string => Boolean(value)),
+  const [orgPageFreshnessById, vendorSourceMetadataById] = await Promise.all([
+    resolveOrgPageUpdatedAt(
+      Array.from(
+        new Set([
+          ...vendorTrainingPages.map((page) => page.id),
+          ...orgPages.map((page) => page.id),
+        ]),
       ),
+      deps,
     ),
-    deps,
-  );
+    resolveVendorSourceMetadata(
+      Array.from(
+        new Set(
+          [
+            vendorPage?.vendor_source_id ?? null,
+            ...vendorPages.map((page) => page.vendorSourceId),
+          ].filter((value): value is string => Boolean(value)),
+        ),
+      ),
+      deps,
+    ),
+  ]);
 
   if (vendorPage) {
     const vendorSourceId = vendorPage.vendor_source_id ?? null;
     const vendorSource =
-      (vendorSourceId ? vendorSourceMetadataById.get(vendorSourceId) : null) ?? null;
+      (vendorSourceId ? vendorSourceMetadataById.get(vendorSourceId) : null) ??
+      null;
 
     citationsBySourceId[vendorPage.id] = {
       sourceId: vendorPage.id,
@@ -859,12 +875,15 @@ export async function resolveCompiledMemoryContext(
     ),
   ];
 
-  const citationsBySourceId = await buildCitationsBySourceId({
-    vendorPage,
-    vendorPages,
-    vendorTrainingPages,
-    orgPages,
-  }, deps);
+  const citationsBySourceId = await buildCitationsBySourceId(
+    {
+      vendorPage,
+      vendorPages,
+      vendorTrainingPages,
+      orgPages,
+    },
+    deps,
+  );
 
   return {
     vendorKnowledge: {

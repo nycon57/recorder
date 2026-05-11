@@ -3,8 +3,8 @@ import type { Json } from '@/lib/types/database';
 
 export const ROUTING_REVIEW_AGENT_TYPE = 'wiki_compiler';
 export const ROUTING_REVIEW_ACTION_TYPE = 'reroute_content';
-export const ROUTING_REVIEW_METADATA_KEY = 'knowledge_routing_review';
-export const ROUTING_REVIEW_CONFIDENCE_THRESHOLD = 0.7;
+const ROUTING_REVIEW_METADATA_KEY = 'knowledge_routing_review';
+const ROUTING_REVIEW_CONFIDENCE_THRESHOLD = 0.7;
 
 export type RoutingReviewDecisionAction =
   | 'approve'
@@ -18,7 +18,7 @@ export interface RoutingRoute {
   screen: string | null;
 }
 
-export interface RoutingReviewHistoryEntry {
+interface RoutingReviewHistoryEntry {
   version: number;
   action: RoutingReviewDecisionAction;
   decidedAt: string;
@@ -56,11 +56,15 @@ export interface RoutingReviewProposedAction {
   proposedRoute: RoutingRoute;
 }
 
-function isRecord(value: Json | null | undefined): value is Record<string, Json> {
+function isRecord(
+  value: Json | null | undefined,
+): value is Record<string, Json> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isDecisionAction(value: Json | null | undefined): value is RoutingReviewDecisionAction {
+function isDecisionAction(
+  value: Json | null | undefined,
+): value is RoutingReviewDecisionAction {
   return (
     value === 'approve' ||
     value === 'edit_and_approve' ||
@@ -75,11 +79,15 @@ function clampConfidence(value: number | null | undefined): number | null {
 }
 
 function normalizeVersion(value: Json | null | undefined): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+    return 0;
   return Math.floor(value);
 }
 
-function routesEqual(left: RoutingRoute | null, right: RoutingRoute | null): boolean {
+function routesEqual(
+  left: RoutingRoute | null,
+  right: RoutingRoute | null,
+): boolean {
   if (!left || !right) return false;
   return (
     left.topic === right.topic &&
@@ -88,7 +96,9 @@ function routesEqual(left: RoutingRoute | null, right: RoutingRoute | null): boo
   );
 }
 
-function parseRoutingReviewHistoryEntry(value: Json): RoutingReviewHistoryEntry | null {
+function parseRoutingReviewHistoryEntry(
+  value: Json,
+): RoutingReviewHistoryEntry | null {
   if (!isRecord(value)) return null;
 
   const proposedRoute = normalizeRoutingRoute({
@@ -106,7 +116,8 @@ function parseRoutingReviewHistoryEntry(value: Json): RoutingReviewHistoryEntry 
   });
 
   const action = isDecisionAction(value.action) ? value.action : null;
-  const decidedAt = typeof value.decidedAt === 'string' ? value.decidedAt : null;
+  const decidedAt =
+    typeof value.decidedAt === 'string' ? value.decidedAt : null;
   const version = normalizeVersion(value.version);
 
   if (!action || !decidedAt || version <= 0) {
@@ -122,9 +133,10 @@ function parseRoutingReviewHistoryEntry(value: Json): RoutingReviewHistoryEntry 
     rejectionReason:
       typeof value.rejectionReason === 'string' ? value.rejectionReason : null,
     routeConfidence: clampConfidence(
-      typeof value.routeConfidence === 'number' ? value.routeConfidence : null
+      typeof value.routeConfidence === 'number' ? value.routeConfidence : null,
     ),
-    routeReason: typeof value.routeReason === 'string' ? value.routeReason : null,
+    routeReason:
+      typeof value.routeReason === 'string' ? value.routeReason : null,
     proposedRoute,
     approvedRoute,
   };
@@ -176,7 +188,7 @@ export function normalizeRoutingSlug(value: unknown): string | null {
   return slug.slice(0, 120);
 }
 
-export function normalizeRoutingRoute(input: {
+function normalizeRoutingRoute(input: {
   topic: unknown;
   app: unknown;
   screen: unknown;
@@ -206,7 +218,7 @@ export function requiresRoutingReview(input: {
 }
 
 export function parseRoutingReviewState(
-  metadata: Json | null | undefined
+  metadata: Json | null | undefined,
 ): RoutingReviewState | null {
   if (!isRecord(metadata)) return null;
   const raw = metadata[ROUTING_REVIEW_METADATA_KEY];
@@ -244,7 +256,7 @@ export function parseRoutingReviewState(
     rejectionReason:
       typeof raw.rejectionReason === 'string' ? raw.rejectionReason : null,
     routeConfidence: clampConfidence(
-      typeof raw.routeConfidence === 'number' ? raw.routeConfidence : null
+      typeof raw.routeConfidence === 'number' ? raw.routeConfidence : null,
     ),
     routeReason: typeof raw.routeReason === 'string' ? raw.routeReason : null,
     proposedRoute,
@@ -252,15 +264,16 @@ export function parseRoutingReviewState(
     decisionVersion: normalizeVersion(raw.decisionVersion),
     lastAction: isDecisionAction(raw.lastAction) ? raw.lastAction : null,
     history: Array.isArray(raw.history)
-      ? raw.history
-          .map((entry) => parseRoutingReviewHistoryEntry(entry))
-          .filter((entry): entry is RoutingReviewHistoryEntry => entry !== null)
+      ? raw.history.flatMap((__item, __index, __array) => {
+          const __mapped = parseRoutingReviewHistoryEntry(__item);
+          return __mapped !== null ? [__mapped] : [];
+        })
       : [],
   };
 }
 
 export function getApprovedRoutingOverride(
-  metadata: Json | null | undefined
+  metadata: Json | null | undefined,
 ): RoutingRoute | null {
   const state = parseRoutingReviewState(metadata);
   if (!state || state.status !== 'approved' || !state.approvedRoute) {
@@ -271,10 +284,10 @@ export function getApprovedRoutingOverride(
 
 export function writeRoutingReviewState(
   metadata: Json | null | undefined,
-  state: RoutingReviewState
+  state: RoutingReviewState,
 ): Json {
-  const history = [...state.history]
-    .sort((left, right) => left.version - right.version)
+  const history = state.history
+    .toSorted((left, right) => left.version - right.version)
     .slice(-50);
 
   const next = isRecord(metadata) ? { ...metadata } : {};
@@ -333,22 +346,25 @@ export function buildRoutingReviewProposedAction(input: {
 }
 
 export function parseRoutingReviewProposedAction(
-  value: Json | null | undefined
+  value: Json | null | undefined,
 ): RoutingReviewProposedAction | null {
   if (!isRecord(value)) return null;
   if (value.kind !== 'routing_review') return null;
   if (typeof value.contentId !== 'string') return null;
 
   const proposedRoute = normalizeRoutingRoute({
-    topic: value.proposedRoute && isRecord(value.proposedRoute)
-      ? value.proposedRoute.topic
-      : null,
-    app: value.proposedRoute && isRecord(value.proposedRoute)
-      ? value.proposedRoute.app
-      : null,
-    screen: value.proposedRoute && isRecord(value.proposedRoute)
-      ? value.proposedRoute.screen
-      : null,
+    topic:
+      value.proposedRoute && isRecord(value.proposedRoute)
+        ? value.proposedRoute.topic
+        : null,
+    app:
+      value.proposedRoute && isRecord(value.proposedRoute)
+        ? value.proposedRoute.app
+        : null,
+    screen:
+      value.proposedRoute && isRecord(value.proposedRoute)
+        ? value.proposedRoute.screen
+        : null,
   });
 
   if (!proposedRoute) {
@@ -361,9 +377,10 @@ export function parseRoutingReviewProposedAction(
     contentTitle:
       typeof value.contentTitle === 'string' ? value.contentTitle : null,
     routeConfidence: clampConfidence(
-      typeof value.routeConfidence === 'number' ? value.routeConfidence : null
+      typeof value.routeConfidence === 'number' ? value.routeConfidence : null,
     ),
-    routeReason: typeof value.routeReason === 'string' ? value.routeReason : null,
+    routeReason:
+      typeof value.routeReason === 'string' ? value.routeReason : null,
     proposedRoute,
   };
 }
@@ -418,6 +435,8 @@ export async function enqueueRoutingCompileWikiJob(input: {
   });
 
   if (error && error.code !== '23505') {
-    throw new Error(`Failed to enqueue compile_wiki reroute job: ${error.message}`);
+    throw new Error(
+      `Failed to enqueue compile_wiki reroute job: ${error.message}`,
+    );
   }
 }

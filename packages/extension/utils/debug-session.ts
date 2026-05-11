@@ -15,7 +15,7 @@ import {
 import { apiFetch } from './api-client.js';
 import { isDebugSessionLoggingAlwaysOn } from './debug-session-policy.js';
 
-export const DEBUG_SESSION_LOGGING_KEY =
+const DEBUG_SESSION_LOGGING_KEY =
   'tribora_debug_session_logging_enabled';
 
 export interface ActiveDebugSessionState {
@@ -37,7 +37,7 @@ export async function getDebugSessionLoggingEnabled(): Promise<boolean> {
   return stored[DEBUG_SESSION_LOGGING_KEY] === true;
 }
 
-export async function setDebugSessionLoggingEnabled(
+async function setDebugSessionLoggingEnabled(
   enabled: boolean,
 ): Promise<void> {
   if (isDebugSessionLoggingAlwaysOn()) {

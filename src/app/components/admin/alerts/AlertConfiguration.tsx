@@ -3,7 +3,13 @@
 import { useState } from 'react';
 import { Settings, Save } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -66,7 +72,9 @@ export default function AlertConfiguration() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to save configuration' }));
+        const errorData = await response
+          .json()
+          .catch(() => ({ message: 'Failed to save configuration' }));
         throw new Error(errorData.message || 'Failed to save configuration');
       }
 
@@ -74,7 +82,9 @@ export default function AlertConfiguration() {
       console.log('Configuration saved successfully');
     } catch (err) {
       console.error('Error saving configuration:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save configuration');
+      setError(
+        err instanceof Error ? err.message : 'Failed to save configuration',
+      );
     } finally {
       setSaving(false);
     }
@@ -84,7 +94,7 @@ export default function AlertConfiguration() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
+          <Settings className="size-5" />
           Alert Configuration
         </CardTitle>
         <CardDescription>
@@ -110,16 +120,19 @@ export default function AlertConfiguration() {
                 onChange={(e) => {
                   const parsed = parseInt(e.target.value);
                   const newValue = Number.isNaN(parsed) ? 0 : parsed;
-                  setConfig({ ...config, storageThreshold: newValue });
+                  setConfig((prev) => ({
+                    ...prev,
+                    storageThreshold: newValue,
+                  }));
 
                   // Real-time validation
                   if (newValue < 0 || newValue > 100) {
-                    setValidationErrors(prev => ({
+                    setValidationErrors((prev) => ({
                       ...prev,
-                      storageThreshold: 'Must be between 0 and 100'
+                      storageThreshold: 'Must be between 0 and 100',
                     }));
                   } else {
-                    setValidationErrors(prev => {
+                    setValidationErrors((prev) => {
                       const { storageThreshold, ...rest } = prev;
                       return rest;
                     });
@@ -130,14 +143,14 @@ export default function AlertConfiguration() {
                 Alert when storage usage exceeds this percentage
               </p>
               {validationErrors.storageThreshold && (
-                <p className="text-xs text-destructive">{validationErrors.storageThreshold}</p>
+                <p className="text-xs text-destructive">
+                  {validationErrors.storageThreshold}
+                </p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="costThreshold">
-                Monthly Cost Threshold ($)
-              </Label>
+              <Label htmlFor="costThreshold">Monthly Cost Threshold ($)</Label>
               <Input
                 id="costThreshold"
                 type="number"
@@ -146,16 +159,16 @@ export default function AlertConfiguration() {
                 onChange={(e) => {
                   const parsed = parseInt(e.target.value);
                   const newValue = Number.isNaN(parsed) ? 0 : parsed;
-                  setConfig({ ...config, costThreshold: newValue });
+                  setConfig((prev) => ({ ...prev, costThreshold: newValue }));
 
                   // Real-time validation
                   if (newValue <= 0) {
-                    setValidationErrors(prev => ({
+                    setValidationErrors((prev) => ({
                       ...prev,
-                      costThreshold: 'Must be a positive number'
+                      costThreshold: 'Must be a positive number',
                     }));
                   } else {
-                    setValidationErrors(prev => {
+                    setValidationErrors((prev) => {
                       const { costThreshold, ...rest } = prev;
                       return rest;
                     });
@@ -166,7 +179,9 @@ export default function AlertConfiguration() {
                 Alert when monthly costs exceed this amount
               </p>
               {validationErrors.costThreshold && (
-                <p className="text-xs text-destructive">{validationErrors.costThreshold}</p>
+                <p className="text-xs text-destructive">
+                  {validationErrors.costThreshold}
+                </p>
               )}
             </div>
           </div>
@@ -184,16 +199,16 @@ export default function AlertConfiguration() {
               onChange={(e) => {
                 const parsed = parseInt(e.target.value);
                 const newValue = Number.isNaN(parsed) ? 5 : parsed;
-                setConfig({ ...config, checkInterval: newValue });
+                setConfig((prev) => ({ ...prev, checkInterval: newValue }));
 
                 // Real-time validation
                 if (newValue < 5 || newValue > 60) {
-                  setValidationErrors(prev => ({
+                  setValidationErrors((prev) => ({
                     ...prev,
-                    checkInterval: 'Must be between 5 and 60 minutes'
+                    checkInterval: 'Must be between 5 and 60 minutes',
                   }));
                 } else {
-                  setValidationErrors(prev => {
+                  setValidationErrors((prev) => {
                     const { checkInterval, ...rest } = prev;
                     return rest;
                   });
@@ -205,7 +220,9 @@ export default function AlertConfiguration() {
               How often to check for alert conditions (5-60 minutes)
             </p>
             {validationErrors.checkInterval && (
-              <p className="text-xs text-destructive">{validationErrors.checkInterval}</p>
+              <p className="text-xs text-destructive">
+                {validationErrors.checkInterval}
+              </p>
             )}
           </div>
         </div>
@@ -228,7 +245,10 @@ export default function AlertConfiguration() {
                 id="emailNotifications"
                 checked={config.enableEmailNotifications}
                 onCheckedChange={(checked) =>
-                  setConfig({ ...config, enableEmailNotifications: checked })
+                  setConfig((prev) => ({
+                    ...prev,
+                    enableEmailNotifications: checked,
+                  }))
                 }
               />
             </div>
@@ -244,7 +264,10 @@ export default function AlertConfiguration() {
                 id="slackNotifications"
                 checked={config.enableSlackNotifications}
                 onCheckedChange={(checked) =>
-                  setConfig({ ...config, enableSlackNotifications: checked })
+                  setConfig((prev) => ({
+                    ...prev,
+                    enableSlackNotifications: checked,
+                  }))
                 }
               />
             </div>
@@ -266,7 +289,7 @@ export default function AlertConfiguration() {
             onClick={handleSave}
             disabled={saving || Object.keys(validationErrors).length > 0}
           >
-            <Save className="h-4 w-4 mr-2" />
+            <Save className="size-4 mr-2" />
             {saving ? 'Saving...' : 'Save Configuration'}
           </Button>
         </div>

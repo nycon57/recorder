@@ -46,8 +46,8 @@ import {
   DEMO_RECORDING_SLUGS,
   DEMO_ORG,
 } from './fixtures.js';
-import { deriveChunkId } from './ids.js'; // eslint-disable-line import/order
-import { seed } from './index.js';
+import { deriveChunkId } from './ids.js';
+import { seed } from './seed.js';
 
 const { Pool } = pg;
 
@@ -269,7 +269,9 @@ function parseArgs(argv: string[]): {
       if (val === 'local' || val === 'staging') {
         env = val;
       } else {
-        console.error(`[error] Unknown --env value: "${val}". Use local or staging.`);
+        console.error(
+          `[error] Unknown --env value: "${val}". Use local or staging.`,
+        );
         process.exit(1);
       }
     } else if (arg === '--dry-run') {
@@ -311,12 +313,18 @@ async function main(): Promise<void> {
     console.log('[demo:reset] Dry run — delete plan:');
     const steps = buildDeleteSteps();
     for (const step of steps) {
-      console.log(`  DELETE FROM ${step.table} WHERE ${step.where} — ${step.description}`);
+      console.log(
+        `  DELETE FROM ${step.table} WHERE ${step.where} — ${step.description}`,
+      );
     }
     console.log('');
-    console.log('[demo:reset] UPDATE organizations SET vendor_org_id = NULL — un-link Acme vendor');
+    console.log(
+      '[demo:reset] UPDATE organizations SET vendor_org_id = NULL — un-link Acme vendor',
+    );
     console.log('');
-    console.log('[demo:reset] Would then call seed() orchestrator (--force-reseed implied).');
+    console.log(
+      '[demo:reset] Would then call seed() orchestrator (--force-reseed implied).',
+    );
     console.log('[demo:reset] Dry run complete. No data was written.\n');
     return;
   }
@@ -328,9 +336,11 @@ async function main(): Promise<void> {
 
   try {
     const smoke = await client.query<{ current_database: string }>(
-      `SELECT current_database()`
+      `SELECT current_database()`,
     );
-    console.log(`[demo:reset] Connected to database: ${smoke.rows[0]?.current_database}`);
+    console.log(
+      `[demo:reset] Connected to database: ${smoke.rows[0]?.current_database}`,
+    );
 
     // ── Delete transaction ────────────────────────────────────────────────
     //
@@ -348,20 +358,22 @@ async function main(): Promise<void> {
       // Un-link Acme from vendor org first (vendor org deleted below).
       const unlinkResult = await client.query(
         `UPDATE organizations SET vendor_org_id = NULL, updated_at = NOW() WHERE id = $1`,
-        [DEMO_ORG_ID]
+        [DEMO_ORG_ID],
       );
       console.log(
-        `[demo:reset]   UPDATE organizations (vendor_org_id = NULL): ${unlinkResult.rowCount} row(s)`
+        `[demo:reset]   UPDATE organizations (vendor_org_id = NULL): ${unlinkResult.rowCount} row(s)`,
       );
 
       const steps = buildDeleteSteps();
-      for (const step of steps) {
-        const sql = `DELETE FROM ${step.table} WHERE ${step.where}`;
-        const result = await client.query(sql, step.params);
-        console.log(
-          `[demo:reset]   DELETE FROM ${step.table}: ${result.rowCount ?? 0} row(s) — ${step.description}`
-        );
-      }
+      await Promise.all(
+        Array.from(steps).map(async (step) => {
+          const sql = `DELETE FROM ${step.table} WHERE ${step.where}`;
+          const result = await client.query(sql, step.params);
+          console.log(
+            `[demo:reset]   DELETE FROM ${step.table}: ${result.rowCount ?? 0} row(s) — ${step.description}`,
+          );
+        }),
+      );
 
       await client.query('COMMIT');
       console.log('[demo:reset] Phase 1 complete — all seed rows deleted.\n');
@@ -377,7 +389,9 @@ async function main(): Promise<void> {
     await seed(client, { dryRun: false, forceReseed: true });
     console.log('[demo:reset] Phase 2 complete.\n');
 
-    console.log('[demo:reset] Reset complete. Demo tenant restored to known-good state.');
+    console.log(
+      '[demo:reset] Reset complete. Demo tenant restored to known-good state.',
+    );
   } finally {
     client.release();
     await pool.end();

@@ -7,7 +7,12 @@
 
 import { NextRequest } from 'next/server';
 
-import { apiHandler, errors, requireOrg, successResponse } from '@/lib/utils/api';
+import {
+  apiHandler,
+  errors,
+  requireOrg,
+  successResponse,
+} from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { toDigestEntry } from '@/lib/utils/digest';
 
@@ -23,14 +28,17 @@ function digestBaseQuery(orgId: string) {
 export const GET = apiHandler(
   async (
     _request: NextRequest,
-    context: { params: Promise<{ id: string }> }
+    context: { params: Promise<{ id: string }> },
   ) => {
-    const { orgId } = await requireOrg();
-    const { id } = await context.params;
-
-    const { data: entry, error } = await digestBaseQuery(orgId)
-      .eq('id', id)
-      .single();
+    const { orgId, entry, error } = await Promise.all([
+      requireOrg(),
+      context.params,
+    ]).then(([{ orgId }, { id }]) =>
+      digestBaseQuery(orgId)
+        .eq('id', id)
+        .single()
+        .then(({ data: entry, error }) => ({ orgId, entry, error })),
+    );
 
     if (error || !entry) {
       return errors.notFound('Digest');
@@ -47,5 +55,5 @@ export const GET = apiHandler(
       ...toDigestEntry(entry),
       previous: prevData ? toDigestEntry(prevData) : null,
     });
-  }
+  },
 );

@@ -31,24 +31,24 @@ const CACHE_PREFIXES = {
  * Cache TTL (time-to-live) in seconds
  */
 const CACHE_TTL = {
-  USER: 300,          // 5 minutes - User data changes infrequently
-  TAGS: 600,          // 10 minutes - Tags are relatively static
-  COLLECTIONS: 600,   // 10 minutes - Collections are relatively static
-  CONCEPTS: 60,       // 1 minute - Concepts change as content is processed
+  USER: 300, // 5 minutes - User data changes infrequently
+  TAGS: 600, // 10 minutes - Tags are relatively static
+  COLLECTIONS: 600, // 10 minutes - Collections are relatively static
+  CONCEPTS: 60, // 1 minute - Concepts change as content is processed
   CONCEPTS_SINGLE: 300, // 5 minutes - Single concept details cache longer
-  CONCEPTS_GRAPH: 300,  // 5 minutes - Graph data is expensive to compute
-  STATS: 60,          // 1 minute - Stats need to be relatively fresh
-  LIBRARY_META: 600,  // 10 minutes - Combined tags + collections metadata
-  DEDUP: 10,          // 10 seconds - Request deduplication window
-  EMBEDDING: 86400,   // 24 hours - Query embeddings are deterministic and stable
+  CONCEPTS_GRAPH: 300, // 5 minutes - Graph data is expensive to compute
+  STATS: 60, // 1 minute - Stats need to be relatively fresh
+  LIBRARY_META: 600, // 10 minutes - Combined tags + collections metadata
+  DEDUP: 10, // 10 seconds - Request deduplication window
+  EMBEDDING: 86400, // 24 hours - Query embeddings are deterministic and stable
 } as const;
 
 /**
  * User data cache entry
  */
 export interface CachedUser {
-  id: string;           // Internal UUID (same as Better Auth user ID)
-  orgId: string;        // Internal org UUID
+  id: string; // Internal UUID (same as Better Auth user ID)
+  orgId: string; // Internal org UUID
   role: string;
   email?: string;
   name?: string;
@@ -77,7 +77,7 @@ export interface CachedCollection {
 /**
  * Concept cache entry
  */
-export interface CachedConcept {
+interface CachedConcept {
   id: string;
   name: string;
   concept_type: string;
@@ -113,7 +113,7 @@ export interface CachedLibraryMetadata {
 /**
  * Generic cache get/set/delete operations
  */
-export class CacheService {
+class CacheService {
   /**
    * Get cached data by key
    */
@@ -140,7 +140,11 @@ export class CacheService {
   /**
    * Set cached data with TTL
    */
-  static async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+  static async set<T>(
+    key: string,
+    value: T,
+    ttlSeconds: number,
+  ): Promise<void> {
     const redis = getRedis();
     if (!redis) {
       return;
@@ -181,33 +185,42 @@ export class CacheService {
     }
 
     try {
-      let cursor = '0';
-      let keysToDelete: string[] = [];
       const batchSize = 100; // Delete in batches to avoid excessive memory usage
 
-      do {
+      const scanAndDelete = async (
+        cursor = '0',
+        keysToDelete: string[] = [],
+      ): Promise<void> => {
         // Scan for matching keys (non-blocking)
         // Upstash Redis v1 API: scan(cursor, { match, count })
         const result = await redis.scan(cursor, { match: pattern, count: 100 });
-        cursor = result[0];
+        const nextCursor = result[0];
         const matchedKeys = result[1];
+        let nextKeysToDelete = keysToDelete;
 
         if (matchedKeys.length > 0) {
-          keysToDelete.push(...matchedKeys);
+          nextKeysToDelete = nextKeysToDelete.concat(matchedKeys);
 
           // Delete in batches to avoid building up too many keys in memory
-          if (keysToDelete.length >= batchSize) {
+          if (nextKeysToDelete.length >= batchSize) {
             // Use unlink for non-blocking deletion
-            await redis.unlink(...keysToDelete);
-            keysToDelete = [];
+            await redis.unlink(...nextKeysToDelete);
+            nextKeysToDelete = [];
           }
         }
-      } while (cursor !== '0');
 
-      // Delete any remaining keys
-      if (keysToDelete.length > 0) {
-        await redis.unlink(...keysToDelete);
-      }
+        if (nextCursor !== '0') {
+          await scanAndDelete(nextCursor, nextKeysToDelete);
+          return;
+        }
+
+        // Delete any remaining keys
+        if (nextKeysToDelete.length > 0) {
+          await redis.unlink(...nextKeysToDelete);
+        }
+      };
+
+      await scanAndDelete();
     } catch (error) {
       console.error('[Cache] Error deleting pattern:', error);
     }
@@ -335,7 +348,10 @@ export class CollectionsCache {
   /**
    * Set cached collections for org
    */
-  static async set(orgId: string, collections: CachedCollection[]): Promise<void> {
+  static async set(
+    orgId: string,
+    collections: CachedCollection[],
+  ): Promise<void> {
     const key = this.buildKey(orgId);
     await CacheService.set(key, collections, CACHE_TTL.COLLECTIONS);
   }
@@ -352,7 +368,7 @@ export class CollectionsCache {
 /**
  * Concepts caching operations (Knowledge Graph)
  */
-export class ConceptsCache {
+class ConceptsCache {
   /**
    * TTL values for different concept cache types
    */
@@ -393,7 +409,10 @@ export class ConceptsCache {
   /**
    * Get cached concepts list for org
    */
-  static async getList(orgId: string, queryHash: string): Promise<CachedConcept[] | null> {
+  static async getList(
+    orgId: string,
+    queryHash: string,
+  ): Promise<CachedConcept[] | null> {
     const key = this.listKey(orgId, queryHash);
     return CacheService.get<CachedConcept[]>(key);
   }
@@ -401,7 +420,11 @@ export class ConceptsCache {
   /**
    * Set cached concepts list for org
    */
-  static async setList(orgId: string, queryHash: string, concepts: CachedConcept[]): Promise<void> {
+  static async setList(
+    orgId: string,
+    queryHash: string,
+    concepts: CachedConcept[],
+  ): Promise<void> {
     const key = this.listKey(orgId, queryHash);
     await CacheService.set(key, concepts, CACHE_TTL.CONCEPTS);
   }
@@ -496,7 +519,10 @@ export class StatsCache {
   /**
    * Get cached dashboard stats
    */
-  static async get(orgId: string, period?: string): Promise<CachedStats | null> {
+  static async get(
+    orgId: string,
+    period?: string,
+  ): Promise<CachedStats | null> {
     const key = this.buildKey(orgId, period);
     return CacheService.get<CachedStats>(key);
   }
@@ -504,7 +530,11 @@ export class StatsCache {
   /**
    * Set cached dashboard stats
    */
-  static async set(orgId: string, stats: CachedStats, period?: string): Promise<void> {
+  static async set(
+    orgId: string,
+    stats: CachedStats,
+    period?: string,
+  ): Promise<void> {
     const key = this.buildKey(orgId, period);
     await CacheService.set(key, stats, CACHE_TTL.STATS);
   }
@@ -540,7 +570,10 @@ export class LibraryMetadataCache {
   /**
    * Set cached library metadata
    */
-  static async set(orgId: string, metadata: CachedLibraryMetadata): Promise<void> {
+  static async set(
+    orgId: string,
+    metadata: CachedLibraryMetadata,
+  ): Promise<void> {
     const key = this.buildKey(orgId);
     await CacheService.set(key, metadata, CACHE_TTL.LIBRARY_META);
   }
@@ -550,11 +583,11 @@ export class LibraryMetadataCache {
    */
   static async invalidate(orgId: string): Promise<void> {
     const key = this.buildKey(orgId);
-    await CacheService.delete(key);
-
-    // Also invalidate individual caches
-    await TagsCache.invalidate(orgId);
-    await CollectionsCache.invalidate(orgId);
+    await Promise.all([
+      CacheService.delete(key),
+      TagsCache.invalidate(orgId),
+      CollectionsCache.invalidate(orgId),
+    ]);
   }
 }
 
@@ -612,7 +645,10 @@ export class EmbeddingCache {
     try {
       const cached = await CacheService.get<number[]>(key);
       if (cached) {
-        console.log('[EmbeddingCache] Cache hit for query:', normalizedQuery.substring(0, 50));
+        console.log(
+          '[EmbeddingCache] Cache hit for query:',
+          normalizedQuery.substring(0, 50),
+        );
       }
       return cached;
     } catch (error) {
@@ -624,13 +660,20 @@ export class EmbeddingCache {
   /**
    * Cache embedding for query
    */
-  static async set(query: string, orgId: string, embedding: number[]): Promise<void> {
+  static async set(
+    query: string,
+    orgId: string,
+    embedding: number[],
+  ): Promise<void> {
     const normalizedQuery = this.normalizeQuery(query);
     const key = this.buildKey(normalizedQuery, orgId);
 
     try {
       await CacheService.set(key, embedding, CACHE_TTL.EMBEDDING);
-      console.log('[EmbeddingCache] Cached embedding for query:', normalizedQuery.substring(0, 50));
+      console.log(
+        '[EmbeddingCache] Cached embedding for query:',
+        normalizedQuery.substring(0, 50),
+      );
     } catch (error) {
       console.error('[EmbeddingCache] Error caching embedding:', error);
       // Silently fail - caching is an optimization, not critical
@@ -691,7 +734,7 @@ export class RequestDeduplication {
    */
   static async execute<T>(
     uniqueId: string,
-    fn: () => Promise<T>
+    fn: () => Promise<T>,
   ): Promise<{ result: T; cacheHit: boolean }> {
     const redis = getRedis();
     const lockKey = `${this.buildKey(uniqueId)}:lock`;
@@ -707,7 +750,10 @@ export class RequestDeduplication {
     // Try to acquire lock using SETNX (set if not exists)
     if (redis) {
       try {
-        const acquired = await redis.set(lockKey, lockToken, { ex: lockTTL, nx: true });
+        const acquired = await redis.set(lockKey, lockToken, {
+          ex: lockTTL,
+          nx: true,
+        });
 
         if (acquired === 'OK') {
           // We got the lock - check cache again (in case it was set while we were acquiring lock)
@@ -750,7 +796,10 @@ export class RequestDeduplication {
   /**
    * Release lock safely (only if we own it)
    */
-  private static async releaseLock(lockKey: string, lockToken: string): Promise<void> {
+  private static async releaseLock(
+    lockKey: string,
+    lockToken: string,
+  ): Promise<void> {
     const redis = getRedis();
     if (!redis) return;
 
@@ -775,20 +824,25 @@ export class RequestDeduplication {
    */
   private static async pollForResult<T>(
     uniqueId: string,
-    timeoutMs: number
+    timeoutMs: number,
   ): Promise<T | null> {
     const startTime = Date.now();
     const pollInterval = 100; // Poll every 100ms
 
-    while (Date.now() - startTime < timeoutMs) {
+    const poll = async (): Promise<T | null> => {
+      if (Date.now() - startTime >= timeoutMs) {
+        return null;
+      }
+
       const cached = await this.get<T>(uniqueId);
       if (cached !== null) {
         return cached;
       }
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      return poll();
+    };
 
-    return null;
+    return poll();
   }
 }
 
@@ -871,7 +925,7 @@ export function generateETag(data: unknown): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash; // Convert to 32bit integer
   }
   return `"${Math.abs(hash).toString(36)}"`;

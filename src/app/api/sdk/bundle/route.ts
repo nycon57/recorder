@@ -13,17 +13,43 @@
  * TRIB-58: Custom domain support — serves from any configured vendor domain.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { webcrypto } from 'crypto';
+
+import { NextRequest, NextResponse } from 'next/server';
 
 import { CORS_HEADERS, corsPreflightResponse } from '@/lib/utils/cors';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Cache the bundle contents in memory after first read
-let bundleCache: { content: string; etag: string } | null = null;
+interface BundleCache {
+  content: string;
+  etag: string;
+}
+
+async function createBundleEtag(content: string): Promise<string> {
+  const digest = await webcrypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(content.slice(0, 1024))
+  );
+  const hash = Buffer.from(digest).toString('hex').slice(0, 12);
+  return `"sdk-${hash}"`;
+}
+
+const bundlePath = join(process.cwd(), 'packages', 'sdk', 'dist', 'tribora-sdk.js');
+const bundleCachePromise: Promise<BundleCache | null> = readFile(bundlePath, 'utf-8')
+  .then(async (content) => ({
+    content,
+    etag: await createBundleEtag(content),
+  }))
+  .catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  });
 
 export function OPTIONS() {
   return corsPreflightResponse();
@@ -31,7 +57,8 @@ export function OPTIONS() {
 
 export async function GET(request: NextRequest) {
   try {
-    // Serve from memory cache if available
+    const bundleCache = await bundleCachePromise;
+
     if (bundleCache) {
       const ifNoneMatch = request.headers.get('if-none-match');
       if (ifNoneMatch === bundleCache.etag) {
@@ -56,39 +83,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Try to read the SDK bundle from the packages directory
-    // In production, the built bundle lives at packages/sdk/dist/tribora-sdk.js
-    const bundlePath = join(process.cwd(), 'packages', 'sdk', 'dist', 'tribora-sdk.js');
-
-    let content: string;
-    try {
-      content = await readFile(bundlePath, 'utf-8');
-    } catch {
-      return NextResponse.json(
-        {
-          error: 'SDK bundle not found',
-          hint: 'Run `cd packages/sdk && npm run build` to build the SDK bundle.',
-        },
-        { status: 404, headers: CORS_HEADERS },
-      );
-    }
-
-    // Generate a simple ETag from content length + hash of first 1KB
-    const { createHash } = await import('crypto');
-    const etag = `"sdk-${createHash('md5').update(content.slice(0, 1024)).digest('hex').slice(0, 12)}"`;
-
-    // Cache in memory
-    bundleCache = { content, etag };
-
-    return new NextResponse(content, {
-      status: 200,
-      headers: {
-        ...CORS_HEADERS,
-        'Content-Type': 'application/javascript; charset=utf-8',
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=3600',
-        ETag: etag,
+    return NextResponse.json(
+      {
+        error: 'SDK bundle not found',
+        hint: 'Run `cd packages/sdk && npm run build` to build the SDK bundle.',
       },
-    });
+      { status: 404, headers: CORS_HEADERS },
+    );
   } catch (err) {
     console.error('[sdk/bundle] Unexpected error:', err);
     return NextResponse.json(

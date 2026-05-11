@@ -13,7 +13,9 @@ import { createClient } from '@/lib/supabase/admin';
 import type { Json, StorageTier, StorageProvider } from '@/lib/types/database';
 import { getStatusDisplayState } from '@/lib/utils/status-helpers';
 
-function isJsonRecord(value: Json | null | undefined): value is Record<string, Json | undefined> {
+function isJsonRecord(
+  value: Json | null | undefined,
+): value is Record<string, Json | undefined> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -21,7 +23,9 @@ function readNumber(value: Json | undefined): number {
   return typeof value === 'number' ? value : 0;
 }
 
-function readTierBreakdown(value: Json | null | undefined): Record<StorageTier, number> {
+function readTierBreakdown(
+  value: Json | null | undefined,
+): Record<StorageTier, number> {
   const record = isJsonRecord(value) ? value : {};
   return {
     hot: readNumber(record.hot),
@@ -117,7 +121,7 @@ export interface StorageTrend {
 /**
  * Anomaly detection result
  */
-export interface StorageAnomaly {
+interface StorageAnomaly {
   type:
     | 'spike'
     | 'drop'
@@ -167,18 +171,14 @@ export async function getStorageMetrics(
   const supabase = createClient();
 
   // Get organization name
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('name')
-    .eq('id', orgId)
-    .single();
-
-  // Get all recordings for the organization
-  const { data: recordings, error } = await supabase
-    .from('content')
-    .select('*')
-    .eq('org_id', orgId)
-    .is('deleted_at', null);
+  const [{ data: org }, { data: recordings, error }] = await Promise.all([
+    supabase.from('organizations').select('name').eq('id', orgId).single(),
+    supabase
+      .from('content')
+      .select('*')
+      .eq('org_id', orgId)
+      .is('deleted_at', null),
+  ]);
 
   if (error) {
     throw new Error(`Failed to fetch recordings: ${error.message}`);
@@ -257,10 +257,22 @@ export async function getStorageMetrics(
   // Compression metrics
   const compressedFiles = recordings.filter(
     (r) =>
-      r.compression_rate !== null && readNumber(isJsonRecord(r.compression_stats) ? r.compression_stats.original_size : undefined) > 0 && r.file_size,
+      r.compression_rate !== null &&
+      readNumber(
+        isJsonRecord(r.compression_stats)
+          ? r.compression_stats.original_size
+          : undefined,
+      ) > 0 &&
+      r.file_size,
   );
   const totalOriginalSize = compressedFiles.reduce(
-    (sum, r) => sum + readNumber(isJsonRecord(r.compression_stats) ? r.compression_stats.original_size : undefined),
+    (sum, r) =>
+      sum +
+      readNumber(
+        isJsonRecord(r.compression_stats)
+          ? r.compression_stats.original_size
+          : undefined,
+      ),
     0,
   );
   const totalCompressedSize = compressedFiles.reduce(
@@ -424,9 +436,7 @@ export async function getStorageTrends(
 /**
  * Detect storage anomalies
  */
-export async function detectAnomalies(
-  orgId: string,
-): Promise<StorageAnomaly[]> {
+async function detectAnomalies(orgId: string): Promise<StorageAnomaly[]> {
   const anomalies: StorageAnomaly[] = [];
 
   // Get recent trends
@@ -666,7 +676,7 @@ function getEmptyMetrics(orgId: string, orgName: string): StorageMetrics {
 /**
  * Aggregate metrics across all organizations
  */
-export async function getGlobalMetrics(): Promise<{
+async function getGlobalMetrics(): Promise<{
   totalOrganizations: number;
   totalFiles: number;
   totalStorageGB: number;
@@ -701,13 +711,20 @@ export async function getGlobalMetrics(): Promise<{
   const BATCH_SIZE = 10;
   const organizationMetrics: StorageMetrics[] = [];
 
-  for (let i = 0; i < organizations.length; i += BATCH_SIZE) {
-    const batch = organizations.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map((org) => getStorageMetrics(org.id)),
-    );
-    organizationMetrics.push(...batchResults);
-  }
+  await Promise.all(
+    Array.from(
+      {
+        length: Math.max(0, Math.ceil((organizations.length - 0) / BATCH_SIZE)),
+      },
+      (_, __loopIndex) => 0 + __loopIndex * BATCH_SIZE,
+    ).map(async (i) => {
+      const batch = organizations.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map((org) => getStorageMetrics(org.id)),
+      );
+      organizationMetrics.push(...batchResults);
+    }),
+  );
 
   const totalFiles = organizationMetrics.reduce(
     (sum, m) => sum + m.totalFiles,

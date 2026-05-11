@@ -44,7 +44,7 @@ export type ProgressCallback = (progress: {
 /**
  * Video quality metrics
  */
-export interface QualityMetrics {
+interface QualityMetrics {
   vmaf?: number; // 0-100 scale
   ssim?: number; // 0-1 scale
   psnr?: number; // Peak Signal-to-Noise Ratio
@@ -242,7 +242,7 @@ export async function measureVMAF(
  * @param compressedPath - Path to compressed video
  * @returns SSIM score (0-1)
  */
-export async function measureSSIM(
+async function measureSSIM(
   originalPath: string,
   compressedPath: string
 ): Promise<number> {
@@ -274,7 +274,7 @@ export async function measureSSIM(
  * @param compressedPath - Path to compressed video
  * @returns PSNR value in dB
  */
-export async function measurePSNR(
+async function measurePSNR(
   originalPath: string,
   compressedPath: string
 ): Promise<number> {
@@ -363,7 +363,7 @@ export async function detectHardwareAccel(): Promise<HardwareAccelType> {
  * @param codec - Desired codec (h264 or h265)
  * @returns FFmpeg codec name
  */
-export function getHardwareCodec(
+function getHardwareCodec(
   hwAccel: HardwareAccelType,
   codec: 'h264' | 'h265'
 ): string {
@@ -462,7 +462,7 @@ export async function validateFFmpegInstallation(): Promise<boolean> {
  *
  * @returns FFmpeg version string
  */
-export async function getFFmpegVersion(): Promise<string> {
+async function getFFmpegVersion(): Promise<string> {
   try {
     const { stdout } = await execAsync('ffmpeg -version');
     const match = stdout.match(/ffmpeg version ([^\s]+)/);
@@ -514,7 +514,7 @@ export function estimateCompressionTime(
  * @param filePath - File path to check
  * @returns True if file exists and is readable
  */
-export async function isFileAccessible(filePath: string): Promise<boolean> {
+async function isFileAccessible(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath, fs.constants.R_OK);
     return true;

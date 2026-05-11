@@ -10,7 +10,7 @@ export const KNOWLEDGE_STATUS = {
 export type KnowledgeStatus =
   (typeof KNOWLEDGE_STATUS)[keyof typeof KNOWLEDGE_STATUS];
 
-export type KnowledgeStatusBadgeVariant =
+type KnowledgeStatusBadgeVariant =
   | 'default'
   | 'secondary'
   | 'destructive'

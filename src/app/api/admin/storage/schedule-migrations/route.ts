@@ -6,6 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import { apiHandler, successResponse, errors } from '@/lib/utils/api';
 import { batchMigrateTier } from '@/lib/workers/handlers/migrate-storage-tier';
 import { createClient } from '@/lib/supabase/admin';
@@ -35,7 +36,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   if (!expectedSecret) {
     throw new Error(
-      'CRON_SECRET not configured. Set CRON_SECRET environment variable.'
+      'CRON_SECRET not configured. Set CRON_SECRET environment variable.',
     );
   }
 
@@ -82,7 +83,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   console.log(
-    `[schedule-migrations] Starting automatic migration scheduling (batch: ${batchSize}, min age: ${minAgeDays} days)`
+    `[schedule-migrations] Starting automatic migration scheduling (batch: ${batchSize}, min age: ${minAgeDays} days)`,
   );
 
   const supabase = createClient();
@@ -97,7 +98,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   try {
     // 1. Get list of organizations to process
-    let query = supabase.from('organizations').select('id, name').is('deleted_at', null);
+    let query = supabase
+      .from('organizations')
+      .select('id, name')
+      .is('deleted_at', null);
 
     if (targetOrgIds && Array.isArray(targetOrgIds)) {
       query = query.in('id', targetOrgIds);
@@ -122,39 +126,51 @@ export const POST = apiHandler(async (request: NextRequest) => {
       });
     }
 
-    console.log(`[schedule-migrations] Processing ${organizations.length} organizations`);
+    console.log(
+      `[schedule-migrations] Processing ${organizations.length} organizations`,
+    );
 
     // 2. Process each organization
-    for (const org of organizations) {
-      console.log(`[schedule-migrations] Processing org: ${org.name} (${org.id})`);
-
-      try {
-        const migrationResult = await batchMigrateTier(org.id, batchSize, minAgeDays);
-
-        results.push({
-          orgId: org.id,
-          orgName: org.name,
-          success: migrationResult.success,
-          migrated: migrationResult.migrated,
-          failed: migrationResult.failed,
-          errors: migrationResult.errors,
-        });
-
+    await Promise.all(
+      Array.from(organizations).map(async (org) => {
         console.log(
-          `[schedule-migrations] Org ${org.name}: ${migrationResult.migrated} migrations scheduled, ${migrationResult.failed} failed`
+          `[schedule-migrations] Processing org: ${org.name} (${org.id})`,
         );
-      } catch (error) {
-        console.error(`[schedule-migrations] Error processing org ${org.name}:`, error);
-        results.push({
-          orgId: org.id,
-          orgName: org.name,
-          success: false,
-          migrated: 0,
-          failed: 0,
-          errors: [error instanceof Error ? error.message : 'Unknown error'],
-        });
-      }
-    }
+        try {
+          const migrationResult = await batchMigrateTier(
+            org.id,
+            batchSize,
+            minAgeDays,
+          );
+
+          results.push({
+            orgId: org.id,
+            orgName: org.name,
+            success: migrationResult.success,
+            migrated: migrationResult.migrated,
+            failed: migrationResult.failed,
+            errors: migrationResult.errors,
+          });
+
+          console.log(
+            `[schedule-migrations] Org ${org.name}: ${migrationResult.migrated} migrations scheduled, ${migrationResult.failed} failed`,
+          );
+        } catch (error) {
+          console.error(
+            `[schedule-migrations] Error processing org ${org.name}:`,
+            error,
+          );
+          results.push({
+            orgId: org.id,
+            orgName: org.name,
+            success: false,
+            migrated: 0,
+            failed: 0,
+            errors: [error instanceof Error ? error.message : 'Unknown error'],
+          });
+        }
+      }),
+    );
 
     // 3. Calculate summary statistics
     const summary = {
@@ -166,7 +182,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
       failedOrgs: results.filter((r) => !r.success).length,
     };
 
-    console.log('[schedule-migrations] Migration scheduling complete:', summary);
+    console.log(
+      '[schedule-migrations] Migration scheduling complete:',
+      summary,
+    );
 
     return successResponse({
       message: 'Migration scheduling completed',
@@ -177,7 +196,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   } catch (error) {
     console.error('[schedule-migrations] Migration scheduling failed:', error);
     throw new Error(
-      `Migration scheduling failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Migration scheduling failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 });
@@ -202,22 +221,29 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const supabase = createClient();
 
   // Get migration statistics across all orgs
-  const { data: orgCount } = await supabase
-    .from('organizations')
-    .select('id', { count: 'exact' })
-    .is('deleted_at', null);
-
-  const { data: pendingMigrations } = await supabase
-    .from('content')
-    .select('id', { count: 'exact' })
-    .eq('tier_migration_scheduled', true)
-    .is('deleted_at', null);
-
-  const { data: recentMigrations } = await supabase
-    .from('storage_migrations')
-    .select('id', { count: 'exact' })
-    .eq('status', 'completed')
-    .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  const [
+    { data: orgCount },
+    { data: pendingMigrations },
+    { data: recentMigrations },
+  ] = await Promise.all([
+    supabase
+      .from('organizations')
+      .select('id', { count: 'exact' })
+      .is('deleted_at', null),
+    supabase
+      .from('content')
+      .select('id', { count: 'exact' })
+      .eq('tier_migration_scheduled', true)
+      .is('deleted_at', null),
+    supabase
+      .from('storage_migrations')
+      .select('id', { count: 'exact' })
+      .eq('status', 'completed')
+      .gte(
+        'created_at',
+        new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      ),
+  ]);
 
   return successResponse({
     status: 'healthy',

@@ -3,18 +3,6 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
-import {
   Users,
   HardDrive,
   Video,
@@ -26,6 +14,18 @@ import {
   MessageSquare,
 } from 'lucide-react';
 
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from '@/app/components/analytics/dynamic-recharts';
 import {
   Card,
   CardContent,
@@ -99,9 +99,9 @@ function StatCard({
 }) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <Icon className="size-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
@@ -110,7 +110,7 @@ function StatCard({
         )}
         {trend !== undefined && (
           <p className="text-xs text-muted-foreground mt-2 flex items-center">
-            <TrendingUp className="h-3 w-3 mr-1" />
+            <TrendingUp className="size-3 mr-1" />
             {trend > 0 ? '+' : ''}
             {trend}% from last month
           </p>
@@ -136,24 +136,30 @@ function StatsLoading() {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Card key={i}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <Skeleton className="h-4 w-[100px]" />
-              <Skeleton className="h-4 w-4" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-7 w-[60px] mb-1" />
-              <Skeleton className="h-3 w-[120px]" />
-            </CardContent>
-          </Card>
-        ))}
+        {['stats-card-1', 'stats-card-2', 'stats-card-3', 'stats-card-4'].map(
+          (skeletonId) => (
+            <Card key={skeletonId}>
+              <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+                <Skeleton className="h-4 w-[100px]" />
+                <Skeleton className="size-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-7 w-[60px] mb-1" />
+                <Skeleton className="h-3 w-[120px]" />
+              </CardContent>
+            </Card>
+          ),
+        )}
       </div>
     </div>
   );
 }
 
 export default function OrganizationStatsPage() {
+  return useOrganizationStatsPageImplementation();
+}
+
+function useOrganizationStatsPageImplementation() {
   // Fetch organization stats
   const {
     data: stats,
@@ -229,13 +235,13 @@ export default function OrganizationStatsPage() {
           </p>
         </div>
         <div className="trbd-icon-chip" aria-hidden="true">
-          <Activity className="h-5 w-5" />
+          <Activity className="size-5" />
         </div>
       </div>
 
       {/* Plan Badge */}
       {stats.quotas && (
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center gap-x-4">
           <Badge variant="secondary" className="text-sm py-1 px-3">
             {stats.quotas.plan.toUpperCase()} PLAN
           </Badge>
@@ -367,13 +373,19 @@ export default function OrganizationStatsPage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, value }) => `${name}: ${value} GB`}
+                    label={({
+                      name,
+                      value,
+                    }: {
+                      name: string;
+                      value: number;
+                    }) => `${name}: ${value} GB`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
                   >
-                    {storageChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    {storageChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
                     ))}
                   </Pie>
                   <Tooltip />
@@ -425,15 +437,15 @@ export default function OrganizationStatsPage() {
                     ).toFixed(1)}
                     K
                   </div>
-                  <div className="flex items-center space-x-4 mt-3 text-xs">
+                  <div className="flex items-center gap-x-4 mt-3 text-xs">
                     <div className="flex items-center">
-                      <div className="w-2 h-2 rounded-full mr-1 bg-primary" />
+                      <div className="size-2 rounded-full mr-1 bg-primary" />
                       <span className="text-muted-foreground">
                         Input: {(stats.usage.tokens_in / 1000).toFixed(1)}K
                       </span>
                     </div>
                     <div className="flex items-center">
-                      <div className="w-2 h-2 rounded-full mr-1 bg-muted-foreground" />
+                      <div className="size-2 rounded-full mr-1 bg-muted-foreground" />
                       <span className="text-muted-foreground">
                         Output: {(stats.usage.tokens_out / 1000).toFixed(1)}K
                       </span>
@@ -481,18 +493,26 @@ export default function OrganizationStatsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {Object.entries(stats.quotas.features)
-                .filter((entry) => entry[1])
-                .map(([feature]) => (
-                  <div key={feature} className="flex items-center space-x-2">
-                    <Zap className="h-4 w-4 text-primary" />
-                    <span className="text-sm">
-                      {feature
-                        .replace(/_/g, ' ')
-                        .replace(/\b\w/g, (l) => l.toUpperCase())}
-                    </span>
-                  </div>
-                ))}
+              {Object.entries(stats.quotas.features).flatMap(
+                (__item, __index, __array) =>
+                  __item[1]
+                    ? [
+                        (([feature]) => (
+                          <div
+                            key={feature}
+                            className="flex items-center gap-x-2"
+                          >
+                            <Zap className="size-4 text-primary" />
+                            <span className="text-sm">
+                              {feature
+                                .replace(/_/g, ' ')
+                                .replace(/\b\w/g, (l) => l.toUpperCase())}
+                            </span>
+                          </div>
+                        ))(__item),
+                      ]
+                    : [],
+              )}
             </div>
           </CardContent>
         </Card>

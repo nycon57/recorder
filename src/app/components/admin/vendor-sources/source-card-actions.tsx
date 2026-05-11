@@ -133,7 +133,7 @@ export function SourceCardActions({
             : 'Queue a manual re-sync for this source')
         }
       >
-        <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+        <RefreshCw className={`size-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
         {isSyncing ? 'Queueing...' : 'Re-sync now'}
       </Button>
 
@@ -145,7 +145,7 @@ export function SourceCardActions({
             disabled={lifecycle === 'retired'}
             className="gap-1.5"
           >
-            <Archive className="h-3.5 w-3.5" />
+            <Archive className="size-3.5" />
             Retire
           </Button>
         </DialogTrigger>
@@ -185,7 +185,7 @@ export function SourceCardActions({
 
       <Button variant="ghost" size="sm" asChild className="gap-1.5">
         <Link href={`/admin/vendor-sources/pages?app=${encodeURIComponent(app)}`}>
-          <Table2 className="h-3.5 w-3.5" />
+          <Table2 className="size-3.5" />
           View pages
         </Link>
       </Button>

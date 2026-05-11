@@ -12,7 +12,11 @@ import { createHash } from 'crypto';
 
 import { createClient } from '@/lib/supabase/admin';
 
-import { StorageManager, type StorageProvider, type StorageTier } from './storage-manager';
+import {
+  StorageManager,
+  type StorageProvider,
+  type StorageTier,
+} from './storage-manager';
 
 function toStorageProvider(value: string | null | undefined): StorageProvider {
   return value === 'r2' ? 'r2' : 'supabase';
@@ -26,7 +30,7 @@ function toStorageTier(value: string | null | undefined): StorageTier {
 /**
  * File hash and metadata
  */
-export interface FileHash {
+interface FileHash {
   hash: string;
   fileSize: number;
   contentId: string;
@@ -70,29 +74,35 @@ type ContentStorageRecord = {
 };
 
 function getContentStoragePath(recording: ContentStorageRecord): string | null {
-  return recording.storage_path_raw || recording.storage_path_processed || recording.storage_path_r2;
+  return (
+    recording.storage_path_raw ||
+    recording.storage_path_processed ||
+    recording.storage_path_r2
+  );
 }
 
 /**
  * Calculate SHA-256 hash of file content
  */
-export async function calculateFileHash(data: Buffer): Promise<string> {
+async function calculateFileHash(data: Buffer): Promise<string> {
   return createHash('sha256').update(new Uint8Array(data)).digest('hex');
 }
 
 /**
  * Find duplicate files by hash
  */
-export async function findDuplicateByHash(
+async function findDuplicateByHash(
   hash: string,
   orgId: string,
-  excludeRecordingId?: string
+  excludeRecordingId?: string,
 ): Promise<FileHash | null> {
   const supabase = createClient();
 
   let query = supabase
     .from('content')
-    .select('id, file_hash, file_size, storage_path_raw, storage_path_processed, storage_path_r2, storage_provider, storage_tier, created_at')
+    .select(
+      'id, file_hash, file_size, storage_path_raw, storage_path_processed, storage_path_r2, storage_provider, storage_tier, created_at',
+    )
     .eq('org_id', orgId)
     .eq('file_hash', hash)
     .is('deleted_at', null)
@@ -129,10 +139,10 @@ export async function findDuplicateByHash(
 /**
  * Create file reference for duplicate
  */
-export async function createFileReference(
+async function createFileReference(
   contentId: string,
   originalRecordingId: string,
-  fileSize: number
+  fileSize: number,
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
@@ -150,12 +160,18 @@ export async function createFileReference(
     }
 
     // 2. Update reference count on original
-    const { error: updateError } = await supabase.rpc('increment_reference_count', {
-      content_id: originalRecordingId,
-    });
+    const { error: updateError } = await supabase.rpc(
+      'increment_reference_count',
+      {
+        content_id: originalRecordingId,
+      },
+    );
 
     if (updateError) {
-      console.warn('[Deduplication] Failed to update reference count:', updateError);
+      console.warn(
+        '[Deduplication] Failed to update reference count:',
+        updateError,
+      );
     }
 
     // 3. Mark recording as deduplicated
@@ -177,7 +193,8 @@ export async function createFileReference(
     console.error('[Deduplication] Failed to create file reference:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create reference',
+      error:
+        error instanceof Error ? error.message : 'Failed to create reference',
     };
   }
 }
@@ -190,7 +207,7 @@ export async function deduplicateFile(
   orgId: string,
   fileData: Buffer,
   currentPath: string,
-  currentProvider: StorageProvider
+  currentProvider: StorageProvider,
 ): Promise<DeduplicationResult> {
   try {
     // 1. Calculate file hash
@@ -222,7 +239,11 @@ export async function deduplicateFile(
     }
 
     // 4. Create reference to original file
-    const refResult = await createFileReference(contentId, duplicate.contentId, fileSize);
+    const refResult = await createFileReference(
+      contentId,
+      duplicate.contentId,
+      fileSize,
+    );
 
     if (!refResult.success) {
       return {
@@ -237,10 +258,13 @@ export async function deduplicateFile(
 
     // 5. Delete duplicate file from storage
     const storageManager = new StorageManager();
-    await storageManager.delete(currentPath, currentProvider === 'r2' ? currentPath : null);
+    await storageManager.delete(
+      currentPath,
+      currentProvider === 'r2' ? currentPath : null,
+    );
 
     console.log(
-      `[Deduplication] Recording ${contentId} is duplicate of ${duplicate.contentId}. Saved ${(fileSize / 1024 / 1024).toFixed(2)} MB`
+      `[Deduplication] Recording ${contentId} is duplicate of ${duplicate.contentId}. Saved ${(fileSize / 1024 / 1024).toFixed(2)} MB`,
     );
 
     return {
@@ -267,7 +291,7 @@ export async function deduplicateFile(
  */
 export async function batchDeduplicateOrganization(
   orgId: string,
-  batchSize: number = 100
+  batchSize: number = 100,
 ): Promise<{
   processed: number;
   duplicatesFound: number;
@@ -280,7 +304,9 @@ export async function batchDeduplicateOrganization(
   // Get recordings without hashes
   const { data: recordings, error } = await supabase
     .from('content')
-    .select('id, storage_path_raw, storage_path_processed, storage_path_r2, storage_provider, file_size')
+    .select(
+      'id, storage_path_raw, storage_path_processed, storage_path_r2, storage_provider, file_size',
+    )
     .eq('org_id', orgId)
     .is('file_hash', null)
     .is('deleted_at', null)
@@ -296,70 +322,85 @@ export async function batchDeduplicateOrganization(
     };
   }
 
-  let processed = 0;
-  let duplicatesFound = 0;
-  let spaceSaved = 0;
-  const errors: string[] = [];
+  const results = await Promise.all(
+    recordings.map(async (recording) => {
+      try {
+        // Download file to calculate hash
+        const storagePath = getContentStoragePath(recording);
+        const provider = toStorageProvider(recording.storage_provider);
 
-  for (const recording of recordings) {
-    try {
-      // Download file to calculate hash
-      const storagePath = getContentStoragePath(recording);
-      const provider = toStorageProvider(recording.storage_provider);
+        if (!storagePath) {
+          return {
+            processed: 0,
+            duplicatesFound: 0,
+            spaceSaved: 0,
+            errors: [`Missing storage path for ${recording.id}`],
+          };
+        }
 
-      if (!storagePath) {
-        errors.push(`Missing storage path for ${recording.id}`);
-        continue;
+        const downloadResult = await storageManager.download(
+          storagePath,
+          recording.storage_path_r2,
+          provider,
+          { asBuffer: true },
+        );
+
+        if (!downloadResult.success || !downloadResult.data) {
+          return {
+            processed: 0,
+            duplicatesFound: 0,
+            spaceSaved: 0,
+            errors: [`Failed to download ${recording.id}`],
+          };
+        }
+
+        // Process deduplication
+        const result = await deduplicateFile(
+          recording.id,
+          orgId,
+          downloadResult.data,
+          storagePath,
+          provider,
+        );
+
+        const duplicateRecorded = result.isDuplicate && result.referenceCreated;
+
+        return {
+          processed: 1,
+          duplicatesFound: duplicateRecorded ? 1 : 0,
+          spaceSaved: duplicateRecorded ? result.spaceSaved : 0,
+          errors: result.error ? [`${recording.id}: ${result.error}`] : [],
+        };
+      } catch (error) {
+        return {
+          processed: 0,
+          duplicatesFound: 0,
+          spaceSaved: 0,
+          errors: [
+            `${recording.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          ],
+        };
       }
-
-      const downloadResult = await storageManager.download(
-        storagePath,
-        recording.storage_path_r2,
-        provider,
-        { asBuffer: true }
-      );
-
-      if (!downloadResult.success || !downloadResult.data) {
-        errors.push(`Failed to download ${recording.id}`);
-        continue;
-      }
-
-      // Process deduplication
-      const result = await deduplicateFile(
-        recording.id,
-        orgId,
-        downloadResult.data,
-        storagePath,
-        provider
-      );
-
-      processed++;
-
-      if (result.isDuplicate && result.referenceCreated) {
-        duplicatesFound++;
-        spaceSaved += result.spaceSaved;
-      }
-
-      if (result.error) {
-        errors.push(`${recording.id}: ${result.error}`);
-      }
-    } catch (error) {
-      errors.push(`${recording.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+    }),
+  );
 
   return {
-    processed,
-    duplicatesFound,
-    spaceSaved,
-    errors,
+    processed: results.reduce((total, result) => total + result.processed, 0),
+    duplicatesFound: results.reduce(
+      (total, result) => total + result.duplicatesFound,
+      0,
+    ),
+    spaceSaved: results.reduce((total, result) => total + result.spaceSaved, 0),
+    errors: results.flatMap((result) => result.errors),
   };
 }
 
 /**
  * Get deduplication statistics for organization
  */
-export async function getDeduplicationStats(orgId: string): Promise<DeduplicationStats> {
+export async function getDeduplicationStats(
+  orgId: string,
+): Promise<DeduplicationStats> {
   const supabase = createClient();
 
   // Get all recordings
@@ -388,15 +429,23 @@ export async function getDeduplicationStats(orgId: string): Promise<Deduplicatio
   const uniqueFiles = totalFiles - duplicateFiles;
 
   // Calculate storage
-  const totalStorageBytes = recordings.reduce((sum, r) => sum + (r.file_size || 0), 0);
+  const totalStorageBytes = recordings.reduce(
+    (sum, r) => sum + (r.file_size || 0),
+    0,
+  );
 
   // Actual storage = unique files only
   const uniqueRecordings = recordings.filter((r) => !r.is_deduplicated);
-  const actualStorageBytes = uniqueRecordings.reduce((sum, r) => sum + (r.file_size || 0), 0);
+  const actualStorageBytes = uniqueRecordings.reduce(
+    (sum, r) => sum + (r.file_size || 0),
+    0,
+  );
 
   const spaceSavedBytes = totalStorageBytes - actualStorageBytes;
-  const spaceSavedPercent = totalStorageBytes > 0 ? (spaceSavedBytes / totalStorageBytes) * 100 : 0;
-  const deduplicationRatio = actualStorageBytes > 0 ? totalStorageBytes / actualStorageBytes : 1;
+  const spaceSavedPercent =
+    totalStorageBytes > 0 ? (spaceSavedBytes / totalStorageBytes) * 100 : 0;
+  const deduplicationRatio =
+    actualStorageBytes > 0 ? totalStorageBytes / actualStorageBytes : 1;
 
   return {
     orgId,
@@ -414,8 +463,8 @@ export async function getDeduplicationStats(orgId: string): Promise<Deduplicatio
 /**
  * Cleanup orphaned file references
  */
-export async function cleanupOrphanedReferences(
-  orgId: string
+async function cleanupOrphanedReferences(
+  orgId: string,
 ): Promise<{ cleaned: number; errors: string[] }> {
   const supabase = createClient();
 
@@ -446,25 +495,29 @@ export async function cleanupOrphanedReferences(
   let cleaned = 0;
   const errors: string[] = [];
 
-  for (const ref of orphaned) {
-    try {
-      // Check if original still exists
-      const { data: original } = await supabase
-        .from('content')
-        .select('id')
-        .eq('id', ref.original_content_id)
-        .is('deleted_at', null)
-        .single();
+  await Promise.all(
+    Array.from(orphaned).map(async (ref) => {
+      try {
+        // Check if original still exists
+        const { data: original } = await supabase
+          .from('content')
+          .select('id')
+          .eq('id', ref.original_content_id)
+          .is('deleted_at', null)
+          .single();
 
-      if (!original) {
-        // Original deleted - need to promote this reference or delete
-        await supabase.from('file_references').delete().eq('id', ref.id);
-        cleaned++;
+        if (!original) {
+          // Original deleted - need to promote this reference or delete
+          await supabase.from('file_references').delete().eq('id', ref.id);
+          cleaned++;
+        }
+      } catch (error) {
+        errors.push(
+          `Failed to cleanup reference ${ref.id}: ${error instanceof Error ? error.message : 'Unknown'}`,
+        );
       }
-    } catch (error) {
-      errors.push(`Failed to cleanup reference ${ref.id}: ${error instanceof Error ? error.message : 'Unknown'}`);
-    }
-  }
+    }),
+  );
 
   return { cleaned, errors };
 }

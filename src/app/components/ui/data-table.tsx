@@ -76,8 +76,6 @@ interface DataTableProps<TData, TValue> {
   showPagination?: boolean;
   /** Page size for pagination */
   pageSize?: number;
-  /** Callback when row selection changes */
-  onRowSelectionChange?: (selectedRows: TData[]) => void;
   /** External row selection state (controlled mode) */
   rowSelection?: RowSelectionState;
   /** External row selection setter (controlled mode) */
@@ -98,7 +96,6 @@ export function DataTable<TData, TValue>({
   showColumnToggle = false,
   showPagination = true,
   pageSize = 10,
-  onRowSelectionChange,
   rowSelection: externalRowSelection,
   setRowSelection: externalSetRowSelection,
   emptyMessage = 'No results.',
@@ -106,9 +103,13 @@ export function DataTable<TData, TValue>({
   getRowId,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    [],
+  );
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>({});
+  const [internalRowSelection, setInternalRowSelection] =
+    React.useState<RowSelectionState>({});
 
   // Use external state if provided, otherwise use internal state
   const rowSelection = externalRowSelection ?? internalRowSelection;
@@ -140,14 +141,6 @@ export function DataTable<TData, TValue>({
     },
   });
 
-  // Notify parent of selection changes
-  React.useEffect(() => {
-    if (onRowSelectionChange) {
-      const selectedRows = table.getFilteredSelectedRowModel().rows.map((row) => row.original);
-      onRowSelectionChange(selectedRows);
-    }
-  }, [rowSelection, table, onRowSelectionChange]);
-
   return (
     <div className={cn('w-full space-y-4', className)}>
       {/* Toolbar */}
@@ -156,7 +149,9 @@ export function DataTable<TData, TValue>({
           {searchKey && (
             <Input
               placeholder={searchPlaceholder}
-              value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ''}
+              value={
+                (table.getColumn(searchKey)?.getFilterValue() as string) ?? ''
+              }
               onChange={(event) =>
                 table.getColumn(searchKey)?.setFilterValue(event.target.value)
               }
@@ -167,25 +162,25 @@ export function DataTable<TData, TValue>({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="ml-auto">
-                  Columns <ChevronDown className="ml-2 h-4 w-4" />
+                  Columns <ChevronDown className="ml-2 size-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {table
-                  .getAllColumns()
-                  .filter((column) => column.getCanHide())
-                  .map((column) => {
-                    return (
-                      <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="capitalize"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                      >
-                        {column.id}
-                      </DropdownMenuCheckboxItem>
-                    );
-                  })}
+                {table.getAllColumns().flatMap((column) => {
+                  if (!column.getCanHide()) return [];
+                  return [
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      className="capitalize"
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(value) =>
+                        column.toggleVisibility(!!value)
+                      }
+                    >
+                      {column.id}
+                    </DropdownMenuCheckboxItem>,
+                  ];
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -202,7 +197,10 @@ export function DataTable<TData, TValue>({
                   <TableHead key={header.id}>
                     {header.isPlaceholder
                       ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
                   </TableHead>
                 ))}
               </TableRow>
@@ -216,19 +214,25 @@ export function DataTable<TData, TValue>({
                   data-state={row.getIsSelected() && 'selected'}
                   className={cn(
                     'transition-colors duration-150',
-                    row.getIsSelected() && 'bg-muted/50'
+                    row.getIsSelected() && 'bg-muted/50',
                   )}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   {emptyMessage}
                 </TableCell>
               </TableRow>
@@ -250,27 +254,28 @@ export function DataTable<TData, TValue>({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
-              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+              Page {table.getState().pagination.pageIndex + 1} of{' '}
+              {table.getPageCount()}
             </span>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="size-8"
                 onClick={() => table.previousPage()}
                 disabled={!table.getCanPreviousPage()}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="size-4" />
                 <span className="sr-only">Previous page</span>
               </Button>
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="size-8"
                 onClick={() => table.nextPage()}
                 disabled={!table.getCanNextPage()}
               >
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="size-4" />
                 <span className="sr-only">Next page</span>
               </Button>
             </div>
@@ -284,4 +289,9 @@ export function DataTable<TData, TValue>({
 /**
  * Re-export TanStack Table types for convenience
  */
-export type { ColumnDef, SortingState, ColumnFiltersState, VisibilityState, RowSelectionState };
+export type {
+  SortingState,
+  ColumnFiltersState,
+  VisibilityState,
+  RowSelectionState,
+};

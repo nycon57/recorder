@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Briefcase, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,6 +35,7 @@ export function AssignDepartmentsModal({
   onClose,
   onSuccess,
 }: AssignDepartmentsModalProps) {
+  const queryClient = useQueryClient();
   const [selectedDepts, setSelectedDepts] = useState<string[]>(
     member.departments?.map((d: Department) => d.id) || []
   );
@@ -62,6 +63,8 @@ export function AssignDepartmentsModal({
       return response.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-members'] });
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
       toast.success('Member departments updated successfully');
       onSuccess();
     },
@@ -86,7 +89,7 @@ export function AssignDepartmentsModal({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Briefcase className="h-5 w-5" />
+            <Briefcase className="size-5" />
             Assign Departments
           </DialogTitle>
           <DialogDescription>
@@ -99,7 +102,7 @@ export function AssignDepartmentsModal({
             <Label className="mb-3 block">Departments</Label>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
+                <div className="size-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
               </div>
             ) : departments.length === 0 ? (
               <div className="rounded-lg border border-dashed p-8 text-center">
@@ -111,7 +114,7 @@ export function AssignDepartmentsModal({
               <ScrollArea className="h-[300px] rounded-md border p-4">
                 <div className="space-y-3">
                   {departments.map((dept: Department) => (
-                    <div key={dept.id} className="flex items-start space-x-3">
+                    <div key={dept.id} className="flex items-start gap-x-3">
                       <Checkbox
                         id={dept.id}
                         checked={selectedDepts.includes(dept.id)}
@@ -146,8 +149,8 @@ export function AssignDepartmentsModal({
             >
               {updateDepartmentsMutation.isPending ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Updating...
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                  Updating…
                 </>
               ) : (
                 'Update Departments'

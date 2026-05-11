@@ -5,12 +5,12 @@
 
 import { Database } from './database';
 
-export type VideoFrame = Database['public']['Tables']['video_frames']['Row'];
+type VideoFrame = Database['public']['Tables']['video_frames']['Row'];
 
-export type VideoFrameInsert =
+type VideoFrameInsert =
   Database['public']['Tables']['video_frames']['Insert'];
 
-export type VideoFrameUpdate =
+type VideoFrameUpdate =
   Database['public']['Tables']['video_frames']['Update'];
 
 /**
@@ -124,7 +124,7 @@ export interface MultimodalSearchResult {
 /**
  * Frame retrieval pagination options
  */
-export interface FrameRetrievalOptions {
+interface FrameRetrievalOptions {
   page?: number;
   limit?: number;
   includeDescriptions?: boolean;
@@ -136,7 +136,7 @@ export interface FrameRetrievalOptions {
 /**
  * Paginated frame response
  */
-export interface PaginatedFrameResponse {
+interface PaginatedFrameResponse {
   frames: Array<{
     id: string;
     frameTimeSec: number;

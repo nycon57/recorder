@@ -324,8 +324,8 @@ export function createSdkOverlay(accentColor?: string): SdkOverlay {
 
   function setAccentColor(color: string): void {
     state.accentColor = color;
-    labelEl.style.background = color;
-    highlight.style.borderColor = color;
+    Object.assign(labelEl.style, { background: color });
+    Object.assign(highlight.style, { borderColor: color });
     // Re-inject keyframes with new color
     const existingStyle = document.getElementById(STYLE_ID);
     if (existingStyle) existingStyle.remove();

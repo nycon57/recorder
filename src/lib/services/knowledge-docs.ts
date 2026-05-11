@@ -69,15 +69,13 @@ function normalizeSegment(value: string) {
 
 function normalizeTuple(
   app: string | null | undefined,
-  screen: string | null | undefined
+  screen: string | null | undefined,
 ) {
   if (!app || !screen) return null;
   return `${normalizeSegment(app)}::${normalizeSegment(screen)}`;
 }
 
-function deriveDocType(
-  sourceTypes: KnowledgeSourceType[]
-): KnowledgeDocType {
+function deriveDocType(sourceTypes: KnowledgeSourceType[]): KnowledgeDocType {
   if (sourceTypes.length === 0) return 'unknown';
   if (sourceTypes.length > 1) return 'mixed';
   const [only] = sourceTypes;
@@ -106,7 +104,7 @@ function deriveVendorCoverage(input: {
 function compareDocs(
   left: KnowledgeDocsListItem,
   right: KnowledgeDocsListItem,
-  sort: KnowledgeDocsQueryInput['sort']
+  sort: KnowledgeDocsQueryInput['sort'],
 ) {
   switch (sort) {
     case 'updated_asc':
@@ -122,11 +120,12 @@ function compareDocs(
 }
 
 function hasPendingReview(
-  compilationLog: Database['public']['Tables']['org_wiki_pages']['Row']['compilation_log']
+  compilationLog: Database['public']['Tables']['org_wiki_pages']['Row']['compilation_log'],
 ) {
   if (!Array.isArray(compilationLog)) return false;
   return (compilationLog as CompilationLogEntryLike[]).some(
-    (entry) => entry?.action === 'flagged' && (entry.resolved_at ?? null) === null
+    (entry) =>
+      entry?.action === 'flagged' && (entry.resolved_at ?? null) === null,
   );
 }
 
@@ -139,14 +138,13 @@ function countBy<T extends string>(values: T[]) {
 }
 
 export function assembleKnowledgeDocsList(
-  args: AssembleKnowledgeDocsArgs
+  args: AssembleKnowledgeDocsArgs,
 ): KnowledgeDocsPayload {
-  const clusterNameById = new Map(args.clusters.map((cluster) => [cluster.id, cluster.name]));
+  const clusterNameById = new Map(
+    args.clusters.map((cluster) => [cluster.id, cluster.name]),
+  );
 
-  const sourceTypesByPageId = new Map<
-    string,
-    Set<KnowledgeSourceType>
-  >();
+  const sourceTypesByPageId = new Map<string, Set<KnowledgeSourceType>>();
   for (const sourceRow of args.pageSources) {
     const existing = sourceTypesByPageId.get(sourceRow.page_id) ?? new Set();
     existing.add(normalizeKnowledgeSourceType(sourceRow.source_type));
@@ -161,7 +159,7 @@ export function assembleKnowledgeDocsList(
 
   const allDocs: KnowledgeDocsListItem[] = args.pages.map((page) => {
     const pageSourceTypes = Array.from(
-      sourceTypesByPageId.get(page.id) ?? []
+      sourceTypesByPageId.get(page.id) ?? [],
     ).sort();
     const docType = deriveDocType(pageSourceTypes);
     const pageHasPendingReview = hasPendingReview(page.compilation_log);
@@ -188,7 +186,9 @@ export function assembleKnowledgeDocsList(
       vendorCoverage,
       sourceTypes: pageSourceTypes,
       clusterId: page.cluster_id,
-      clusterName: page.cluster_id ? (clusterNameById.get(page.cluster_id) ?? null) : null,
+      clusterName: page.cluster_id
+        ? (clusterNameById.get(page.cluster_id) ?? null)
+        : null,
       updatedAt: page.updated_at,
       detailHref: `/knowledge/pages/${page.id}`,
     };
@@ -218,7 +218,8 @@ export function assembleKnowledgeDocsList(
         }
       }
       if (args.query.search) {
-        const haystack = `${doc.topic} ${doc.app ?? ''} ${doc.screen ?? ''}`.toLowerCase();
+        const haystack =
+          `${doc.topic} ${doc.app ?? ''} ${doc.screen ?? ''}`.toLowerCase();
         if (!haystack.includes(args.query.search.toLowerCase())) return false;
       }
       return true;
@@ -227,22 +228,25 @@ export function assembleKnowledgeDocsList(
 
   const paginatedItems = filteredDocs.slice(
     args.query.offset,
-    args.query.offset + args.query.limit
+    args.query.offset + args.query.limit,
   );
 
   const typeCounts = countBy(allDocs.map((doc) => doc.type));
   const statusCounts = countBy(allDocs.map((doc) => doc.status));
   const appCounts = countBy(
-    allDocs
-      .map((doc) => doc.app)
-      .filter((value): value is string => Boolean(value))
-      .map((value) => normalizeSegment(value))
+    allDocs.flatMap((__item, __index, __array) => {
+      const __mapped = __item.app;
+      return typeof __mapped === 'string' && __mapped.length > 0
+        ? [normalizeSegment(__mapped)]
+        : [];
+    }),
   );
   const coverageCounts = countBy(allDocs.map((doc) => doc.vendorCoverage));
   const clusterCounts = countBy(
-    allDocs
-      .map((doc) => doc.clusterId ?? 'unclustered')
-      .filter((value): value is string => Boolean(value))
+    allDocs.flatMap((__item, __index, __array) => {
+      const __mapped = __item.clusterId ?? 'unclustered';
+      return __mapped ? [__mapped] : [];
+    }),
   );
 
   return {
@@ -300,7 +304,7 @@ async function fetchOrgPages(args: { supabase: AdminClient; orgId: string }) {
   const { data, error } = await args.supabase
     .from('org_wiki_pages')
     .select(
-      'id, app, screen, topic, confidence, valid_until, cluster_id, updated_at, compilation_log'
+      'id, app, screen, topic, confidence, valid_until, cluster_id, updated_at, compilation_log',
     )
     .eq('org_id', args.orgId)
     .order('updated_at', { ascending: false });
@@ -357,7 +361,7 @@ async function fetchVendorPages(args: { supabase: AdminClient }) {
 }
 
 export async function buildKnowledgeDocsList(
-  args: BuildKnowledgeDocsArgs
+  args: BuildKnowledgeDocsArgs,
 ): Promise<KnowledgeDocsPayload> {
   const supabase = args.supabase ?? createAdminClient();
 

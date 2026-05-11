@@ -76,7 +76,7 @@ export interface MessagePart {
 /**
  * Reasoning/chain-of-thought data
  */
-export interface ReasoningData {
+interface ReasoningData {
   steps: ReasoningStep[];
   conclusion?: string;
 }
@@ -84,7 +84,7 @@ export interface ReasoningData {
 /**
  * Individual reasoning step
  */
-export interface ReasoningStep {
+interface ReasoningStep {
   id: string;
   type: 'thinking' | 'searching' | 'analyzing' | 'concluding';
   content: string;
@@ -241,7 +241,7 @@ export interface ConversationState {
 /**
  * Conversation store actions
  */
-export interface ConversationActions {
+interface ConversationActions {
   /**
    * Create a new conversation
    */
@@ -311,7 +311,7 @@ export type ConversationContextType = ConversationState & ConversationActions;
 /**
  * Suggestion for follow-up questions
  */
-export interface Suggestion {
+interface Suggestion {
   id: string;
   text: string;
   icon?: string;

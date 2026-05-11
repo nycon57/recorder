@@ -1,6 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  Suspense,
+  useReducer,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  type RefObject,
+  type ReactNode,
+} from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Grid3x3,
@@ -11,7 +20,7 @@ import {
   Settings,
   Upload,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
@@ -85,8 +94,15 @@ type SortOption =
   | 'duration-asc'
   | 'duration-desc';
 type ViewMode = 'grid' | 'list';
+type TagFilterMode = 'and' | 'or';
 
 const ITEMS_PER_PAGE = 25;
+const QUICK_ACCESS_TABS: QuickAccessTab[] = [
+  'recent',
+  'favorites',
+  'all',
+  'uncategorized',
+];
 
 interface BreadcrumbItem {
   id: string;
@@ -142,6 +158,403 @@ interface CollectionSaveData {
   parent_id: string | null;
 }
 
+function isQuickAccessTab(value: string | null): value is QuickAccessTab {
+  return QUICK_ACCESS_TABS.includes(value as QuickAccessTab);
+}
+
+function getSavedViewMode(): ViewMode {
+  if (typeof window === 'undefined') return 'grid';
+  const savedViewMode = localStorage.getItem('library-view-mode');
+  return savedViewMode === 'list' || savedViewMode === 'grid'
+    ? savedViewMode
+    : 'grid';
+}
+
+function getSavedSortOption(): SortOption {
+  if (typeof window === 'undefined') return 'recent';
+  const savedSortBy = localStorage.getItem(
+    'library-sort-by',
+  ) as SortOption | null;
+  return savedSortBy ?? 'recent';
+}
+
+const defaultAdvancedFilters: FilterState = {
+  contentTypes: [],
+  statuses: [],
+  statusFilter: 'active',
+  dateRange: { from: null, to: null },
+  favoritesOnly: false,
+  hasTranscript: null,
+  hasDocument: null,
+};
+
+type LibraryPageState = {
+  currentCollectionId: string | null;
+  activeTab: QuickAccessTab;
+  homeData: HomeViewData | null;
+  collectionData: CollectionViewData | null;
+  items: ContentItem[];
+  loading: boolean;
+  error: string | null;
+  sortBy: SortOption;
+  viewMode: ViewMode;
+  searchQuery: string;
+  advancedFilters: FilterState;
+  selectedIds: string[];
+  showTagModal: boolean;
+  showTagManager: boolean;
+  showUploadWizard: boolean;
+  showExportModal: boolean;
+  showGoogleDriveImport: boolean;
+  showCollectionManager: boolean;
+  showMoveModal: boolean;
+  editingCollection: CollectionFolder | null;
+  showDeleteDialog: boolean;
+  showBulkDeleteDialog: boolean;
+  showDeleteCollectionDialog: boolean;
+  itemToDelete: string | null;
+  collectionToDelete: CollectionFolder | null;
+  isDeletingCollection: boolean;
+  availableTags: LibraryTag[];
+  selectedTagIds: string[];
+  tagFilterMode: TagFilterMode;
+  allCollections: CollectionFolder[];
+  currentPage: number;
+};
+
+type LibraryPageAction =
+  | Partial<LibraryPageState>
+  | ((state: LibraryPageState) => LibraryPageState);
+
+function createInitialLibraryPageState(
+  collectionParam: string | null,
+  tabParam: string | null,
+  searchParam: string | null,
+): LibraryPageState {
+  return {
+    currentCollectionId: collectionParam ?? null,
+    activeTab: isQuickAccessTab(tabParam) ? tabParam : 'recent',
+    homeData: null,
+    collectionData: null,
+    items: [],
+    loading: true,
+    error: null,
+    sortBy: getSavedSortOption(),
+    viewMode: getSavedViewMode(),
+    searchQuery: searchParam ?? '',
+    advancedFilters: defaultAdvancedFilters,
+    selectedIds: [],
+    showTagModal: false,
+    showTagManager: false,
+    showUploadWizard: false,
+    showExportModal: false,
+    showGoogleDriveImport: false,
+    showCollectionManager: false,
+    showMoveModal: false,
+    editingCollection: null,
+    showDeleteDialog: false,
+    showBulkDeleteDialog: false,
+    showDeleteCollectionDialog: false,
+    itemToDelete: null,
+    collectionToDelete: null,
+    isDeletingCollection: false,
+    availableTags: [],
+    selectedTagIds: [],
+    tagFilterMode: 'or',
+    allCollections: [],
+    currentPage: 1,
+  };
+}
+
+function libraryPageReducer(
+  state: LibraryPageState,
+  action: LibraryPageAction,
+): LibraryPageState {
+  return typeof action === 'function' ? action(state) : { ...state, ...action };
+}
+
+interface LibraryContentGridProps {
+  items: ContentItem[];
+  paginatedItems: ContentItem[];
+  viewMode: ViewMode;
+  selectedIds: string[];
+  searchQuery: string;
+  currentPage: number;
+  totalPages: number;
+  startIndex: number;
+  endIndex: number;
+  onClearSearch: () => void;
+  onPageChange: (page: number) => void;
+  onSelect: (id: string, selected: boolean) => void;
+  onSelectAll: (checked: boolean) => void;
+  onDelete: (id: string) => void;
+  onShare: (id: string) => void;
+  onDownload: (id: string) => void;
+}
+
+function LibraryContentGrid({
+  items,
+  paginatedItems,
+  viewMode,
+  selectedIds,
+  searchQuery,
+  currentPage,
+  totalPages,
+  startIndex,
+  endIndex,
+  onClearSearch,
+  onPageChange,
+  onSelect,
+  onSelectAll,
+  onDelete,
+  onShare,
+  onDownload,
+}: LibraryContentGridProps) {
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+        <FileX2 className="size-12 text-muted-foreground mb-6" />
+        <h3 className="text-lg font-semibold mb-3">No items found</h3>
+        <p className="text-sm text-muted-foreground mb-6 max-w-md">
+          {searchQuery
+            ? 'Try adjusting your search'
+            : 'No content in this view'}
+        </p>
+        {searchQuery && (
+          <Button onClick={onClearSearch} variant="outline">
+            Clear Search
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  if (viewMode === 'list') {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-md border overflow-x-auto">
+          <LibraryTable
+            items={paginatedItems}
+            selectedIds={selectedIds}
+            onSelect={onSelect}
+            onSelectAll={onSelectAll}
+            onDelete={onDelete}
+            onShare={onShare}
+            onDownload={onDownload}
+          />
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {startIndex + 1} to {Math.min(endIndex, items.length)} of{' '}
+              {items.length}
+            </p>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className={
+                      currentPage === 1
+                        ? 'pointer-events-none opacity-50'
+                        : 'cursor-pointer'
+                    }
+                  />
+                </PaginationItem>
+                <PaginationItem>
+                  <span className="px-4 text-sm">
+                    {currentPage} / {totalPages}
+                  </span>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationNext
+                    onClick={() =>
+                      onPageChange(Math.min(totalPages, currentPage + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                    className={
+                      currentPage === totalPages
+                        ? 'pointer-events-none opacity-50'
+                        : 'cursor-pointer'
+                    }
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      {items.map((item) => (
+        <SelectableContentCard
+          key={item.id}
+          item={item}
+          selected={selectedIds.includes(item.id)}
+          onSelect={onSelect}
+          onDelete={onDelete}
+          onShare={onShare}
+          onDownload={onDownload}
+        />
+      ))}
+    </div>
+  );
+}
+
+interface LibraryFilterControlsProps {
+  itemsCount: number;
+  selectedIdsCount: number;
+  searchInputRef: RefObject<HTMLInputElement | null>;
+  searchQuery: string;
+  advancedFilters: FilterState;
+  availableTags: LibraryTag[];
+  selectedTagIds: string[];
+  tagFilterMode: TagFilterMode;
+  sortBy: SortOption;
+  viewMode: ViewMode;
+  onSelectAll: (checked: boolean) => void;
+  onSearchQueryChange: (value: string) => void;
+  onAdvancedFiltersChange: (filters: FilterState) => void;
+  onSelectedTagIdsChange: (ids: string[]) => void;
+  onTagFilterModeChange: (mode: TagFilterMode) => void;
+  onSortByChange: (sortBy: SortOption) => void;
+  onViewModeChange: (viewMode: ViewMode) => void;
+}
+
+function LibraryFilterControls({
+  itemsCount,
+  selectedIdsCount,
+  searchInputRef,
+  searchQuery,
+  advancedFilters,
+  availableTags,
+  selectedTagIds,
+  tagFilterMode,
+  sortBy,
+  viewMode,
+  onSelectAll,
+  onSearchQueryChange,
+  onAdvancedFiltersChange,
+  onSelectedTagIdsChange,
+  onTagFilterModeChange,
+  onSortByChange,
+  onViewModeChange,
+}: LibraryFilterControlsProps) {
+  return (
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-wrap items-center gap-4">
+        {itemsCount > 0 && (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={selectedIdsCount === itemsCount && itemsCount > 0}
+              onCheckedChange={onSelectAll}
+              aria-label="Select all items"
+            />
+            <span className="text-sm text-muted-foreground">Select all</span>
+          </div>
+        )}
+
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            ref={searchInputRef}
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => onSearchQueryChange(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        <AdvancedFilters
+          filters={advancedFilters}
+          onFiltersChange={onAdvancedFiltersChange}
+        />
+
+        <TagFilter
+          tags={availableTags}
+          selectedTags={selectedTagIds}
+          onSelectionChange={onSelectedTagIdsChange}
+          filterMode={tagFilterMode}
+          onFilterModeChange={onTagFilterModeChange}
+          showCounts={true}
+        />
+      </div>
+
+      <div className="flex items-center gap-4">
+        <Select
+          value={sortBy}
+          onValueChange={(v) => onSortByChange(v as SortOption)}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SlidersHorizontal className="mr-2 size-4" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="recent">Most Recent</SelectItem>
+            <SelectItem value="oldest">Oldest First</SelectItem>
+            <SelectItem value="name-asc">Name A-Z</SelectItem>
+            <SelectItem value="name-desc">Name Z-A</SelectItem>
+            <SelectItem value="size-asc">Size (Smallest)</SelectItem>
+            <SelectItem value="size-desc">Size (Largest)</SelectItem>
+            <SelectItem value="duration-asc">Duration (Shortest)</SelectItem>
+            <SelectItem value="duration-desc">Duration (Longest)</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <div className="flex items-center border rounded-md">
+          <Button
+            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => onViewModeChange('grid')}
+            className="rounded-r-none"
+          >
+            <Grid3x3 className="size-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => onViewModeChange('list')}
+            className="rounded-l-none"
+          >
+            <List className="size-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LibraryContentSection({
+  children,
+  filterControls,
+  advancedFilters,
+  onRemoveFilter,
+  onClearAllFilters,
+}: {
+  children: ReactNode;
+  filterControls: ReactNode;
+  advancedFilters: FilterState;
+  onRemoveFilter: (key: keyof FilterState, value?: string) => void;
+  onClearAllFilters: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      {filterControls}
+      <FilterChips
+        filters={advancedFilters}
+        onRemoveFilter={onRemoveFilter}
+        onClearAll={onClearAllFilters}
+      />
+      {children}
+    </div>
+  );
+}
+
 /**
  * Enhanced Library Page Component
  * Folder-style navigation model
@@ -155,108 +568,75 @@ interface CollectionSaveData {
  * - Advanced filtering and search
  */
 function LibraryPageContent() {
-  const router = useRouter();
+  return useLibraryPageContentImplementation();
+}
+
+function useLibraryPageContentImplementation() {
+  const { push } = useRouter();
   const searchParams = useSearchParams();
+  const getSearchParam = searchParams.get.bind(searchParams);
+  const collectionParam = getSearchParam('collection');
+  const tabParam = getSearchParam('tab');
+  const searchParam = getSearchParam('q');
 
   const { toast } = useToast();
 
-  // Navigation state - current collection (null = root/home view)
-  const [currentCollectionId, setCurrentCollectionId] = useState<string | null>(
-    null,
+  const [
+    {
+      currentCollectionId,
+      activeTab,
+      homeData,
+      collectionData,
+      items,
+      loading,
+      error,
+      sortBy,
+      viewMode,
+      searchQuery,
+      advancedFilters,
+      selectedIds,
+      showTagModal,
+      showTagManager,
+      showUploadWizard,
+      showExportModal,
+      showGoogleDriveImport,
+      showCollectionManager,
+      showMoveModal,
+      editingCollection,
+      showDeleteDialog,
+      showBulkDeleteDialog,
+      showDeleteCollectionDialog,
+      itemToDelete,
+      collectionToDelete,
+      isDeletingCollection,
+      availableTags,
+      selectedTagIds,
+      tagFilterMode,
+      allCollections,
+      currentPage,
+    },
+    updateLibraryPageState,
+  ] = useReducer(libraryPageReducer, undefined, () =>
+    createInitialLibraryPageState(collectionParam, tabParam, searchParam),
   );
 
-  // Quick access tab for root view
-  const [activeTab, setActiveTab] = useState<QuickAccessTab>('recent');
-
-  // Data state
-  const [homeData, setHomeData] = useState<HomeViewData | null>(null);
-  const [collectionData, setCollectionData] =
-    useState<CollectionViewData | null>(null);
-  const [items, setItems] = useState<ContentItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Filter/view state
-  const [sortBy, setSortBy] = useState<SortOption>('recent');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Advanced filters state
-  const [advancedFilters, setAdvancedFilters] = useState<FilterState>({
-    contentTypes: [],
-    statuses: [],
-    statusFilter: 'active',
-    dateRange: { from: null, to: null },
-    favoritesOnly: false,
-    hasTranscript: null,
-    hasDocument: null,
-  });
-
-  // Bulk selection state
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [showTagModal, setShowTagModal] = useState(false);
-  const [showTagManager, setShowTagManager] = useState(false);
-  const [showUploadWizard, setShowUploadWizard] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [showGoogleDriveImport, setShowGoogleDriveImport] = useState(false);
-  const [showCollectionManager, setShowCollectionManager] = useState(false);
-  const [showMoveModal, setShowMoveModal] = useState(false);
-  const [editingCollection, setEditingCollection] =
-    useState<CollectionFolder | null>(null);
-
-  // Delete confirmation state
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
-  const [showDeleteCollectionDialog, setShowDeleteCollectionDialog] =
-    useState(false);
-  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
-  const [collectionToDelete, setCollectionToDelete] =
-    useState<CollectionFolder | null>(null);
-  const [isDeletingCollection, setIsDeletingCollection] = useState(false);
-
-  // Tag filter state
-  const [availableTags, setAvailableTags] = useState<LibraryTag[]>([]);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [tagFilterMode, setTagFilterMode] = useState<'and' | 'or'>('or');
-
-  // All collections for move modal
-  const [allCollections, setAllCollections] = useState<CollectionFolder[]>([]);
-
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
+  const updateAdvancedFilters = useCallback(
+    (action: FilterState | ((filters: FilterState) => FilterState)) => {
+      updateLibraryPageState((state) => ({
+        ...state,
+        advancedFilters:
+          typeof action === 'function' ? action(state.advancedFilters) : action,
+      }));
+    },
+    [],
+  );
 
   // Search input ref
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize from URL params
-  useEffect(() => {
-    const collectionParam = searchParams.get('collection');
-    const tabParam = searchParams.get('tab') as QuickAccessTab | null;
-    const searchParam = searchParams.get('q');
-
-    if (collectionParam) {
-      setCurrentCollectionId(collectionParam);
-    }
-    if (
-      tabParam &&
-      ['recent', 'favorites', 'all', 'uncategorized'].includes(tabParam)
-    ) {
-      setActiveTab(tabParam);
-    }
-    if (searchParam) {
-      setSearchQuery(searchParam);
-    }
-
-    // Load saved preferences
-    if (typeof window !== 'undefined') {
-      const savedViewMode = localStorage.getItem(
-        'library-view-mode',
-      ) as ViewMode;
-      const savedSortBy = localStorage.getItem('library-sort-by') as SortOption;
-      if (savedViewMode) setViewMode(savedViewMode);
-      if (savedSortBy) setSortBy(savedSortBy);
-    }
-  }, [searchParams]);
+  const resetSelectionForViewChange = useCallback(() => {
+    updateLibraryPageState({ selectedIds: [], currentPage: 1 });
+  }, []);
 
   // Save preferences to localStorage
   useEffect(() => {
@@ -275,8 +655,8 @@ function LibraryPageContent() {
     if (searchQuery) params.set('q', searchQuery);
 
     const newUrl = params.toString() ? `?${params.toString()}` : '/library';
-    router.replace(newUrl, { scroll: false });
-  }, [currentCollectionId, activeTab, searchQuery, router]);
+    window.history.replaceState(null, '', newUrl);
+  }, [currentCollectionId, activeTab, searchQuery]);
 
   // Fetch data based on current navigation state
   useEffect(() => {
@@ -296,36 +676,32 @@ function LibraryPageContent() {
     }
   }, [activeTab, currentCollectionId, advancedFilters.statusFilter]);
 
-  // Clear selection when changing views
-  useEffect(() => {
-    setSelectedIds([]);
-    setCurrentPage(1);
-  }, [currentCollectionId, activeTab]);
-
   // Fetch functions
   async function fetchHomeView() {
     try {
-      setLoading(true);
-      setError(null);
+      updateLibraryPageState({ loading: true, error: null });
 
       const response = await fetch('/api/library/home');
       if (!response.ok) throw new Error('Failed to fetch library home');
 
       const result = await response.json();
-      setHomeData(result.data);
-      setCollectionData(null);
+      updateLibraryPageState({
+        homeData: result.data,
+        collectionData: null,
+      });
     } catch (err) {
       console.error('Error fetching library home:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load library');
+      updateLibraryPageState({
+        error: err instanceof Error ? err.message : 'Failed to load library',
+      });
     } finally {
-      setLoading(false);
+      updateLibraryPageState({ loading: false });
     }
   }
 
   async function fetchCollectionView(collectionId: string) {
     try {
-      setLoading(true);
-      setError(null);
+      updateLibraryPageState({ loading: true, error: null });
 
       const params = new URLSearchParams({
         limit: String(ITEMS_PER_PAGE),
@@ -338,7 +714,8 @@ function LibraryPageContent() {
       );
       if (!response.ok) {
         if (response.status === 404) {
-          setCurrentCollectionId(null);
+          updateLibraryPageState({ currentCollectionId: null });
+          resetSelectionForViewChange();
           toast({
             variant: 'destructive',
             title: 'Collection not found',
@@ -350,23 +727,24 @@ function LibraryPageContent() {
       }
 
       const result = await response.json();
-      setCollectionData(result.data);
-      setItems(result.data.items || []);
-      setHomeData(null);
+      updateLibraryPageState({
+        collectionData: result.data,
+        items: result.data.items || [],
+        homeData: null,
+      });
     } catch (err) {
       console.error('Error fetching collection:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to load collection',
-      );
+      updateLibraryPageState({
+        error: err instanceof Error ? err.message : 'Failed to load collection',
+      });
     } finally {
-      setLoading(false);
+      updateLibraryPageState({ loading: false });
     }
   }
 
   async function fetchFilteredContent() {
     try {
-      setLoading(true);
-      setError(null);
+      updateLibraryPageState({ loading: true, error: null });
 
       const params = new URLSearchParams({
         limit: '100',
@@ -381,18 +759,22 @@ function LibraryPageContent() {
 
       // Filter by tab
       if (activeTab === 'favorites') {
-        allItems = allItems.filter((item) => Boolean(item.metadata?.is_favorite));
+        allItems = allItems.filter((item) =>
+          Boolean(item.metadata?.is_favorite),
+        );
       } else if (activeTab === 'uncategorized') {
         allItems = allItems.filter((item) => !item.collection_id);
       }
       // 'all' tab shows everything
 
-      setItems(allItems);
+      updateLibraryPageState({ items: allItems });
     } catch (err) {
       console.error('Error fetching content:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load content');
+      updateLibraryPageState({
+        error: err instanceof Error ? err.message : 'Failed to load content',
+      });
     } finally {
-      setLoading(false);
+      updateLibraryPageState({ loading: false });
     }
   }
 
@@ -404,7 +786,7 @@ function LibraryPageContent() {
       if (!response.ok) throw new Error('Failed to fetch tags');
 
       const data = await response.json();
-      setAvailableTags(data.data.tags || []);
+      updateLibraryPageState({ availableTags: data.data.tags || [] });
     } catch (error) {
       console.error('Error fetching tags:', error);
     }
@@ -416,16 +798,20 @@ function LibraryPageContent() {
       if (!response.ok) throw new Error('Failed to fetch collections');
 
       const data = await response.json();
-      setAllCollections(data.data?.collections || []);
+      updateLibraryPageState({ allCollections: data.data?.collections || [] });
     } catch (error) {
       console.error('Error fetching collections:', error);
     }
   }
 
   // Navigation handlers
-  const handleNavigateToCollection = useCallback((collectionId: string) => {
-    setCurrentCollectionId(collectionId);
-  }, []);
+  const handleNavigateToCollection = useCallback(
+    (collectionId: string) => {
+      updateLibraryPageState({ currentCollectionId: collectionId });
+      resetSelectionForViewChange();
+    },
+    [resetSelectionForViewChange],
+  );
 
   const handleNavigateBack = useCallback(() => {
     if (collectionData?.breadcrumb && collectionData.breadcrumb.length > 1) {
@@ -433,46 +819,52 @@ function LibraryPageContent() {
       const parentId =
         collectionData.breadcrumb[collectionData.breadcrumb.length - 2]?.id ||
         null;
-      setCurrentCollectionId(parentId);
+      updateLibraryPageState({ currentCollectionId: parentId });
     } else {
       // Navigate to root
-      setCurrentCollectionId(null);
+      updateLibraryPageState({ currentCollectionId: null });
     }
-  }, [collectionData]);
+    resetSelectionForViewChange();
+  }, [collectionData, resetSelectionForViewChange]);
 
-  const handleBreadcrumbClick = useCallback((collectionId: string | null) => {
-    setCurrentCollectionId(collectionId);
-  }, []);
+  const handleBreadcrumbClick = useCallback(
+    (collectionId: string | null) => {
+      updateLibraryPageState({ currentCollectionId: collectionId });
+      resetSelectionForViewChange();
+    },
+    [resetSelectionForViewChange],
+  );
 
-  const handleTabChange = useCallback((tab: QuickAccessTab) => {
-    setActiveTab(tab);
-    if (tab !== 'recent') {
-      fetchFilteredContent();
-    }
-  }, []);
+  const handleTabChange = useCallback(
+    (tab: QuickAccessTab) => {
+      updateLibraryPageState({ activeTab: tab, currentCollectionId: null });
+      resetSelectionForViewChange();
+    },
+    [resetSelectionForViewChange],
+  );
 
   // Compute filtered items
   const filteredItems = useMemo(() => {
     let filtered = [...items];
 
     // Filter by content types
-      if (advancedFilters.contentTypes.length > 0) {
-        filtered = filtered.filter((item) =>
-          item.content_type
-            ? advancedFilters.contentTypes.includes(item.content_type)
-            : false,
-        );
-      }
+    if (advancedFilters.contentTypes.length > 0) {
+      filtered = filtered.filter((item) =>
+        item.content_type
+          ? advancedFilters.contentTypes.includes(item.content_type)
+          : false,
+      );
+    }
 
     // Filter by tags
-      if (selectedTagIds.length > 0) {
-        filtered = filtered.filter((item) => {
-          const itemTagIds = item.metadata?.tags?.map((tag) => tag.id) || [];
-          if (tagFilterMode === 'and') {
-            return selectedTagIds.every((tagId) => itemTagIds.includes(tagId));
-          } else {
-            return selectedTagIds.some((tagId) => itemTagIds.includes(tagId));
-          }
+    if (selectedTagIds.length > 0) {
+      filtered = filtered.filter((item) => {
+        const itemTagIds = item.metadata?.tags?.map((tag) => tag.id) || [];
+        if (tagFilterMode === 'and') {
+          return selectedTagIds.every((tagId) => itemTagIds.includes(tagId));
+        } else {
+          return selectedTagIds.some((tagId) => itemTagIds.includes(tagId));
+        }
       });
     }
 
@@ -542,8 +934,7 @@ function LibraryPageContent() {
 
   // Action handlers
   const handleDelete = (id: string) => {
-    setItemToDelete(id);
-    setShowDeleteDialog(true);
+    updateLibraryPageState({ itemToDelete: id, showDeleteDialog: true });
   };
 
   const confirmDelete = async () => {
@@ -559,7 +950,10 @@ function LibraryPageContent() {
         throw new Error(errorData.message || 'Failed to delete');
       }
 
-      setItems((prev) => prev.filter((item) => item.id !== itemToDelete));
+      updateLibraryPageState((state) => ({
+        ...state,
+        items: state.items.filter((item) => item.id !== itemToDelete),
+      }));
       toast({
         description: 'Item moved to trash.',
       });
@@ -572,53 +966,66 @@ function LibraryPageContent() {
           err instanceof Error ? err.message : 'Failed to delete item',
       });
     } finally {
-      setShowDeleteDialog(false);
-      setItemToDelete(null);
+      updateLibraryPageState({
+        showDeleteDialog: false,
+        itemToDelete: null,
+      });
     }
   };
 
   const handleShare = (id: string) => {
-    router.push(`/library/${id}?action=share`);
+    push(`/library/${id}?action=share`);
   };
 
   const handleDownload = (id: string) => {
-    router.push(`/library/${id}?action=download`);
+    push(`/library/${id}?action=download`);
   };
 
   // Bulk selection handlers
   const handleSelect = useCallback((id: string, selected: boolean) => {
-    setSelectedIds((prev) =>
-      selected ? [...prev, id] : prev.filter((itemId) => itemId !== id),
-    );
+    updateLibraryPageState((state) => ({
+      ...state,
+      selectedIds: selected
+        ? [...state.selectedIds, id]
+        : state.selectedIds.filter((itemId) => itemId !== id),
+    }));
   }, []);
 
   const handleSelectAll = useCallback(
     (checked: boolean) => {
       const itemsToSelect =
         viewMode === 'list' ? paginatedItems : filteredItems;
-      setSelectedIds(checked ? itemsToSelect.map((item) => item.id) : []);
+      updateLibraryPageState({
+        selectedIds: checked ? itemsToSelect.map((item) => item.id) : [],
+      });
     },
     [filteredItems, paginatedItems, viewMode],
   );
 
   const handleClearSelection = useCallback(() => {
-    setSelectedIds([]);
+    updateLibraryPageState({ selectedIds: [] });
   }, []);
 
   // Collection handlers
   const handleNewCollection = useCallback(() => {
-    setEditingCollection(null);
-    setShowCollectionManager(true);
+    updateLibraryPageState({
+      editingCollection: null,
+      showCollectionManager: true,
+    });
   }, []);
 
   const handleEditCollection = useCallback((collection: CollectionFolder) => {
-    setEditingCollection(collection);
-    setShowCollectionManager(true);
+    updateLibraryPageState({
+      editingCollection: collection,
+      showCollectionManager: true,
+    });
   }, []);
 
   const handleDeleteCollection = useCallback((collection: CollectionFolder) => {
-    setCollectionToDelete(collection);
-    setShowDeleteCollectionDialog(true);
+    updateLibraryPageState({
+      collectionToDelete: collection,
+      showDeleteCollectionDialog: true,
+    });
   }, []);
 
   // Move items to collection handler
@@ -642,13 +1049,14 @@ function LibraryPageContent() {
         }
 
         // Update local state
-        setItems((prev) =>
-          prev.map((item) =>
+        updateLibraryPageState((state) => ({
+          ...state,
+          items: state.items.map((item) =>
             selectedIds.includes(item.id)
               ? { ...item, collection_id: collectionId }
               : item,
           ),
-        );
+        }));
 
         // Refresh data
         if (currentCollectionId) {
@@ -657,7 +1065,7 @@ function LibraryPageContent() {
           fetchHomeView();
         }
 
-        setSelectedIds([]);
+        updateLibraryPageState({ selectedIds: [] });
         toast({
           description: `Moved ${selectedIds.length} item${selectedIds.length === 1 ? '' : 's'} successfully`,
         });
@@ -678,7 +1086,7 @@ function LibraryPageContent() {
   const confirmDeleteCollection = async () => {
     if (!collectionToDelete) return;
 
-    setIsDeletingCollection(true);
+    updateLibraryPageState({ isDeletingCollection: true });
     try {
       const response = await fetch(
         `/api/collections/${collectionToDelete.id}`,
@@ -693,7 +1101,8 @@ function LibraryPageContent() {
       }
 
       if (currentCollectionId === collectionToDelete.id) {
-        setCurrentCollectionId(null);
+        updateLibraryPageState({ currentCollectionId: null });
+        resetSelectionForViewChange();
       }
 
       // Refresh data
@@ -712,9 +1121,11 @@ function LibraryPageContent() {
           err instanceof Error ? err.message : 'Failed to delete collection',
       });
     } finally {
-      setIsDeletingCollection(false);
-      setShowDeleteCollectionDialog(false);
-      setCollectionToDelete(null);
+      updateLibraryPageState({
+        isDeletingCollection: false,
+        showDeleteCollectionDialog: false,
+        collectionToDelete: null,
+      });
     }
   };
 
@@ -779,28 +1190,22 @@ function LibraryPageContent() {
       newFilters.hasDocument = null;
     }
 
-    setAdvancedFilters(newFilters);
+    updateAdvancedFilters(newFilters);
   };
 
   const handleClearAllFilters = () => {
-    setAdvancedFilters({
-      contentTypes: [],
-      statuses: [],
-      statusFilter: 'active',
-      dateRange: { from: null, to: null },
-      favoritesOnly: false,
-      hasTranscript: null,
-      hasDocument: null,
+    updateLibraryPageState({
+      advancedFilters: defaultAdvancedFilters,
+      selectedTagIds: [],
+      searchQuery: '',
     });
-    setSelectedTagIds([]);
-    setSearchQuery('');
   };
 
   // Keyboard shortcuts
   useKeyboardShortcuts([
     {
       ...COMMON_SHORTCUTS.UPLOAD,
-      handler: () => setShowUploadWizard(true),
+      handler: () => updateLibraryPageState({ showUploadWizard: true }),
     },
     {
       ...COMMON_SHORTCUTS.SEARCH,
@@ -809,7 +1214,7 @@ function LibraryPageContent() {
     {
       key: 'n',
       ctrl: true,
-      handler: () => setShowCollectionManager(true),
+      handler: () => updateLibraryPageState({ showCollectionManager: true }),
       description: 'New collection',
     },
     {
@@ -826,7 +1231,7 @@ function LibraryPageContent() {
       key: 'm',
       handler: () => {
         if (selectedIds.length > 0) {
-          setShowMoveModal(true);
+          updateLibraryPageState({ showMoveModal: true });
         }
       },
       description: 'Move to folder',
@@ -843,191 +1248,64 @@ function LibraryPageContent() {
     },
   ]);
 
-  // Render content grid/list
-  const renderContentGrid = () => {
-    if (filteredItems.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <FileX2 className="h-12 w-12 text-muted-foreground mb-6" />
-          <h3 className="text-lg font-semibold mb-3">No items found</h3>
-          <p className="text-sm text-muted-foreground mb-6 max-w-md">
-            {searchQuery
-              ? 'Try adjusting your search'
-              : 'No content in this view'}
-          </p>
-          {searchQuery && (
-            <Button onClick={() => setSearchQuery('')} variant="outline">
-              Clear Search
-            </Button>
-          )}
-        </div>
-      );
-    }
+  const filterControls = (
+    <LibraryFilterControls
+      itemsCount={filteredItems.length}
+      selectedIdsCount={selectedIds.length}
+      searchInputRef={searchInputRef}
+      searchQuery={searchQuery}
+      advancedFilters={advancedFilters}
+      availableTags={availableTags}
+      selectedTagIds={selectedTagIds}
+      tagFilterMode={tagFilterMode}
+      sortBy={sortBy}
+      viewMode={viewMode}
+      onSelectAll={handleSelectAll}
+      onSearchQueryChange={(searchQuery) =>
+        updateLibraryPageState({ searchQuery })
+      }
+      onAdvancedFiltersChange={updateAdvancedFilters}
+      onSelectedTagIdsChange={(selectedTagIds) =>
+        updateLibraryPageState({ selectedTagIds })
+      }
+      onTagFilterModeChange={(tagFilterMode) =>
+        updateLibraryPageState({ tagFilterMode })
+      }
+      onSortByChange={(sortBy) => updateLibraryPageState({ sortBy })}
+      onViewModeChange={(viewMode) => updateLibraryPageState({ viewMode })}
+    />
+  );
 
-    return viewMode === 'list' ? (
-      <div className="space-y-6">
-        <div className="rounded-md border overflow-x-auto">
-          <LibraryTable
-            items={paginatedItems}
-            selectedIds={selectedIds}
-            onSelect={handleSelect}
-            onSelectAll={handleSelectAll}
-            onDelete={handleDelete}
-            onShare={handleShare}
-            onDownload={handleDownload}
-          />
-        </div>
+  const contentGrid = (
+    <LibraryContentGrid
+      items={filteredItems}
+      paginatedItems={paginatedItems}
+      viewMode={viewMode}
+      selectedIds={selectedIds}
+      searchQuery={searchQuery}
+      currentPage={currentPage}
+      totalPages={totalPages}
+      startIndex={startIndex}
+      endIndex={endIndex}
+      onClearSearch={() => updateLibraryPageState({ searchQuery: '' })}
+      onPageChange={(currentPage) => updateLibraryPageState({ currentPage })}
+      onSelect={handleSelect}
+      onSelectAll={handleSelectAll}
+      onDelete={handleDelete}
+      onShare={handleShare}
+      onDownload={handleDownload}
+    />
+  );
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Showing {startIndex + 1} to{' '}
-              {Math.min(endIndex, filteredItems.length)} of{' '}
-              {filteredItems.length}
-            </p>
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className={
-                      currentPage === 1
-                        ? 'pointer-events-none opacity-50'
-                        : 'cursor-pointer'
-                    }
-                  />
-                </PaginationItem>
-                <PaginationItem>
-                  <span className="px-4 text-sm">
-                    {currentPage} / {totalPages}
-                  </span>
-                </PaginationItem>
-                <PaginationItem>
-                  <PaginationNext
-                    onClick={() =>
-                      setCurrentPage(Math.min(totalPages, currentPage + 1))
-                    }
-                    disabled={currentPage === totalPages}
-                    className={
-                      currentPage === totalPages
-                        ? 'pointer-events-none opacity-50'
-                        : 'cursor-pointer'
-                    }
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          </div>
-        )}
-      </div>
-    ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {filteredItems.map((item) => (
-          <SelectableContentCard
-            key={item.id}
-            item={item}
-            selected={selectedIds.includes(item.id)}
-            onSelect={handleSelect}
-            onDelete={handleDelete}
-            onShare={handleShare}
-            onDownload={handleDownload}
-          />
-        ))}
-      </div>
-    );
-  };
-
-  // Render filter controls
-  const renderFilterControls = () => (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex flex-wrap items-center gap-4">
-        {/* Select all */}
-        {filteredItems.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={
-                selectedIds.length === filteredItems.length &&
-                filteredItems.length > 0
-              }
-              onCheckedChange={handleSelectAll}
-              aria-label="Select all items"
-            />
-            <span className="text-sm text-muted-foreground">Select all</span>
-          </div>
-        )}
-
-        {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            ref={searchInputRef}
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-
-        {/* Filters */}
-        <AdvancedFilters
-          filters={advancedFilters}
-          onFiltersChange={setAdvancedFilters}
-        />
-
-        <TagFilter
-          tags={availableTags}
-          selectedTags={selectedTagIds}
-          onSelectionChange={setSelectedTagIds}
-          filterMode={tagFilterMode}
-          onFilterModeChange={setTagFilterMode}
-          showCounts={true}
-        />
-      </div>
-
-      <div className="flex items-center gap-4">
-        {/* Sort */}
-        <Select
-          value={sortBy}
-          onValueChange={(v) => setSortBy(v as SortOption)}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SlidersHorizontal className="mr-2 h-4 w-4" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="recent">Most Recent</SelectItem>
-            <SelectItem value="oldest">Oldest First</SelectItem>
-            <SelectItem value="name-asc">Name A-Z</SelectItem>
-            <SelectItem value="name-desc">Name Z-A</SelectItem>
-            <SelectItem value="size-asc">Size (Smallest)</SelectItem>
-            <SelectItem value="size-desc">Size (Largest)</SelectItem>
-            <SelectItem value="duration-asc">Duration (Shortest)</SelectItem>
-            <SelectItem value="duration-desc">Duration (Longest)</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* View toggle */}
-        <div className="flex items-center border rounded-md">
-          <Button
-            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => setViewMode('grid')}
-            className="rounded-r-none"
-          >
-            <Grid3x3 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => setViewMode('list')}
-            className="rounded-l-none"
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    </div>
+  const libraryContent = (
+    <LibraryContentSection
+      filterControls={filterControls}
+      advancedFilters={advancedFilters}
+      onRemoveFilter={handleRemoveFilter}
+      onClearAllFilters={handleClearAllFilters}
+    >
+      {contentGrid}
+    </LibraryContentSection>
   );
 
   return (
@@ -1040,18 +1318,21 @@ function LibraryPageContent() {
             <p className="text-sm text-muted-foreground">
               Your recordings, documents, and content organized in folders
             </p>
-            <DocLink href="/docs/product/recordings">
-              About recordings
-            </DocLink>
+            <DocLink href="/docs/product/recordings">About recordings</DocLink>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" onClick={() => setShowTagManager(true)}>
-              <Settings className="h-4 w-4 mr-2" />
+            <Button
+              variant="outline"
+              onClick={() => updateLibraryPageState({ showTagManager: true })}
+            >
+              <Settings className="size-4 mr-2" />
               <span className="hidden sm:inline">Manage Tags</span>
             </Button>
-            <Button onClick={() => setShowUploadWizard(true)}>
-              <Upload className="h-4 w-4 mr-2" />
+            <Button
+              onClick={() => updateLibraryPageState({ showUploadWizard: true })}
+            >
+              <Upload className="size-4 mr-2" />
               Upload
             </Button>
           </div>
@@ -1060,7 +1341,7 @@ function LibraryPageContent() {
         {/* Main Content */}
         <AnimatePresence mode="wait">
           {loading ? (
-            <motion.div
+            <m.div
               key="loading"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1071,15 +1352,15 @@ function LibraryPageContent() {
               ) : (
                 <LibraryRootViewSkeleton />
               )}
-            </motion.div>
+            </m.div>
           ) : error ? (
-            <motion.div
+            <m.div
               key="error"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="flex flex-col items-center justify-center py-16 px-4 text-center"
             >
-              <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
+              <FileX2 className="size-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">
                 Error Loading Library
               </h3>
@@ -1094,10 +1375,10 @@ function LibraryPageContent() {
               >
                 Try Again
               </Button>
-            </motion.div>
+            </m.div>
           ) : currentCollectionId && collectionData ? (
             // Collection View
-            <motion.div
+            <m.div
               key={`collection-${currentCollectionId}`}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -1114,22 +1395,12 @@ function LibraryPageContent() {
                 onNewSubcollection={handleNewCollection}
                 onEditCollection={handleEditCollection}
                 onDeleteCollection={handleDeleteCollection}
-                renderContent={() => (
-                  <div className="space-y-4">
-                    {renderFilterControls()}
-                    <FilterChips
-                      filters={advancedFilters}
-                      onRemoveFilter={handleRemoveFilter}
-                      onClearAll={handleClearAllFilters}
-                    />
-                    {renderContentGrid()}
-                  </div>
-                )}
+                content={libraryContent}
               />
-            </motion.div>
+            </m.div>
           ) : homeData ? (
             // Root/Home View
-            <motion.div
+            <m.div
               key="home"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -1146,21 +1417,11 @@ function LibraryPageContent() {
                 onNewCollection={handleNewCollection}
                 onEditCollection={handleEditCollection}
                 onDeleteCollection={handleDeleteCollection}
-                onRecentItemClick={(id) => router.push(`/library/${id}`)}
+                onRecentItemClick={(id) => push(`/library/${id}`)}
                 onSeeAllRecent={() => handleTabChange('all')}
-                renderContent={() => (
-                  <div className="space-y-4">
-                    {renderFilterControls()}
-                    <FilterChips
-                      filters={advancedFilters}
-                      onRemoveFilter={handleRemoveFilter}
-                      onClearAll={handleClearAllFilters}
-                    />
-                    {renderContentGrid()}
-                  </div>
-                )}
+                content={libraryContent}
               />
-            </motion.div>
+            </m.div>
           ) : (
             <LibraryEmptyState onUploadComplete={() => fetchHomeView()} />
           )}
@@ -1171,28 +1432,41 @@ function LibraryPageContent() {
       <BulkActionsToolbar
         selectedCount={selectedIds.length}
         onClearSelection={handleClearSelection}
-        onDelete={async () => setShowBulkDeleteDialog(true)}
-        onAddTags={() => setShowTagModal(true)}
-        onMoveToCollection={() => setShowMoveModal(true)}
-        onDownload={async () => setShowExportModal(true)}
+        onDelete={async () =>
+          updateLibraryPageState({ showBulkDeleteDialog: true })
+        }
+        onAddTags={() => updateLibraryPageState({ showTagModal: true })}
+        onMoveToCollection={() =>
+          updateLibraryPageState({ showMoveModal: true })
+        }
+        onDownload={async () =>
+          updateLibraryPageState({ showExportModal: true })
+        }
         mode="active"
       />
 
       {/* Modals */}
       <BulkTagModal
         open={showTagModal}
-        onOpenChange={setShowTagModal}
+        onOpenChange={(open) => updateLibraryPageState({ showTagModal: open })}
         selectedCount={selectedIds.length}
         selectedIds={selectedIds}
       />
 
-      <TagManager open={showTagManager} onOpenChange={setShowTagManager} />
+      <TagManager
+        open={showTagManager}
+        onOpenChange={(open) =>
+          updateLibraryPageState({ showTagManager: open })
+        }
+      />
 
       <CollectionManager
         open={showCollectionManager}
         onOpenChange={(open) => {
-          setShowCollectionManager(open);
-          if (!open) setEditingCollection(null);
+          updateLibraryPageState({
+            showCollectionManager: open,
+            editingCollection: open ? editingCollection : null,
+          });
         }}
         collection={editingCollection}
         collections={
@@ -1204,7 +1478,7 @@ function LibraryPageContent() {
       <UploadWizard
         open={showUploadWizard}
         onClose={() => {
-          setShowUploadWizard(false);
+          updateLibraryPageState({ showUploadWizard: false });
           if (currentCollectionId) {
             fetchCollectionView(currentCollectionId);
           } else {
@@ -1215,14 +1489,14 @@ function LibraryPageContent() {
 
       <ExportModal
         isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
+        onClose={() => updateLibraryPageState({ showExportModal: false })}
         selectedItems={selectedIds}
         totalItems={items.length}
       />
 
       <GoogleDriveImportModal
         isOpen={showGoogleDriveImport}
-        onClose={() => setShowGoogleDriveImport(false)}
+        onClose={() => updateLibraryPageState({ showGoogleDriveImport: false })}
         onImportComplete={(count) => {
           toast({
             description: `Successfully imported ${count} file(s) from Google Drive`,
@@ -1237,21 +1511,30 @@ function LibraryPageContent() {
 
       <MoveToCollectionModal
         open={showMoveModal}
-        onOpenChange={setShowMoveModal}
-        items={items
-          .filter((item) => selectedIds.includes(item.id))
-          .map((item) => ({
-            id: item.id,
-            title: item.title,
-            collection_id: item.collection_id,
-          }))}
+        onOpenChange={(open) => updateLibraryPageState({ showMoveModal: open })}
+        items={items.flatMap((__item, __index, __array) =>
+          selectedIds.includes(__item.id)
+            ? [
+                {
+                  id: __item.id,
+                  title: __item.title,
+                  collection_id: __item.collection_id,
+                },
+              ]
+            : [],
+        )}
         collections={allCollections}
         onMove={handleMoveToCollection}
         maxDepth={2}
       />
 
       {/* Delete Dialogs */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) =>
+          updateLibraryPageState({ showDeleteDialog: open })
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
@@ -1273,7 +1556,9 @@ function LibraryPageContent() {
 
       <AlertDialog
         open={showBulkDeleteDialog}
-        onOpenChange={setShowBulkDeleteDialog}
+        onOpenChange={(open) =>
+          updateLibraryPageState({ showBulkDeleteDialog: open })
+        }
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1292,11 +1577,14 @@ function LibraryPageContent() {
                   fetch(`/api/recordings/${id}`, { method: 'DELETE' }),
                 );
                 await Promise.allSettled(promises);
-                setItems((prev) =>
-                  prev.filter((item) => !selectedIds.includes(item.id)),
-                );
-                setSelectedIds([]);
-                setShowBulkDeleteDialog(false);
+                updateLibraryPageState((state) => ({
+                  ...state,
+                  items: state.items.filter(
+                    (item) => !selectedIds.includes(item.id),
+                  ),
+                  selectedIds: [],
+                  showBulkDeleteDialog: false,
+                }));
                 toast({
                   description: `Moved ${selectedIds.length} items to trash`,
                 });
@@ -1311,7 +1599,9 @@ function LibraryPageContent() {
 
       <AlertDialog
         open={showDeleteCollectionDialog}
-        onOpenChange={setShowDeleteCollectionDialog}
+        onOpenChange={(open) =>
+          updateLibraryPageState({ showDeleteCollectionDialog: open })
+        }
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1344,7 +1634,9 @@ function LibraryPageContent() {
 export default function LibraryPage() {
   return (
     <KeyboardShortcutsProvider>
-      <LibraryPageContent />
+      <Suspense fallback={<LibraryRootViewSkeleton />}>
+        <LibraryPageContent />
+      </Suspense>
     </KeyboardShortcutsProvider>
   );
 }

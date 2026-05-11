@@ -1,6 +1,4 @@
 /* eslint-env node */
-/* eslint-disable @typescript-eslint/no-require-imports */
-
 // Sentry error monitoring
 const { withSentryConfig } = require('@sentry/nextjs');
 // Vercel Bot ID protection
@@ -109,6 +107,10 @@ const nextConfig = {
 
   // Enable React strict mode
   reactStrictMode: true,
+
+  // Transpile the workspace shared package so Next.js can resolve its
+  // ESM-style ".js" relative imports back to the original ".ts" sources.
+  transpilePackages: ['@tribora/shared'],
 
   // TODO: Re-enable TypeScript build checks - https://github.com/[org]/recorder/issues/[TBD]
   // Current status: 1,249 type errors across multiple categories (as of 2025-10-19)

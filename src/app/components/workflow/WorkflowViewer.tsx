@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import Image from 'next/image';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { AlertTriangle, Clock, Maximize2 } from 'lucide-react';
 
 import { Badge } from '@/app/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from '@/app/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/app/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import type { WorkflowStep, WorkflowStatus, Database } from '@/lib/types/database';
+import type {
+  WorkflowStep,
+  WorkflowStatus,
+  Database,
+} from '@/lib/types/database';
 
 type WorkflowRow = Database['public']['Tables']['workflows']['Row'];
 
@@ -27,7 +29,10 @@ function formatTimestamp(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-const STATUS_CONFIG: Record<WorkflowStatus, { label: string; className: string }> = {
+const STATUS_CONFIG: Record<
+  WorkflowStatus,
+  { label: string; className: string }
+> = {
   draft: {
     label: 'Draft',
     className: 'bg-muted/50 text-muted-foreground border-border/50',
@@ -38,7 +43,8 @@ const STATUS_CONFIG: Record<WorkflowStatus, { label: string; className: string }
   },
   outdated: {
     label: 'Outdated',
-    className: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30',
+    className:
+      'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30',
   },
   archived: {
     label: 'Archived',
@@ -51,48 +57,34 @@ export default function WorkflowViewer({
   workflow: initialWorkflow,
   supersededByContentId: initialSupersededContentId,
 }: WorkflowViewerProps) {
-  const [workflow, setWorkflow] = useState<WorkflowRow | null>(
-    initialWorkflow ?? null
-  );
-  const [loading, setLoading] = useState(!initialWorkflow);
-  const [error, setError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<number | null>(null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
-  const [supersededContentId, setSupersededContentId] = useState<string | null>(
-    initialSupersededContentId ?? null
-  );
 
-  useEffect(() => {
-    if (initialWorkflow || !workflowId) return;
+  const {
+    data: loadedWorkflow,
+    isLoading,
+    error,
+  } = useQuery<
+    { workflow: WorkflowRow; supersededByContentId?: string | null },
+    Error
+  >({
+    queryKey: ['workflows', workflowId],
+    enabled: !initialWorkflow && Boolean(workflowId),
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`/api/workflows/${workflowId}`, { signal });
+      if (!response.ok) throw new Error('Failed to load workflow');
+      return response.json();
+    },
+  });
 
-    let cancelled = false;
+  const workflow = initialWorkflow ?? loadedWorkflow?.workflow ?? null;
+  const supersededContentId =
+    initialSupersededContentId ?? loadedWorkflow?.supersededByContentId ?? null;
 
-    async function fetchWorkflow() {
-      try {
-        const response = await fetch(`/api/workflows/${workflowId}`);
-        if (!response.ok) throw new Error('Failed to load workflow');
-        const data = await response.json();
-        if (!cancelled) {
-          setWorkflow(data.workflow);
-          setSupersededContentId(data.supersededByContentId ?? null);
-        }
-      } catch {
-        if (!cancelled) setError('Failed to load workflow');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    fetchWorkflow();
-    return () => {
-      cancelled = true;
-    };
-  }, [workflowId, initialWorkflow]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
-        <span className="text-sm">Loading workflow...</span>
+        <span className="text-sm">Loading workflow…</span>
       </div>
     );
   }
@@ -100,13 +92,21 @@ export default function WorkflowViewer({
   if (error || !workflow) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
-        <span className="text-sm">{error ?? 'No workflow available'}</span>
+        <span className="text-sm">
+          {error?.message ?? 'No workflow available'}
+        </span>
       </div>
     );
   }
 
-  const steps = workflow.steps as WorkflowStep[];
-  const statusConfig = STATUS_CONFIG[workflow.status];
+  const steps = (Array.isArray(workflow.steps)
+    ? workflow.steps
+    : []) as unknown as WorkflowStep[];
+  const workflowStatus: WorkflowStatus =
+    workflow.status in STATUS_CONFIG
+      ? (workflow.status as WorkflowStatus)
+      : 'draft';
+  const statusConfig = STATUS_CONFIG[workflowStatus];
   const contentId = workflow.content_id;
 
   return (
@@ -122,7 +122,10 @@ export default function WorkflowViewer({
 
       {workflow.status === 'outdated' && (
         <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-300">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <AlertTriangle
+            className="mt-0.5 size-4 shrink-0"
+            aria-hidden="true"
+          />
           <span>
             This workflow may be outdated. A newer version is available.
             {workflow.superseded_by && (
@@ -163,12 +166,14 @@ export default function WorkflowViewer({
                 {/* Step number bubble — primary interactive element for keyboard/screen readers */}
                 <button
                   type="button"
-                  onClick={() => setActiveStep(isActive ? null : step.stepNumber)}
+                  onClick={() =>
+                    setActiveStep(isActive ? null : step.stepNumber)
+                  }
                   className={cn(
                     'relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-[border-color,background-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 motion-reduce:transition-none',
                     isActive
                       ? 'border-accent bg-accent/20 text-accent shadow-[0_0_12px_rgba(0,223,130,0.3)]'
-                      : 'border-border/50 bg-card text-muted-foreground hover:border-accent/40 hover:text-accent'
+                      : 'border-border/50 bg-card text-muted-foreground hover:border-accent/40 hover:text-accent',
                   )}
                   aria-label={`Step ${step.stepNumber}: ${step.title}`}
                   aria-pressed={isActive}
@@ -180,9 +185,20 @@ export default function WorkflowViewer({
                 <div
                   className={cn(
                     'card-interactive flex-1 cursor-pointer rounded-xl border bg-card p-4 transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none',
-                    isActive && 'border-accent/30 shadow-[0_0_15px_rgba(0,223,130,0.12)]'
+                    isActive &&
+                      'border-accent/30 shadow-[0_0_15px_rgba(0,223,130,0.12)]',
                   )}
-                  onClick={() => setActiveStep(isActive ? null : step.stepNumber)}
+                  onClick={() =>
+                    setActiveStep(isActive ? null : step.stepNumber)
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setActiveStep(isActive ? null : step.stepNumber);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={-1}
                 >
                   <div className="flex flex-wrap items-start gap-2">
                     <h4 className="min-w-0 flex-1 text-sm font-medium leading-snug text-foreground">
@@ -218,12 +234,13 @@ export default function WorkflowViewer({
                         className="group relative block overflow-hidden rounded-lg border border-border/40 transition-colors duration-200 hover:border-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 motion-reduce:transition-none"
                         aria-label={`Expand screenshot for step ${step.stepNumber}`}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <Image
                           src={step.screenshotPath}
                           alt={`Step ${step.stepNumber}: ${step.title}`}
+                          width={600}
+                          height={338}
                           className="block h-auto w-full max-w-[600px] object-contain"
-                          loading="lazy"
+                          unoptimized
                         />
                         <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-[background-color] duration-200 group-hover:bg-black/30 motion-reduce:transition-none">
                           <Maximize2
@@ -237,9 +254,9 @@ export default function WorkflowViewer({
 
                   {step.uiElements && step.uiElements.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {step.uiElements.map((el, i) => (
+                      {step.uiElements.map((el) => (
                         <span
-                          key={i}
+                          key={el}
                           className="inline-flex items-center rounded-md border border-border/40 bg-muted/30 px-2 py-0.5 text-xs text-muted-foreground"
                         >
                           {el}
@@ -258,15 +275,22 @@ export default function WorkflowViewer({
         open={!!expandedImage}
         onOpenChange={() => setExpandedImage(null)}
       >
-        <DialogContent className="max-w-4xl border-border/50 p-2" showCloseButton>
+        <DialogContent
+          className="max-w-4xl border-border/50 p-2"
+          showCloseButton
+        >
           <DialogTitle className="sr-only">Screenshot preview</DialogTitle>
           {expandedImage && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={expandedImage}
-              alt="Full-size screenshot"
-              className="h-auto max-h-[80vh] w-full rounded-lg object-contain"
-            />
+            <div className="relative h-[80vh] w-full">
+              <Image
+                src={expandedImage}
+                alt="Full-size screenshot"
+                fill
+                sizes="min(100vw, 896px)"
+                className="rounded-lg object-contain"
+                unoptimized
+              />
+            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -45,7 +45,7 @@ export function PageDetailClient({ pageId }: Props) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">Loading page detail…</p>
         </div>
       </div>
@@ -62,7 +62,7 @@ export function PageDetailClient({ pageId }: Props) {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
-          <ShieldAlert className="h-4 w-4" />
+          <ShieldAlert className="size-4" />
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       </div>

@@ -1,6 +1,7 @@
 /* global describe, expect, it */
 
 import {
+  DEFAULT_OPENAI_REALTIME_MODEL,
   buildOpenAIRealtimeFunctionOutputEvent,
   buildOpenAIRealtimeSessionConfig,
   extractOpenAIRealtimeToolCalls,
@@ -11,10 +12,12 @@ describe('OpenAI Realtime extension helpers', () => {
     const session = buildOpenAIRealtimeSessionConfig({
       model: 'gpt-realtime-test',
       voice: 'sage',
+      reasoningEffort: 'low',
     });
 
     expect(session.model).toBe('gpt-realtime-test');
     expect(session.output_modalities).toEqual(['audio']);
+    expect(session.reasoning).toEqual({ effort: 'low' });
     expect(session.instructions).toEqual(
       expect.stringContaining('You are Tribora'),
     );
@@ -40,6 +43,7 @@ describe('OpenAI Realtime extension helpers', () => {
     expect(tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining([
         'get_page_context',
+        'answer_with_knowledge',
         'search_page_elements',
         'inspect_element',
         'inspect_page_region',
@@ -52,6 +56,16 @@ describe('OpenAI Realtime extension helpers', () => {
     expect(
       tools.every((tool) => tool.parameters.additionalProperties === false),
     ).toBe(true);
+  });
+
+  it('defaults the OpenAI pilot to Realtime 2 with low reasoning', () => {
+    const session = buildOpenAIRealtimeSessionConfig();
+
+    expect(DEFAULT_OPENAI_REALTIME_MODEL).toBe('gpt-realtime-2');
+    expect(session).toMatchObject({
+      model: 'gpt-realtime-2',
+      reasoning: { effort: 'low' },
+    });
   });
 
   it('extracts function calls from output item and response done events', () => {

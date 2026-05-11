@@ -4,8 +4,10 @@ import { apiHandler, requireAuth, successResponse } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { userId } = await requireAuth();
-  const supabase = await createClient();
+  const [{ userId }, supabase] = await Promise.all([
+    requireAuth(),
+    createClient(),
+  ]);
 
   const { searchParams } = new URL(request.url);
   const timeRange = searchParams.get('timeRange') || '30d';

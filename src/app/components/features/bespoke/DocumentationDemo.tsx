@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { type Dispatch, useEffect, useReducer } from 'react';
 import * as motion from 'motion/react-client';
 import { AnimatePresence } from 'motion/react';
 import {
@@ -17,7 +17,12 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
@@ -154,7 +159,9 @@ function parseMarkdownSections(markdown: string): DocSection[] {
     }
     // List items
     else if (line.startsWith('- ') || line.match(/^\d+\.\s/)) {
-      const listContent = line.startsWith('- ') ? line.slice(2) : line.replace(/^\d+\.\s/, '');
+      const listContent = line.startsWith('- ')
+        ? line.slice(2)
+        : line.replace(/^\d+\.\s/, '');
       if (currentSection?.type === 'list') {
         currentSection.items?.push(listContent);
       } else {
@@ -174,54 +181,105 @@ function parseMarkdownSections(markdown: string): DocSection[] {
   return sections;
 }
 
+type DocumentationDemoState = {
+  isExpanded: boolean;
+  isGenerating: boolean;
+  visibleSections: number;
+  copied: boolean;
+  showSummary: boolean;
+  status: 'generating' | 'generated';
+};
+
+type DocumentationDemoAction =
+  | { type: 'patch'; patch: Partial<DocumentationDemoState> }
+  | { type: 'toggle-expanded' };
+
+const initialDocumentationDemoState: DocumentationDemoState = {
+  isExpanded: true,
+  isGenerating: true,
+  visibleSections: 0,
+  copied: false,
+  showSummary: false,
+  status: 'generating',
+};
+
+function documentationDemoReducer(
+  state: DocumentationDemoState,
+  action: DocumentationDemoAction,
+): DocumentationDemoState {
+  if (action.type === 'toggle-expanded') {
+    return { ...state, isExpanded: !state.isExpanded };
+  }
+
+  return { ...state, ...action.patch };
+}
+
+function scheduleDocumentationReveal(
+  sectionsCount: number,
+  dispatch: Dispatch<DocumentationDemoAction>,
+) {
+  const summaryTimer = setTimeout(() => {
+    dispatch({ type: 'patch', patch: { showSummary: true } });
+  }, 800);
+
+  const sectionTimers = Array.from({ length: sectionsCount }, (_, index) =>
+    setTimeout(
+      () =>
+        dispatch({
+          type: 'patch',
+          patch: { visibleSections: index + 1 },
+        }),
+      1200 + index * 400,
+    ),
+  );
+
+  const completeTimer = setTimeout(
+    () =>
+      dispatch({
+        type: 'patch',
+        patch: { isGenerating: false, status: 'generated' },
+      }),
+    1200 + sectionsCount * 400 + 500,
+  );
+
+  return () => {
+    clearTimeout(summaryTimer);
+    sectionTimers.forEach(clearTimeout);
+    clearTimeout(completeTimer);
+  };
+}
+
 export function DocumentationDemo() {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(true);
-  const [visibleSections, setVisibleSections] = useState(0);
-  const [copied, setCopied] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
-  const [status, setStatus] = useState<'generating' | 'generated'>('generating');
+  return useDocumentationDemoImplementation();
+}
+
+function useDocumentationDemoImplementation() {
+  const [state, dispatch] = useReducer(
+    documentationDemoReducer,
+    initialDocumentationDemoState,
+  );
+  const {
+    isExpanded,
+    isGenerating,
+    visibleSections,
+    copied,
+    showSummary,
+    status,
+  } = state;
 
   const sections = parseMarkdownSections(MOCK_DOCUMENT.markdown);
 
   // Progressive reveal animation
   useEffect(() => {
-    // Start generating after a short delay
-    const summaryTimer = setTimeout(() => {
-      setShowSummary(true);
-    }, 800);
-
-    // Reveal sections progressively
-    const sectionTimers: NodeJS.Timeout[] = [];
-    sections.forEach((_, index) => {
-      const timer = setTimeout(
-        () => {
-          setVisibleSections(index + 1);
-        },
-        1200 + index * 400
-      );
-      sectionTimers.push(timer);
-    });
-
-    // Mark as complete
-    const completeTimer = setTimeout(
-      () => {
-        setIsGenerating(false);
-        setStatus('generated');
-      },
-      1200 + sections.length * 400 + 500
-    );
-
-    return () => {
-      clearTimeout(summaryTimer);
-      sectionTimers.forEach(clearTimeout);
-      clearTimeout(completeTimer);
-    };
+    return scheduleDocumentationReveal(sections.length, dispatch);
   }, [sections.length]);
 
   const handleCopy = () => {
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    dispatch({ type: 'patch', patch: { copied: true } });
+    setTimeout(
+      () => dispatch({ type: 'patch', patch: { copied: false } }),
+      2000,
+    );
   };
 
   const visibleContent = sections.slice(0, visibleSections);
@@ -252,14 +310,13 @@ export function DocumentationDemo() {
               className="inline-flex items-center gap-2 mb-4 px-4 py-2 rounded-full
                 bg-accent/10 border border-accent/30"
             >
-              <FileText className="h-4 w-4 text-accent" />
-              <span className="text-sm font-medium text-accent">Auto Documentation</span>
+              <FileText className="size-4 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                Auto Documentation
+              </span>
             </div>
             <h3 className="font-outfit text-2xl sm:text-3xl font-light mb-2">
-              Watch docs{' '}
-              <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                generate
-              </span>
+              Watch docs <span className=" text-primary">generate</span>
             </h3>
             <p className="text-muted-foreground">
               Recording to structured documentation in seconds
@@ -277,18 +334,22 @@ export function DocumentationDemo() {
               className={cn(
                 'overflow-hidden',
                 'border-accent/20',
-                'shadow-[0_0_80px_rgba(0,223,130,0.15)]'
+                'shadow-[0_0_80px_rgba(0,223,130,0.15)]',
               )}
             >
               <CardHeader>
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <Sparkles className="size-4 text-primary" />
-                    <CardTitle className="text-base">AI-Generated Document</CardTitle>
-                    <Badge variant={status === 'generated' ? 'default' : 'secondary'}>
+                    <CardTitle className="text-base">
+                      AI-Generated Document
+                    </CardTitle>
+                    <Badge
+                      variant={status === 'generated' ? 'default' : 'secondary'}
+                    >
                       {status === 'generating' ? (
                         <span className="flex items-center gap-1">
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="size-3 animate-spin" />
                           generating
                         </span>
                       ) : (
@@ -300,7 +361,7 @@ export function DocumentationDemo() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setIsExpanded(!isExpanded)}
+                    onClick={() => dispatch({ type: 'toggle-expanded' })}
                   >
                     {isExpanded ? (
                       <ChevronUp className="size-4" />
@@ -328,7 +389,9 @@ export function DocumentationDemo() {
                             animate={{ opacity: 1, y: 0 }}
                             className="p-4 bg-muted/50 rounded-lg border"
                           >
-                            <p className="text-sm font-semibold mb-2">Summary</p>
+                            <p className="text-sm font-semibold mb-2">
+                              Summary
+                            </p>
                             <p className="text-sm text-muted-foreground leading-relaxed">
                               {MOCK_DOCUMENT.summary}
                             </p>
@@ -351,11 +414,19 @@ export function DocumentationDemo() {
                           )}
                           Copy
                         </Button>
-                        <Button variant="outline" size="sm" title="Download as Markdown">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          title="Download as Markdown"
+                        >
                           <Download className="size-4" />
                           Markdown
                         </Button>
-                        <Button variant="outline" size="sm" title="Download as HTML">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          title="Download as HTML"
+                        >
                           <FileText className="size-4" />
                           HTML
                         </Button>
@@ -380,60 +451,79 @@ export function DocumentationDemo() {
                           <AnimatePresence>
                             {visibleContent.map((section, index) => (
                               <motion.div
-                                key={index}
+                                key={JSON.stringify(section)}
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.3 }}
                               >
-                                {section.type === 'heading' && section.level === 1 && (
-                                  <h1 className="text-xl font-semibold text-foreground mb-4 mt-0">
-                                    {section.content}
-                                  </h1>
-                                )}
-                                {section.type === 'heading' && section.level === 2 && (
-                                  <h2 className="text-lg font-medium text-foreground mt-6 mb-3">
-                                    {section.content}
-                                  </h2>
-                                )}
-                                {section.type === 'heading' && section.level === 3 && (
-                                  <h3 className="text-base font-medium text-foreground mt-4 mb-2">
-                                    {section.content}
-                                  </h3>
-                                )}
+                                {section.type === 'heading' &&
+                                  section.level === 1 && (
+                                    <h1 className="text-xl font-semibold text-foreground mb-4 mt-0">
+                                      {section.content}
+                                    </h1>
+                                  )}
+                                {section.type === 'heading' &&
+                                  section.level === 2 && (
+                                    <h2 className="text-lg font-medium text-foreground mt-6 mb-3">
+                                      {section.content}
+                                    </h2>
+                                  )}
+                                {section.type === 'heading' &&
+                                  section.level === 3 && (
+                                    <h3 className="text-base font-medium text-foreground mt-4 mb-2">
+                                      {section.content}
+                                    </h3>
+                                  )}
                                 {section.type === 'paragraph' && (
                                   <p className="text-sm text-muted-foreground leading-relaxed mb-3">
                                     {/* Handle bold text */}
-                                    {section.content.split(/(\*\*[^*]+\*\*)/).map((part, i) => {
-                                      if (part.startsWith('**') && part.endsWith('**')) {
-                                        return (
-                                          <strong key={i} className="text-foreground">
-                                            {part.slice(2, -2)}
-                                          </strong>
-                                        );
-                                      }
-                                      return part;
-                                    })}
+                                    {section.content
+                                      .split(/(\*\*[^*]+\*\*)/)
+                                      .map((part, i) => {
+                                        if (
+                                          part.startsWith('**') &&
+                                          part.endsWith('**')
+                                        ) {
+                                          return (
+                                            <strong
+                                              key={JSON.stringify(part)}
+                                              className="text-foreground"
+                                            >
+                                              {part.slice(2, -2)}
+                                            </strong>
+                                          );
+                                        }
+                                        return part;
+                                      })}
                                   </p>
                                 )}
                                 {section.type === 'list' && section.items && (
                                   <ul className="space-y-1.5 mb-4 list-none pl-0">
                                     {section.items.map((item, i) => (
                                       <li
-                                        key={i}
+                                        key={JSON.stringify(item)}
                                         className="flex items-start gap-2 text-sm text-muted-foreground"
                                       >
-                                        <span className="shrink-0 mt-2 w-1.5 h-1.5 rounded-full bg-accent" />
+                                        <span className="shrink-0 mt-2 size-1.5 rounded-full bg-accent" />
                                         {/* Handle bold text in list items */}
-                                        {item.split(/(\*\*[^*]+\*\*)/).map((part, j) => {
-                                          if (part.startsWith('**') && part.endsWith('**')) {
-                                            return (
-                                              <strong key={j} className="text-foreground">
-                                                {part.slice(2, -2)}
-                                              </strong>
-                                            );
-                                          }
-                                          return part;
-                                        })}
+                                        {item
+                                          .split(/(\*\*[^*]+\*\*)/)
+                                          .map((part, j) => {
+                                            if (
+                                              part.startsWith('**') &&
+                                              part.endsWith('**')
+                                            ) {
+                                              return (
+                                                <strong
+                                                  key={j}
+                                                  className="text-foreground"
+                                                >
+                                                  {part.slice(2, -2)}
+                                                </strong>
+                                              );
+                                            }
+                                            return part;
+                                          })}
                                       </li>
                                     ))}
                                   </ul>
@@ -441,13 +531,15 @@ export function DocumentationDemo() {
                                 {section.type === 'code' && (
                                   <div className="relative rounded-lg overflow-hidden mb-4 bg-background border border-border/50">
                                     <div className="flex items-center gap-2 px-3 py-2 border-b border-border/30 bg-muted/30">
-                                      <Code className="h-3.5 w-3.5 text-muted-foreground" />
+                                      <Code className="size-3.5 text-muted-foreground" />
                                       <span className="text-xs text-muted-foreground font-mono">
                                         {section.language}
                                       </span>
                                     </div>
                                     <pre className="p-4 text-sm font-mono overflow-x-auto">
-                                      <code className="text-accent">{section.content}</code>
+                                      <code className="text-accent">
+                                        {section.content}
+                                      </code>
                                     </pre>
                                   </div>
                                 )}

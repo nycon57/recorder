@@ -10,7 +10,7 @@ import { z } from 'zod';
 /**
  * Schema for answerQuestion tool input
  */
-export const answerQuestionInputSchema = z.object({
+const answerQuestionInputSchema = z.object({
   question: z
     .string()
     .min(1, 'Question is required')
@@ -236,7 +236,7 @@ export const exploreKnowledgeGraphInputSchema = z.object({
 /**
  * Schema for tool response wrapper
  */
-export const toolResponseSchema = z.object({
+const toolResponseSchema = z.object({
   success: z.boolean().describe('Whether the operation succeeded'),
   data: z.any().optional().describe('The result data'),
   error: z.string().optional().describe('Error message if failed'),
@@ -260,13 +260,13 @@ export const toolResponseSchema = z.object({
 /**
  * Type exports for TypeScript
  */
-export type SearchRecordingsInput = z.infer<typeof searchRecordingsInputSchema>;
-export type AnswerQuestionInput = z.infer<typeof answerQuestionInputSchema>;
-export type GetDocumentInput = z.infer<typeof getDocumentInputSchema>;
-export type GetTranscriptInput = z.infer<typeof getTranscriptInputSchema>;
-export type GetRecordingMetadataInput = z.infer<typeof getRecordingMetadataInputSchema>;
-export type ListRecordingsInput = z.infer<typeof listRecordingsInputSchema>;
-export type SearchConceptsInput = z.infer<typeof searchConceptsInputSchema>;
-export type GetConceptDetailsInput = z.infer<typeof getConceptDetailsInputSchema>;
-export type ExploreKnowledgeGraphInput = z.infer<typeof exploreKnowledgeGraphInputSchema>;
-export type ToolResponse = z.infer<typeof toolResponseSchema>;
+type SearchRecordingsInput = z.infer<typeof searchRecordingsInputSchema>;
+type AnswerQuestionInput = z.infer<typeof answerQuestionInputSchema>;
+type GetDocumentInput = z.infer<typeof getDocumentInputSchema>;
+type GetTranscriptInput = z.infer<typeof getTranscriptInputSchema>;
+type GetRecordingMetadataInput = z.infer<typeof getRecordingMetadataInputSchema>;
+type ListRecordingsInput = z.infer<typeof listRecordingsInputSchema>;
+type SearchConceptsInput = z.infer<typeof searchConceptsInputSchema>;
+type GetConceptDetailsInput = z.infer<typeof getConceptDetailsInputSchema>;
+type ExploreKnowledgeGraphInput = z.infer<typeof exploreKnowledgeGraphInputSchema>;
+type ToolResponse = z.infer<typeof toolResponseSchema>;

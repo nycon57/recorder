@@ -56,6 +56,10 @@ import {
   FrameExtractionMetadata,
 } from '@/lib/types/video-frames';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 /**
  * GET /api/recordings/[id]/frames/status
  *
@@ -72,11 +76,13 @@ import {
 export const GET = apiHandler(
   async (
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
   ) => {
-    const { orgId } = await requireOrg();
-    const { id: recordingId } = await params;
-    const supabase = await createClient();
+    const [{ orgId }, { id: recordingId }, supabase] = await Promise.all([
+      requireOrg(),
+      params,
+      createClient(),
+    ]);
 
     // Verify recording exists and user has access
     const { data: recording, error: recordingError } = await supabase
@@ -91,21 +97,21 @@ export const GET = apiHandler(
     }
 
     // Check for frame extraction job
-    const { data: frameJob } = await supabaseAdmin
-      .from('jobs')
-      .select('status, payload, result, error, started_at, completed_at')
-      .eq('type', 'extract_frames')
-      .eq('payload->>recordingId', recordingId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    // Get current frame count
-    const { count: frameCount } = await supabaseAdmin
-      .from('video_frames')
-      .select('*', { count: 'exact', head: true })
-      .eq('content_id', recordingId)
-      .eq('org_id', orgId);
+    const [{ data: frameJob }, { count: frameCount }] = await Promise.all([
+      supabaseAdmin
+        .from('jobs')
+        .select('status, payload, result, error, started_at, completed_at')
+        .eq('type', 'extract_frames')
+        .eq('payload->>recordingId', recordingId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single(),
+      supabaseAdmin
+        .from('video_frames')
+        .select('*', { count: 'exact', head: true })
+        .eq('content_id', recordingId)
+        .eq('org_id', orgId),
+    ]);
 
     const totalFrames = frameCount || 0;
     const framesExtracted = totalFrames > 0;
@@ -131,7 +137,7 @@ export const GET = apiHandler(
           const payload = frameJob.payload as any;
           const extractionRate = payload.extractionRate || 1; // frames per second
           const expectedTotal = Math.ceil(
-            recording.duration_sec * extractionRate
+            recording.duration_sec * extractionRate,
           );
 
           progress = {
@@ -159,11 +165,17 @@ export const GET = apiHandler(
     }
 
     // Build metadata response
+    const jobPayload = frameJob?.payload;
+    const extractionRate =
+      isRecord(jobPayload) && typeof jobPayload.extractionRate === 'number'
+        ? jobPayload.extractionRate
+        : undefined;
+
     const metadata: FrameExtractionMetadata = {
       status,
       frameCount: totalFrames,
       framesExtracted,
-      extractionRate: frameJob?.payload?.extractionRate,
+      extractionRate,
       totalDuration: recording.duration_sec || undefined,
       startedAt: frameJob?.started_at || undefined,
       completedAt: frameJob?.completed_at || undefined,
@@ -177,5 +189,5 @@ export const GET = apiHandler(
     }
 
     return successResponse(metadata);
-  }
+  },
 );

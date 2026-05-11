@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Skeleton } from '@/app/components/ui/skeleton';
 
 interface Service {
@@ -15,84 +21,36 @@ interface Service {
 }
 
 export default function ServiceStatusGrid() {
-  const [services, setServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const timeoutIdRef = useRef<NodeJS.Timeout | null>(null);
+  const {
+    data: services = [],
+    isLoading,
+    error,
+  } = useQuery<Service[], Error>({
+    queryKey: ['analytics', 'metrics', 'services'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        '/api/analytics/metrics?includeHealth=true',
+        { signal },
+      );
 
-  useEffect(() => {
-    const fetchServices = async () => {
-      // Create new AbortController for this fetch
-      abortControllerRef.current = new AbortController();
-      const controller = abortControllerRef.current;
-
-      // Set timeout to abort after 15 seconds
-      timeoutIdRef.current = setTimeout(() => {
-        controller.abort();
-      }, 15000);
-
-      try {
-        const response = await fetch('/api/analytics/metrics?includeHealth=true', {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch service status');
-        }
-
-        const { data } = await response.json();
-        setServices(data.health?.services || []);
-        setError(null);
-
-        // Clear timeout on success
-        if (timeoutIdRef.current) {
-          clearTimeout(timeoutIdRef.current);
-          timeoutIdRef.current = null;
-        }
-      } catch (err) {
-        // Handle abort specifically
-        if (err instanceof Error && err.name === 'AbortError') {
-          setError('Request timed out. Please check your connection.');
-        } else {
-          // Log only sanitized message, not full error object
-          console.error('Service status fetch error:', err instanceof Error ? err.message : 'Unknown error');
-          setError('Failed to load service status');
-        }
-      } finally {
-        // Clear timeout if still set
-        if (timeoutIdRef.current) {
-          clearTimeout(timeoutIdRef.current);
-          timeoutIdRef.current = null;
-        }
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch service status');
       }
-    };
 
-    fetchServices();
-
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchServices, 30000);
-
-    return () => {
-      clearInterval(interval);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      if (timeoutIdRef.current) {
-        clearTimeout(timeoutIdRef.current);
-      }
-    };
-  }, []);
+      const { data } = await response.json();
+      return data.health?.services || [];
+    },
+    refetchInterval: 30000,
+  });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'operational':
-        return <CheckCircle2 className="h-5 w-5 text-green-600" />;
+        return <CheckCircle2 className="size-5 text-green-600" />;
       case 'degraded':
-        return <Loader2 className="h-5 w-5 text-yellow-600 animate-spin" />;
+        return <Loader2 className="size-5 text-yellow-600 animate-spin" />;
       case 'down':
-        return <XCircle className="h-5 w-5 text-red-600" />;
+        return <XCircle className="size-5 text-red-600" />;
       default:
         return null;
     }
@@ -137,7 +95,7 @@ export default function ServiceStatusGrid() {
     return `${diffHours}h ago`;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -146,8 +104,15 @@ export default function ServiceStatusGrid() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="h-32 w-full" />
+            {[
+              'service-1',
+              'service-2',
+              'service-3',
+              'service-4',
+              'service-5',
+              'service-6',
+            ].map((skeletonId) => (
+              <Skeleton key={skeletonId} className="h-32 w-full" />
             ))}
           </div>
         </CardContent>
@@ -159,7 +124,9 @@ export default function ServiceStatusGrid() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading service status: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading service status: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -187,10 +154,14 @@ export default function ServiceStatusGrid() {
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-xs font-medium">{getStatusLabel(service.status)}</p>
+                  <p className="text-xs font-medium">
+                    {getStatusLabel(service.status)}
+                  </p>
                   <div className="flex justify-between items-center text-xs text-muted-foreground">
                     <span>Uptime</span>
-                    <span className="font-medium">{service.uptime.toFixed(2)}%</span>
+                    <span className="font-medium">
+                      {service.uptime.toFixed(2)}%
+                    </span>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Checked {formatTimestamp(service.lastChecked)}

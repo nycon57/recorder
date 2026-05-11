@@ -11,7 +11,7 @@ import type { Variants, Transition, Easing } from 'motion/react';
 /**
  * Easing presets - typed as tuples for framer-motion compatibility
  */
-export const easings = {
+const easings = {
   // Standard easing for most animations
   standard: [0.4, 0, 0.2, 1] as Easing,
   // Emphasized easing for important elements
@@ -27,7 +27,7 @@ export const easings = {
 /**
  * Duration presets (in seconds)
  */
-export const durations = {
+const durations = {
   fast: 0.15,
   normal: 0.25,
   slow: 0.35,
@@ -66,7 +66,7 @@ export const messageVariants: Variants = {
 /**
  * Collapsible section variants
  */
-export const collapsibleVariants: Variants = {
+const collapsibleVariants: Variants = {
   collapsed: {
     height: 0,
     opacity: 0,
@@ -101,7 +101,7 @@ export const collapsibleVariants: Variants = {
 /**
  * Button hover/tap variants
  */
-export const buttonVariants: Variants = {
+const buttonVariants: Variants = {
   idle: {
     scale: 1,
   },
@@ -124,7 +124,7 @@ export const buttonVariants: Variants = {
 /**
  * Icon button variants (smaller scale changes)
  */
-export const iconButtonVariants: Variants = {
+const iconButtonVariants: Variants = {
   idle: {
     scale: 1,
     rotate: 0,
@@ -149,7 +149,7 @@ export const iconButtonVariants: Variants = {
 /**
  * Fade in/out variants
  */
-export const fadeVariants: Variants = {
+const fadeVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -170,7 +170,7 @@ export const fadeVariants: Variants = {
 /**
  * Slide in from bottom variants
  */
-export const slideUpVariants: Variants = {
+const slideUpVariants: Variants = {
   hidden: {
     y: 50,
     opacity: 0,
@@ -196,7 +196,7 @@ export const slideUpVariants: Variants = {
 /**
  * Scale and fade variants (for modals, dropdowns)
  */
-export const scaleVariants: Variants = {
+const scaleVariants: Variants = {
   hidden: {
     scale: 0.8,
     opacity: 0,
@@ -222,7 +222,7 @@ export const scaleVariants: Variants = {
 /**
  * Stagger children animation
  */
-export const staggerContainerVariants: Variants = {
+const staggerContainerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -233,7 +233,7 @@ export const staggerContainerVariants: Variants = {
   },
 };
 
-export const staggerItemVariants: Variants = {
+const staggerItemVariants: Variants = {
   hidden: {
     opacity: 0,
     y: 10,
@@ -251,7 +251,7 @@ export const staggerItemVariants: Variants = {
 /**
  * Pulse animation (for notifications, badges)
  */
-export const pulseVariants: Variants = {
+const pulseVariants: Variants = {
   idle: {
     scale: 1,
   },
@@ -268,7 +268,7 @@ export const pulseVariants: Variants = {
 /**
  * Shimmer animation (for loading states)
  */
-export const shimmerTransition: Transition = {
+const shimmerTransition: Transition = {
   duration: 1.5,
   repeat: Infinity,
   ease: 'linear',
@@ -277,7 +277,7 @@ export const shimmerTransition: Transition = {
 /**
  * Bounce entrance animation
  */
-export const bounceVariants: Variants = {
+const bounceVariants: Variants = {
   hidden: {
     scale: 0,
     opacity: 0,
@@ -295,7 +295,7 @@ export const bounceVariants: Variants = {
 /**
  * Shake animation (for errors)
  */
-export const shakeVariants: Variants = {
+const shakeVariants: Variants = {
   idle: {
     x: 0,
   },
@@ -311,7 +311,7 @@ export const shakeVariants: Variants = {
 /**
  * Rotate variants (for icons)
  */
-export const rotateVariants: Variants = {
+const rotateVariants: Variants = {
   idle: {
     rotate: 0,
   },
@@ -342,7 +342,7 @@ export const rotateVariants: Variants = {
 /**
  * Notification/Toast variants (slide in from top)
  */
-export const toastVariants: Variants = {
+const toastVariants: Variants = {
   hidden: {
     y: -100,
     opacity: 0,
@@ -372,7 +372,7 @@ export const toastVariants: Variants = {
 /**
  * Page transition variants
  */
-export const pageVariants: Variants = {
+const pageVariants: Variants = {
   hidden: {
     opacity: 0,
     x: -20,
@@ -398,7 +398,7 @@ export const pageVariants: Variants = {
 /**
  * Confetti/celebration animation
  */
-export const celebrationVariants: Variants = {
+const celebrationVariants: Variants = {
   idle: {
     scale: 1,
     rotate: 0,
@@ -418,7 +418,7 @@ export const celebrationVariants: Variants = {
 /**
  * Helper function to create spring animation
  */
-export const springTransition = (
+const springTransition = (
   stiffness: number = 400,
   damping: number = 30
 ): Transition => ({
@@ -430,7 +430,7 @@ export const springTransition = (
 /**
  * Helper function to create custom duration transition
  */
-export const customDuration = (
+const customDuration = (
   duration: number,
   ease: Easing = easings.emphasized
 ): Transition => ({
@@ -471,7 +471,7 @@ export function usePrefersReducedMotion(): boolean {
  * Get animation variants with reduced motion support
  * Note: Use usePrefersReducedMotion() hook in components instead of this function
  */
-export const getVariants = (variants: Variants, prefersReducedMotion: boolean): Variants => {
+const getVariants = (variants: Variants, prefersReducedMotion: boolean): Variants => {
   if (prefersReducedMotion) {
     // Return simplified animations for reduced motion preference
     return {

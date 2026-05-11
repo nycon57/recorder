@@ -132,8 +132,10 @@ describe('/api/mcp route', () => {
       },
     });
 
-    const firstResponse = await POST(firstRequest);
-    const secondResponse = await GET(secondRequest);
+    const [firstResponse, secondResponse] = await Promise.all([
+      POST(firstRequest),
+      GET(secondRequest),
+    ]);
 
     expect(firstResponse.status).toBe(200);
     expect(secondResponse.status).toBe(200);
@@ -187,7 +189,9 @@ describe('/api/mcp route', () => {
 
     expect(response.status).toBe(204);
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
-    expect(response.headers.get('access-control-allow-methods')).toContain('POST');
+    expect(response.headers.get('access-control-allow-methods')).toContain(
+      'POST',
+    );
     expect(response.headers.get('access-control-allow-headers')).toContain(
       'Authorization',
     );

@@ -41,7 +41,7 @@ export interface ProcessingStageConfig {
  * Condensed from 5+ technical steps to 3 high-level stages users understand.
  * Each stage represents a meaningful milestone in the user journey.
  */
-export const SIMPLIFIED_STAGES: ProcessingStageConfig[] = [
+const SIMPLIFIED_STAGES: ProcessingStageConfig[] = [
   {
     id: 'upload',
     label: 'Uploading',
@@ -87,7 +87,7 @@ export const SIMPLIFIED_STAGES: ProcessingStageConfig[] = [
  * These map backend job types to user-friendly descriptions.
  * Used when showing more granular progress (optional detailed view).
  */
-export const DETAILED_STAGE_CONFIGS: Record<string, ProcessingStageConfig> = {
+const DETAILED_STAGE_CONFIGS: Record<string, ProcessingStageConfig> = {
   upload: {
     id: 'upload',
     label: 'Uploading your file',
@@ -217,7 +217,7 @@ export const JOB_TYPE_TO_STAGE: Record<string, string> = {
 /**
  * Map detailed stages to simplified stages
  */
-export const DETAILED_TO_SIMPLIFIED: Record<string, string> = {
+const DETAILED_TO_SIMPLIFIED: Record<string, string> = {
   upload: 'upload',
   extract_audio: 'processing',
   transcribe: 'processing',
@@ -233,7 +233,7 @@ export const DETAILED_TO_SIMPLIFIED: Record<string, string> = {
  *
  * Customize stage labels based on content type for more relevant messaging.
  */
-export const getContentTypeStages = (contentType: string): ProcessingStageConfig[] => {
+const getContentTypeStages = (contentType: string): ProcessingStageConfig[] => {
   switch (contentType) {
     case 'video':
     case 'recording':
@@ -299,7 +299,7 @@ export const getContentTypeStages = (contentType: string): ProcessingStageConfig
  * Educational content shown during long processing times.
  * Helps users understand what they'll be able to do when processing completes.
  */
-export const PROCESSING_TIPS = [
+const PROCESSING_TIPS = [
   '💡 Tip: Your content will be searchable with our AI assistant',
   '💡 Tip: You can chat with your content once processing completes',
   '💡 Tip: Summaries are automatically generated for easy reference',
@@ -336,14 +336,14 @@ export const STATUS_MESSAGES = {
 /**
  * Get user-friendly label for a stage
  */
-export function getStageLabel(stageId: string): string {
+function getStageLabel(stageId: string): string {
   return DETAILED_STAGE_CONFIGS[stageId]?.label || stageId;
 }
 
 /**
  * Get user-friendly benefit for a stage
  */
-export function getStageBenefit(stageId: string): string {
+function getStageBenefit(stageId: string): string {
   return DETAILED_STAGE_CONFIGS[stageId]?.benefit || '';
 }
 

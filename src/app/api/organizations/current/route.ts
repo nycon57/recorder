@@ -16,7 +16,9 @@ import { updateOrganizationSchema } from '@/lib/validations/organizations';
 type JsonObject = { [key: string]: Json | undefined };
 
 const asJsonObject = (value: Json | null | undefined): JsonObject =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {};
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value
+    : {};
 
 /**
  * GET /api/organizations/current
@@ -48,14 +50,17 @@ export const GET = apiHandler(async () => {
       onboarded_at,
       created_at,
       updated_at
-    `
+    `,
     )
     .eq('id', orgId)
     .is('deleted_at', null)
     .single();
 
   if (error || !organization) {
-    console.error('[GET /api/organizations/current] Error fetching organization:', error);
+    console.error(
+      '[GET /api/organizations/current] Error fetching organization:',
+      error,
+    );
     return errors.notFound('Organization');
   }
 
@@ -67,10 +72,13 @@ export const GET = apiHandler(async () => {
  * Update current organization (admin+ only)
  */
 export const PATCH = apiHandler(async (request: NextRequest) => {
-  const { orgId } = await requireAdmin();
-
-  // Parse and validate request body
-  const bodyData = await parseBody<z.infer<typeof updateOrganizationSchema>>(request, updateOrganizationSchema);
+  const [{ orgId }, bodyData] = await Promise.all([
+    requireAdmin(),
+    parseBody<z.infer<typeof updateOrganizationSchema>>(
+      request,
+      updateOrganizationSchema,
+    ),
+  ]);
 
   // Build update object (only include provided fields)
   const updates: Record<string, Json | string | null> = {
@@ -79,9 +87,11 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
   if (bodyData.name !== undefined) updates.name = bodyData.name;
   if (bodyData.logo_url !== undefined) updates.logo_url = bodyData.logo_url;
-  if (bodyData.primary_color !== undefined) updates.primary_color = bodyData.primary_color;
+  if (bodyData.primary_color !== undefined)
+    updates.primary_color = bodyData.primary_color;
   if (bodyData.domain !== undefined) updates.domain = bodyData.domain;
-  if (bodyData.billing_email !== undefined) updates.billing_email = bodyData.billing_email;
+  if (bodyData.billing_email !== undefined)
+    updates.billing_email = bodyData.billing_email;
 
   // Handle features - merge with existing
   if (bodyData.features) {
@@ -122,12 +132,17 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       .single();
 
     if (domainCheckError && domainCheckError.code !== 'PGRST116') {
-      console.error('[PATCH /api/organizations/current] Error checking domain:', domainCheckError);
+      console.error(
+        '[PATCH /api/organizations/current] Error checking domain:',
+        domainCheckError,
+      );
       return errors.internalError();
     }
 
     if (existingOrg) {
-      return errors.badRequest('Domain is already in use by another organization');
+      return errors.badRequest(
+        'Domain is already in use by another organization',
+      );
     }
   }
 
@@ -157,12 +172,15 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
       onboarded_at,
       created_at,
       updated_at
-    `
+    `,
     )
     .single();
 
   if (updateError || !updatedOrg) {
-    console.error('[PATCH /api/organizations/current] Error updating organization:', updateError);
+    console.error(
+      '[PATCH /api/organizations/current] Error updating organization:',
+      updateError,
+    );
     return errors.internalError();
   }
 

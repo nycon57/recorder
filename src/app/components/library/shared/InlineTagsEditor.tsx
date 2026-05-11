@@ -46,6 +46,8 @@ interface InlineTagsEditorProps {
   readOnly?: boolean;
 }
 
+const EMPTY_TAGS: Tag[] = [];
+
 /**
  * InlineTagsEditor - Edit tags directly without modal
  *
@@ -77,15 +79,37 @@ export default function InlineTagsEditor({
   onTagsChange,
   onAddTag,
   onRemoveTag,
-  availableTags = [],
+  availableTags = EMPTY_TAGS,
   className,
   readOnly = false,
 }: InlineTagsEditorProps) {
-  const [isAdding, setIsAdding] = React.useState(false);
-  const [newTagName, setNewTagName] = React.useState('');
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const [state, dispatch] = React.useReducer(
+    (
+      current: {
+        isAdding: boolean;
+        newTagName: string;
+        isTagMutationPending: boolean;
+        error: string | null;
+        showSuggestions: boolean;
+      },
+      patch: Partial<{
+        isAdding: boolean;
+        newTagName: string;
+        isTagMutationPending: boolean;
+        error: string | null;
+        showSuggestions: boolean;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      isAdding: false,
+      newTagName: '',
+      isTagMutationPending: false,
+      error: null,
+      showSuggestions: false,
+    },
+  );
+  const { isAdding, newTagName, isTagMutationPending, error, showSuggestions } =
+    state;
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   // Filter suggestions based on input and existing tags
@@ -103,73 +127,67 @@ export default function InlineTagsEditor({
       .slice(0, 5);
   }, [newTagName, tags, availableTags]);
 
-  // Focus input when entering add mode
-  React.useEffect(() => {
-    if (isAdding) {
-      inputRef.current?.focus();
-    }
-  }, [isAdding]);
-
   const handleStartAdding = () => {
-    setIsAdding(true);
-    setError(null);
+    dispatch({ isAdding: true, error: null });
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const handleCancelAdding = () => {
-    setIsAdding(false);
-    setNewTagName('');
-    setError(null);
-    setShowSuggestions(false);
+    dispatch({
+      isAdding: false,
+      newTagName: '',
+      error: null,
+      showSuggestions: false,
+    });
   };
 
   const handleAddTag = async (tagName: string) => {
     const trimmedName = tagName.trim();
 
     if (!trimmedName) {
-      setError('Tag name cannot be empty');
+      dispatch({ error: 'Tag name cannot be empty' });
       return;
     }
 
     if (trimmedName.length > 50) {
-      setError('Tag name is too long (max 50 characters)');
+      dispatch({ error: 'Tag name is too long (max 50 characters)' });
       return;
     }
 
     if (tags.some((t) => t.name.toLowerCase() === trimmedName.toLowerCase())) {
-      setError('Tag already exists');
+      dispatch({ error: 'Tag already exists' });
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
+    dispatch({ isTagMutationPending: true, error: null });
 
     try {
       const newTag = await onAddTag(trimmedName);
       onTagsChange([...tags, newTag]);
-      setNewTagName('');
-      setShowSuggestions(false);
+      dispatch({ newTagName: '', showSuggestions: false });
       // Keep input focused for adding more tags
       inputRef.current?.focus();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to add tag';
-      setError(errorMessage);
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to add tag';
+      dispatch({ error: errorMessage });
     } finally {
-      setIsLoading(false);
+      dispatch({ isTagMutationPending: false });
     }
   };
 
   const handleRemoveTag = async (tagId: string) => {
-    setIsLoading(true);
-    setError(null);
+    dispatch({ isTagMutationPending: true, error: null });
 
     try {
       await onRemoveTag(tagId);
       onTagsChange(tags.filter((t) => t.id !== tagId));
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to remove tag';
-      setError(errorMessage);
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to remove tag';
+      dispatch({ error: errorMessage });
     } finally {
-      setIsLoading(false);
+      dispatch({ isTagMutationPending: false });
     }
   };
 
@@ -196,7 +214,7 @@ export default function InlineTagsEditor({
             {!readOnly && (
               <button
                 onClick={() => handleRemoveTag(tag.id)}
-                disabled={isLoading}
+                disabled={isTagMutationPending}
                 className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
                 title={`Remove ${tag.name}`}
               >
@@ -214,7 +232,7 @@ export default function InlineTagsEditor({
                 variant="outline"
                 size="sm"
                 onClick={handleStartAdding}
-                disabled={isLoading}
+                disabled={isTagMutationPending}
                 className="h-6 text-xs"
               >
                 <Plus className="size-3 mr-1" />
@@ -228,9 +246,11 @@ export default function InlineTagsEditor({
                     type="text"
                     value={newTagName}
                     onChange={(e) => {
-                      setNewTagName(e.target.value);
-                      setShowSuggestions(true);
-                      setError(null);
+                      dispatch({
+                        newTagName: e.target.value,
+                        showSuggestions: true,
+                        error: null,
+                      });
                     }}
                     onKeyDown={handleKeyDown}
                     onBlur={() => {
@@ -242,7 +262,7 @@ export default function InlineTagsEditor({
                       }, 200);
                     }}
                     placeholder="Type tag name..."
-                    disabled={isLoading}
+                    disabled={isTagMutationPending}
                     maxLength={50}
                     className="h-6 w-32 text-xs"
                   />
@@ -250,11 +270,11 @@ export default function InlineTagsEditor({
                     size="icon"
                     variant="ghost"
                     onClick={() => handleAddTag(newTagName)}
-                    disabled={isLoading || !newTagName.trim()}
-                    className="h-6 w-6"
+                    disabled={isTagMutationPending || !newTagName.trim()}
+                    className="size-6"
                     title="Add tag (Enter)"
                   >
-                    {isLoading ? (
+                    {isTagMutationPending ? (
                       <Loader2 className="size-3 animate-spin" />
                     ) : (
                       <Plus className="size-3" />
@@ -264,8 +284,8 @@ export default function InlineTagsEditor({
                     size="icon"
                     variant="ghost"
                     onClick={handleCancelAdding}
-                    disabled={isLoading}
-                    className="h-6 w-6"
+                    disabled={isTagMutationPending}
+                    className="size-6"
                     title="Cancel (Esc)"
                   >
                     <X className="size-3" />
@@ -293,9 +313,7 @@ export default function InlineTagsEditor({
       </div>
 
       {/* Error Message */}
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
 
       {/* Empty State */}
       {tags.length === 0 && !isAdding && !readOnly && (

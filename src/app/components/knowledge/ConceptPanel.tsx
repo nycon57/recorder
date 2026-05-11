@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import {
   AlertCircle,
@@ -14,18 +15,14 @@ import {
   Sparkles,
   TrendingUp,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 import Link from 'next/link';
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-} from '@/app/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/app/components/ui/sheet';
 import { cn } from '@/lib/utils/cn';
 import { CONCEPT_TYPE_COLORS } from '@/lib/validations/knowledge';
 import type {
@@ -39,17 +36,17 @@ import { ConceptCorrection } from './ConceptCorrection';
 
 // Edge relationship colors - MUST match KnowledgeGraph.tsx getEdgeColor()
 const EDGE_TYPE_COLORS: Record<string, string> = {
-  prerequisite: '#ef4444',  // red-500
+  prerequisite: '#ef4444', // red-500
   requires: '#ef4444',
-  'co-occurs': '#22c55e',   // green-500
+  'co-occurs': '#22c55e', // green-500
   often_used_with: '#22c55e',
-  uses: '#3b82f6',          // blue-500
+  uses: '#3b82f6', // blue-500
   implements: '#3b82f6',
-  created_by: '#f97316',    // orange-500
+  created_by: '#f97316', // orange-500
   works_on: '#f97316',
   employs: '#f97316',
-  provides: '#8b5cf6',      // violet-500
-  related: '#6366f1',       // indigo-500
+  provides: '#8b5cf6', // violet-500
+  related: '#6366f1', // indigo-500
   related_to: '#6366f1',
 };
 
@@ -72,50 +69,53 @@ interface ConceptData {
 // Type-based color schemes with gradients
 // IMPORTANT: These colors must match CONCEPT_TYPE_COLORS in lib/validations/knowledge.ts
 // tool: blue, process: green, person: orange, organization: slate, technical_term: purple, general: yellow
-const typeStyles: Record<ConceptType, {
-  gradient: string;
-  bg: string;
-  border: string;
-  icon: string;
-  glow: string;
-}> = {
+const typeStyles: Record<
+  ConceptType,
+  {
+    gradient: string;
+    bg: string;
+    border: string;
+    icon: string;
+    glow: string;
+  }
+> = {
   tool: {
-    gradient: 'from-blue-500 to-blue-600',      // blue-500 (#3b82f6)
+    gradient: 'from-blue-500 to-blue-600', // blue-500 (#3b82f6)
     bg: 'bg-blue-500/10',
     border: 'border-blue-500/30',
     icon: 'text-blue-400',
     glow: 'shadow-blue-500/20',
   },
   process: {
-    gradient: 'from-green-500 to-emerald-600',  // green-500 (#22c55e)
+    gradient: 'from-green-500 to-emerald-600', // green-500 (#22c55e)
     bg: 'bg-green-500/10',
     border: 'border-green-500/30',
     icon: 'text-green-400',
     glow: 'shadow-green-500/20',
   },
   person: {
-    gradient: 'from-orange-500 to-amber-600',   // orange-500 (#f97316)
+    gradient: 'from-orange-500 to-amber-600', // orange-500 (#f97316)
     bg: 'bg-orange-500/10',
     border: 'border-orange-500/30',
     icon: 'text-orange-400',
     glow: 'shadow-orange-500/20',
   },
   organization: {
-    gradient: 'from-slate-500 to-slate-600',    // slate-500 (#64748b)
+    gradient: 'from-slate-500 to-slate-600', // slate-500 (#64748b)
     bg: 'bg-slate-500/10',
     border: 'border-slate-500/30',
     icon: 'text-slate-400',
     glow: 'shadow-slate-500/20',
   },
   technical_term: {
-    gradient: 'from-purple-500 to-violet-600',  // purple-500 (#a855f7)
+    gradient: 'from-purple-500 to-violet-600', // purple-500 (#a855f7)
     bg: 'bg-purple-500/10',
     border: 'border-purple-500/30',
     icon: 'text-purple-400',
     glow: 'shadow-purple-500/20',
   },
   general: {
-    gradient: 'from-yellow-500 to-amber-500',   // yellow-500 (#eab308)
+    gradient: 'from-yellow-500 to-amber-500', // yellow-500 (#eab308)
     bg: 'bg-yellow-500/10',
     border: 'border-yellow-500/30',
     icon: 'text-yellow-400',
@@ -147,65 +147,45 @@ const typeIcons: Record<ConceptType, string> = {
  * Design: "Knowledge Observatory" - refined, editorial aesthetic
  * with sophisticated data visualization and elegant typography
  */
-export function ConceptPanel({
+export function ConceptPanel(
+  props: Parameters<typeof useConceptPanelImplementation>[0],
+) {
+  return useConceptPanelImplementation(props);
+}
+
+function useConceptPanelImplementation({
   conceptId,
   onClose,
   onConceptClick,
 }: ConceptPanelProps) {
-  const [data, setData] = useState<ConceptData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data,
+    isLoading: isConceptLoading,
+    error,
+    refetch,
+  } = useQuery<ConceptData, Error>({
+    queryKey: ['knowledge', 'concepts', conceptId],
+    enabled: Boolean(conceptId),
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`/api/knowledge/concepts/${conceptId}`, {
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 404
+            ? 'Concept not found'
+            : 'Failed to load concept',
+        );
+      }
+
+      const result = await response.json();
+      return result.data;
+    },
+  });
 
   // Ref for scrolling to mentions section
   const mentionsSectionRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!conceptId) {
-      setData(null);
-      setError(null);
-      return;
-    }
-
-    const controller = new AbortController();
-
-    const fetchConcept = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch(`/api/knowledge/concepts/${conceptId}`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(
-            response.status === 404
-              ? 'Concept not found'
-              : 'Failed to load concept'
-          );
-        }
-
-        const result = await response.json();
-        setData(result.data);
-        setIsLoading(false);
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-        console.error('Error fetching concept:', err);
-        setError(
-          err instanceof Error ? err.message : 'Failed to load concept details'
-        );
-        setIsLoading(false);
-      }
-    };
-
-    fetchConcept();
-
-    return () => {
-      controller.abort();
-    };
-  }, [conceptId]);
 
   const handleConceptClick = (id: string) => {
     if (onConceptClick) {
@@ -270,12 +250,14 @@ export function ConceptPanel({
         {/* Visually hidden title for screen readers */}
         <VisuallyHidden.Root asChild>
           <SheetTitle>
-            {data?.concept?.name ? `Concept: ${data.concept.name}` : 'Concept Details'}
+            {data?.concept?.name
+              ? `Concept: ${data.concept.name}`
+              : 'Concept Details'}
           </SheetTitle>
         </VisuallyHidden.Root>
         <AnimatePresence mode="wait">
-          {isLoading ? (
-            <motion.div
+          {isConceptLoading ? (
+            <m.div
               key="loading"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -284,51 +266,39 @@ export function ConceptPanel({
             >
               <div className="relative">
                 <div className="absolute inset-0 blur-xl bg-primary/20 rounded-full" />
-                <Loader2 className="h-10 w-10 animate-spin text-primary relative" />
+                <Loader2 className="size-10 animate-spin text-primary relative" />
               </div>
               <p className="mt-6 text-sm text-muted-foreground tracking-wide">
-                Loading concept...
+                Loading concept…
               </p>
-            </motion.div>
+            </m.div>
           ) : error ? (
-            <motion.div
+            <m.div
               key="error"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               className="p-6"
             >
-              <Alert variant="destructive" className="border-destructive/30 bg-destructive/10">
-                <AlertCircle className="h-4 w-4" />
+              <Alert
+                variant="destructive"
+                className="border-destructive/30 bg-destructive/10"
+              >
+                <AlertCircle className="size-4" />
                 <AlertDescription className="flex flex-col gap-4">
-                  <span>{error}</span>
+                  <span>{error.message}</span>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setError(null);
-                      if (conceptId) {
-                        setIsLoading(true);
-                        fetch(`/api/knowledge/concepts/${conceptId}`)
-                          .then(res => res.json())
-                          .then(result => {
-                            setData(result.data);
-                            setIsLoading(false);
-                          })
-                          .catch(err => {
-                            setError(err.message);
-                            setIsLoading(false);
-                          });
-                      }
-                    }}
+                    onClick={() => void refetch()}
                   >
                     Try Again
                   </Button>
                 </AlertDescription>
               </Alert>
-            </motion.div>
+            </m.div>
           ) : data ? (
-            <motion.div
+            <m.div
               key="content"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -336,34 +306,38 @@ export function ConceptPanel({
               className="h-full flex flex-col"
             >
               {/* Hero Header */}
-              <div className={cn(
-                "relative px-6 pt-8 pb-6",
-                "bg-gradient-to-br from-black/40 via-transparent to-transparent"
-              )}>
+              <div
+                className={cn(
+                  'relative px-6 pt-8 pb-6',
+                  'bg-gradient-to-br from-black/40 via-transparent to-transparent',
+                )}
+              >
                 {/* Decorative gradient orb */}
-                <div className={cn(
-                  "absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl opacity-30",
-                  `bg-gradient-to-br ${style.gradient}`
-                )} />
+                <div
+                  className={cn(
+                    'absolute top-0 right-0 size-32 rounded-full blur-3xl opacity-30',
+                    `bg-gradient-to-br ${style.gradient}`,
+                  )}
+                />
 
                 {/* Type badge */}
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.1 }}
                   className={cn(
-                    "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium tracking-wide",
-                    "bg-gradient-to-r shadow-lg",
+                    'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium tracking-wide',
+                    'bg-gradient-to-r shadow-lg',
                     style.gradient,
-                    style.glow
+                    style.glow,
                   )}
                 >
                   <span>{typeIcons[conceptType]}</span>
                   <span className="text-white">{typeLabels[conceptType]}</span>
-                </motion.div>
+                </m.div>
 
                 {/* Concept name + edit */}
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 }}
@@ -378,31 +352,31 @@ export function ConceptPanel({
                     conceptType={data.concept.conceptType}
                     onCorrected={onClose}
                   />
-                </motion.div>
+                </m.div>
 
                 {/* Description */}
                 {data.concept.description && (
-                  <motion.p
+                  <m.p
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                     className="mt-2 text-sm text-muted-foreground leading-relaxed"
                   >
                     {data.concept.description}
-                  </motion.p>
+                  </m.p>
                 )}
               </div>
 
               <ScrollArea className="flex-1 px-6">
                 <div className="space-y-6 pb-8">
                   {/* Statistics Cards */}
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.25 }}
                   >
                     <div className="flex items-center gap-2 mb-3">
-                      <TrendingUp className={cn("h-4 w-4", style.icon)} />
+                      <TrendingUp className={cn('size-4', style.icon)} />
                       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Statistics
                       </h3>
@@ -413,19 +387,21 @@ export function ConceptPanel({
                       <button
                         onClick={scrollToMentions}
                         className={cn(
-                          "relative overflow-hidden rounded-xl p-4 text-left",
-                          "bg-gradient-to-br from-white/5 to-white/[0.02]",
-                          "border border-white/10",
-                          "transition-all duration-200 hover:border-primary/30 hover:from-primary/10 hover:to-primary/5",
-                          "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
-                          "cursor-pointer group"
+                          'relative overflow-hidden rounded-xl p-4 text-left',
+                          'bg-gradient-to-br from-white/5 to-white/[0.02]',
+                          'border border-white/10',
+                          'transition-all duration-200 hover:border-primary/30 hover:from-primary/10 hover:to-primary/5',
+                          'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background',
+                          'cursor-pointer group',
                         )}
                         title="Click to view all mentions"
                       >
-                        <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-primary/10 to-transparent rounded-full blur-xl group-hover:from-primary/20" />
+                        <div className="absolute top-0 right-0 size-16 bg-gradient-to-br from-primary/10 to-transparent rounded-full blur-xl group-hover:from-primary/20" />
                         <div className="flex items-center justify-between">
-                          <p className="text-xs text-muted-foreground mb-1">Mentions</p>
-                          <ArrowRight className="h-3 w-3 text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Mentions
+                          </p>
+                          <ArrowRight className="size-3 text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                         </div>
                         <p className="text-2xl font-bold tabular-nums group-hover:text-primary transition-colors">
                           {data.concept.mentionCount}
@@ -433,40 +409,48 @@ export function ConceptPanel({
                       </button>
 
                       {/* First Seen */}
-                      <div className={cn(
-                        "relative overflow-hidden rounded-xl p-4",
-                        "bg-gradient-to-br from-white/5 to-white/[0.02]",
-                        "border border-white/10"
-                      )}>
-                        <p className="text-xs text-muted-foreground mb-1">First Seen</p>
+                      <div
+                        className={cn(
+                          'relative overflow-hidden rounded-xl p-4',
+                          'bg-gradient-to-br from-white/5 to-white/[0.02]',
+                          'border border-white/10',
+                        )}
+                      >
+                        <p className="text-xs text-muted-foreground mb-1">
+                          First Seen
+                        </p>
                         <p className="text-sm font-medium">
                           {formatDate(data.concept.firstSeenAt)}
                         </p>
                       </div>
 
                       {/* Last Seen */}
-                      <div className={cn(
-                        "relative overflow-hidden rounded-xl p-4",
-                        "bg-gradient-to-br from-white/5 to-white/[0.02]",
-                        "border border-white/10"
-                      )}>
-                        <p className="text-xs text-muted-foreground mb-1">Last Seen</p>
+                      <div
+                        className={cn(
+                          'relative overflow-hidden rounded-xl p-4',
+                          'bg-gradient-to-br from-white/5 to-white/[0.02]',
+                          'border border-white/10',
+                        )}
+                      >
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Last Seen
+                        </p>
                         <p className="text-sm font-medium">
                           {formatDate(data.concept.lastSeenAt)}
                         </p>
                       </div>
                     </div>
-                  </motion.div>
+                  </m.div>
 
                   {/* Related Concepts */}
                   {data.relatedConcepts.length > 0 && (
-                    <motion.div
+                    <m.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.3 }}
                     >
                       <div className="flex items-center gap-2 mb-3">
-                        <Link2 className={cn("h-4 w-4", style.icon)} />
+                        <Link2 className={cn('size-4', style.icon)} />
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           Related Concepts
                         </h3>
@@ -478,20 +462,24 @@ export function ConceptPanel({
                       <div className="space-y-2">
                         {data.relatedConcepts.map((related, index) => {
                           // Use CONCEPT_TYPE_COLORS for node color (matches graph)
-                          const nodeColor = CONCEPT_TYPE_COLORS[related.conceptType] || CONCEPT_TYPE_COLORS.general;
+                          const nodeColor =
+                            CONCEPT_TYPE_COLORS[related.conceptType] ||
+                            CONCEPT_TYPE_COLORS.general;
                           return (
-                            <motion.button
+                            <m.button
                               key={related.id}
                               initial={{ opacity: 0, x: -10 }}
                               animate={{ opacity: 1, x: 0 }}
                               transition={{ delay: 0.35 + index * 0.05 }}
-                              onClick={() => onConceptClick && handleConceptClick(related.id)}
+                              onClick={() =>
+                                onConceptClick && handleConceptClick(related.id)
+                              }
                               className={cn(
-                                "w-full group relative overflow-hidden rounded-lg p-3",
-                                "bg-gradient-to-r from-white/5 to-transparent",
-                                "border border-white/10 hover:border-white/20",
-                                "transition-all duration-300",
-                                "hover:shadow-lg"
+                                'w-full group relative overflow-hidden rounded-lg p-3',
+                                'bg-gradient-to-r from-white/5 to-transparent',
+                                'border border-white/10 hover:border-white/20',
+                                'transition-all duration-300',
+                                'hover:shadow-lg',
                               )}
                               style={{
                                 boxShadow: `0 4px 14px -3px ${nodeColor}20`,
@@ -505,7 +493,9 @@ export function ConceptPanel({
 
                               <div className="flex items-center justify-between pl-2">
                                 <div className="flex items-center gap-3">
-                                  <span className="text-lg">{typeIcons[related.conceptType]}</span>
+                                  <span className="text-lg">
+                                    {typeIcons[related.conceptType]}
+                                  </span>
                                   <div className="text-left">
                                     <p className="text-sm font-medium group-hover:text-primary transition-colors">
                                       {related.name}
@@ -522,10 +512,15 @@ export function ConceptPanel({
                                     className="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider"
                                     style={{
                                       backgroundColor: `${getEdgeColor(related.relationshipType || 'related')}20`,
-                                      color: getEdgeColor(related.relationshipType || 'related'),
+                                      color: getEdgeColor(
+                                        related.relationshipType || 'related',
+                                      ),
                                     }}
                                   >
-                                    {related.relationshipType?.replace(/_/g, ' ') || 'related'}
+                                    {related.relationshipType?.replace(
+                                      /_/g,
+                                      ' ',
+                                    ) || 'related'}
                                   </span>
                                   <div className="flex items-center gap-1">
                                     <div className="h-1.5 w-12 bg-white/10 rounded-full overflow-hidden">
@@ -534,7 +529,10 @@ export function ConceptPanel({
                                         className="h-full rounded-full"
                                         style={{
                                           width: `${related.strength * 100}%`,
-                                          backgroundColor: getEdgeColor(related.relationshipType || 'related'),
+                                          backgroundColor: getEdgeColor(
+                                            related.relationshipType ||
+                                              'related',
+                                          ),
                                         }}
                                       />
                                     </div>
@@ -542,37 +540,38 @@ export function ConceptPanel({
                                       {(related.strength * 100).toFixed(0)}%
                                     </span>
                                   </div>
-                                  <ArrowRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                                  <ArrowRight className="size-4 text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                                 </div>
                               </div>
-                            </motion.button>
+                            </m.button>
                           );
                         })}
                       </div>
-                    </motion.div>
+                    </m.div>
                   )}
 
                   {/* Recent Mentions */}
                   {data.recentMentions.length > 0 ? (
-                    <motion.div
+                    <m.div
                       ref={mentionsSectionRef}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.4 }}
                     >
                       <div className="flex items-center gap-2 mb-3">
-                        <FileText className={cn("h-4 w-4", style.icon)} />
+                        <FileText className={cn('size-4', style.icon)} />
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           Found In
                         </h3>
                         <span className="ml-auto text-xs text-muted-foreground/60">
-                          {data.recentMentions.length} {data.recentMentions.length === 1 ? 'item' : 'items'}
+                          {data.recentMentions.length}{' '}
+                          {data.recentMentions.length === 1 ? 'item' : 'items'}
                         </span>
                       </div>
 
                       <div className="space-y-2">
                         {data.recentMentions.map((mention, index) => (
-                          <motion.div
+                          <m.div
                             key={mention.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -581,11 +580,11 @@ export function ConceptPanel({
                             <Link
                               href={getMentionUrl(mention)}
                               className={cn(
-                                "group block relative overflow-hidden rounded-xl",
-                                "bg-gradient-to-br from-primary/10 via-primary/5 to-transparent",
-                                "border border-primary/20 hover:border-primary/40",
-                                "transition-all duration-300",
-                                "hover:shadow-lg hover:shadow-primary/10"
+                                'group block relative overflow-hidden rounded-xl',
+                                'bg-gradient-to-br from-primary/10 via-primary/5 to-transparent',
+                                'border border-primary/20 hover:border-primary/40',
+                                'transition-all duration-300',
+                                'hover:shadow-lg hover:shadow-primary/10',
                               )}
                             >
                               {/* Content header */}
@@ -594,29 +593,39 @@ export function ConceptPanel({
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                       <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
-                                        {mention.content?.title || 'Untitled Content'}
+                                        {mention.content?.title ||
+                                          'Untitled Content'}
                                       </p>
-                                      <ExternalLink className="h-3 w-3 flex-shrink-0 text-muted-foreground/50 group-hover:text-primary transition-colors" />
+                                      <ExternalLink className="size-3 flex-shrink-0 text-muted-foreground/50 group-hover:text-primary transition-colors" />
                                     </div>
 
                                     {/* Content type badge */}
-                                    <span className={cn(
-                                      "inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider",
-                                      "bg-primary/20 text-primary"
-                                    )}>
-                                      {mention.content?.contentType?.replace('_', ' ') || 'Content'}
+                                    <span
+                                      className={cn(
+                                        'inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider',
+                                        'bg-primary/20 text-primary',
+                                      )}
+                                    >
+                                      {mention.content?.contentType?.replace(
+                                        '_',
+                                        ' ',
+                                      ) || 'Content'}
                                     </span>
                                   </div>
 
                                   {/* Confidence indicator */}
                                   <div className="flex flex-col items-end gap-1">
-                                    <div className={cn(
-                                      "px-2 py-1 rounded-lg text-xs font-medium",
-                                      "bg-emerald-500/20 text-emerald-400"
-                                    )}>
+                                    <div
+                                      className={cn(
+                                        'px-2 py-1 rounded-lg text-xs font-medium',
+                                        'bg-emerald-500/20 text-emerald-400',
+                                      )}
+                                    >
                                       {(mention.confidence * 100).toFixed(0)}%
                                     </div>
-                                    <span className="text-[10px] text-muted-foreground">confidence</span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                      confidence
+                                    </span>
                                   </div>
                                 </div>
 
@@ -632,8 +641,10 @@ export function ConceptPanel({
                                 {/* Timestamp */}
                                 {mention.timestampSec !== null && (
                                   <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground/60">
-                                    <Clock className="h-3 w-3" />
-                                    <span>at {formatTimestamp(mention.timestampSec)}</span>
+                                    <Clock className="size-3" />
+                                    <span>
+                                      at {formatTimestamp(mention.timestampSec)}
+                                    </span>
                                   </div>
                                 )}
                               </div>
@@ -641,46 +652,49 @@ export function ConceptPanel({
                               {/* Hover gradient */}
                               <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-primary/0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                             </Link>
-                          </motion.div>
+                          </m.div>
                         ))}
                       </div>
-                    </motion.div>
+                    </m.div>
                   ) : (
-                    <motion.div
+                    <m.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.4 }}
                       className="text-center py-8"
                     >
-                      <div className={cn(
-                        "inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4",
-                        "bg-gradient-to-br from-white/10 to-white/5",
-                        "border border-white/10"
-                      )}>
-                        <Eye className="h-7 w-7 text-muted-foreground/50" />
+                      <div
+                        className={cn(
+                          'inline-flex items-center justify-center size-16 rounded-2xl mb-4',
+                          'bg-gradient-to-br from-white/10 to-white/5',
+                          'border border-white/10',
+                        )}
+                      >
+                        <Eye className="size-7 text-muted-foreground/50" />
                       </div>
                       <p className="text-sm text-muted-foreground">
                         No content mentions yet
                       </p>
                       <p className="text-xs text-muted-foreground/60 mt-1">
-                        This concept will link to content as you add more recordings
+                        This concept will link to content as you add more
+                        recordings
                       </p>
-                    </motion.div>
+                    </m.div>
                   )}
 
                   {/* Footer sparkle */}
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.6 }}
                     className="flex items-center justify-center gap-2 pt-4 text-xs text-muted-foreground/40"
                   >
-                    <Sparkles className="h-3 w-3" />
+                    <Sparkles className="size-3" />
                     <span>Extracted by AI from your content</span>
-                  </motion.div>
+                  </m.div>
                 </div>
               </ScrollArea>
-            </motion.div>
+            </m.div>
           ) : null}
         </AnimatePresence>
       </SheetContent>

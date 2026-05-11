@@ -13,8 +13,7 @@ const generateContentStream =
   jest.fn<() => Promise<AsyncGenerator<StreamChunk>>>();
 const buildExtensionCompiledMemoryPrompt =
   jest.fn<(args: PromptArgs) => string>();
-const resolveCompiledMemoryAnswerContext =
-  jest.fn<() => Promise<unknown>>();
+const resolveCompiledMemoryAnswerContext = jest.fn<() => Promise<unknown>>();
 const mockRequireApiKeyOrSession =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const resolveExtensionContextMatches =
@@ -121,9 +120,11 @@ function buildRequest(body: unknown): NextRequest {
 }
 
 async function runAfterCallbacks() {
-  for (const callback of afterCallbacks) {
-    await callback();
-  }
+  await Promise.all(
+    Array.from(afterCallbacks).map(async (callback) => {
+      await callback();
+    }),
+  );
 }
 
 function createSupabaseAnalyticsMock() {
@@ -282,10 +283,7 @@ describe('POST /api/extension/query', () => {
 
     expect(response.status).toBe(200);
     const streamBody = await response.text();
-    expect(mockRequireApiKeyOrSession).toHaveBeenCalledWith(
-      request,
-      'query',
-    );
+    expect(mockRequireApiKeyOrSession).toHaveBeenCalledWith(request, 'query');
     expect(resolveCustomerOrgForVendor).toHaveBeenCalledWith(
       'vendor_org',
       'customer_org',

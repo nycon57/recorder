@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
+
 import type { Collection } from './CollectionTree';
 
 interface CollectionManagerProps {
@@ -30,7 +31,11 @@ interface CollectionManagerProps {
   collection?: Collection | null;
   parentId?: string | null;
   collections: Collection[];
-  onSave: (data: { name: string; description: string; parent_id: string | null }) => Promise<void>;
+  onSave: (data: {
+    name: string;
+    description: string;
+    parent_id: string | null;
+  }) => Promise<void>;
   /** Set to false to prevent Dialog from trapping focus (useful when opening from inside Sheet) */
   modal?: boolean;
 }
@@ -65,37 +70,44 @@ export function CollectionManager({
   onSave,
   modal = true,
 }: CollectionManagerProps) {
-  const [name, setName] = React.useState('');
-  const [description, setDescription] = React.useState('');
-  const [selectedParentId, setSelectedParentId] = React.useState<string | null>(null);
-  const [isLoading, setIsLoading] = React.useState(false);
+  const fallbackDraft = {
+    name: collection?.name || '',
+    description: collection?.description || '',
+    selectedParentId: parentId || collection?.parent_id || null,
+  };
+  const [draft, setDraft] = React.useState<typeof fallbackDraft | null>(null);
+  const name = draft?.name ?? fallbackDraft.name;
+  const description = draft?.description ?? fallbackDraft.description;
+  const selectedParentId =
+    draft?.selectedParentId ?? fallbackDraft.selectedParentId;
+  const [isSavingCollection, setIsSavingCollection] = React.useState(false);
 
   const isEditing = !!collection;
 
-  React.useEffect(() => {
-    if (open) {
-      setName(collection?.name || '');
-      setDescription(collection?.description || '');
-      setSelectedParentId(parentId || collection?.parent_id || null);
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setDraft(null);
     }
-  }, [open, collection, parentId]);
+    onOpenChange(nextOpen);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    setIsLoading(true);
+    setIsSavingCollection(true);
     try {
       await onSave({
         name: name.trim(),
         description: description.trim(),
         parent_id: selectedParentId,
       });
+      setDraft(null);
       onOpenChange(false);
     } catch (error) {
       console.error('Failed to save collection:', error);
     } finally {
-      setIsLoading(false);
+      setIsSavingCollection(false);
     }
   };
 
@@ -123,7 +135,7 @@ export function CollectionManager({
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={modal}>
+    <Dialog open={open} onOpenChange={handleOpenChange} modal={modal}>
       <DialogContent hideOverlay={!modal}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
@@ -147,31 +159,49 @@ export function CollectionManager({
                 id="collection-name"
                 placeholder="Collection name..."
                 value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={isLoading}
-                autoFocus
+                onChange={(e) =>
+                  setDraft((current) => ({
+                    ...(current ?? fallbackDraft),
+                    name: e.target.value,
+                  }))
+                }
+                disabled={isSavingCollection}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="collection-description">Description (optional)</Label>
+              <Label htmlFor="collection-description">
+                Description (optional)
+              </Label>
               <Textarea
                 id="collection-description"
                 placeholder="Describe this collection..."
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={isLoading}
+                onChange={(e) =>
+                  setDraft((current) => ({
+                    ...(current ?? fallbackDraft),
+                    description: e.target.value,
+                  }))
+                }
+                disabled={isSavingCollection}
                 rows={3}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="parent-collection">Parent Collection (optional)</Label>
+              <Label htmlFor="parent-collection">
+                Parent Collection (optional)
+              </Label>
               <Select
                 value={selectedParentId || 'none'}
-                onValueChange={(value) => setSelectedParentId(value === 'none' ? null : value)}
-                disabled={isLoading}
+                onValueChange={(value) =>
+                  setDraft((current) => ({
+                    ...(current ?? fallbackDraft),
+                    selectedParentId: value === 'none' ? null : value,
+                  }))
+                }
+                disabled={isSavingCollection}
               >
                 <SelectTrigger id="parent-collection">
                   <SelectValue placeholder="No parent" />
@@ -193,12 +223,16 @@ export function CollectionManager({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={isLoading}
+              disabled={isSavingCollection}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!name.trim() || isLoading}>
-              {isLoading ? 'Saving...' : isEditing ? 'Update' : 'Create'}
+            <Button type="submit" disabled={!name.trim() || isSavingCollection}>
+              {isSavingCollection
+                ? 'Saving...'
+                : isEditing
+                  ? 'Update'
+                  : 'Create'}
             </Button>
           </DialogFooter>
         </form>

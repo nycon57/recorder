@@ -11,6 +11,7 @@
 
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
+import type { Json } from '@/lib/types/database';
 import type {
   PublishDestination,
   PublishFormat,
@@ -191,7 +192,7 @@ export async function checkAutoPublish(
       .insert({
         type: 'publish_document',
         status: 'pending',
-        payload: payload as unknown as Record<string, unknown>,
+        payload: payload as unknown as Json,
         dedupe_key: dedupeKey,
         org_id: orgId,
         // Use normal priority for auto-publish jobs
@@ -254,7 +255,7 @@ export async function checkAutoPublish(
  * @param orgId - Organization ID
  * @returns True if auto-publish is enabled and properly configured
  */
-export async function isAutoPublishEnabled(orgId: string): Promise<boolean> {
+async function isAutoPublishEnabled(orgId: string): Promise<boolean> {
   const supabase = createAdminClient();
 
   const { data: settings } = await supabase
@@ -280,7 +281,7 @@ export async function isAutoPublishEnabled(orgId: string): Promise<boolean> {
  * @param orgId - Organization ID
  * @returns Auto-publish configuration or null if not configured
  */
-export async function getAutoPublishConfig(
+async function getAutoPublishConfig(
   orgId: string
 ): Promise<{
   enabled: boolean;
@@ -315,5 +316,3 @@ export async function getAutoPublishConfig(
     branding: (publishSettings.default_branding || {}) as Partial<BrandingConfig>,
   };
 }
-
-export default checkAutoPublish;

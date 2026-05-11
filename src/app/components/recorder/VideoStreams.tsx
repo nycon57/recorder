@@ -32,10 +32,10 @@ const ReviewRecording = dynamic(
   {
     loading: () => (
       <div className="w-full space-y-4">
-        <div className="relative aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center">
+        <div className="relative aspect-video bg-zinc-950 rounded-lg overflow-hidden flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="size-8 animate-spin text-primary mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Loading video tools...</p>
+            <p className="text-sm text-muted-foreground">Loading video tools…</p>
           </div>
         </div>
       </div>
@@ -102,7 +102,7 @@ function Placeholder() {
 
   return (
     <div className="relative flex flex-col items-center justify-center aspect-video bg-background rounded-lg border border-border">
-      <h1 className="text-3xl font-bold text-foreground mb-6">
+      <h1 className="text-3xl font-semibold text-foreground mb-6">
         Record your screen
       </h1>
       <Button
@@ -112,7 +112,7 @@ function Placeholder() {
         className="h-14 px-8 text-lg font-medium rounded-full disabled:opacity-50"
       >
         <MonitorPlay className="size-5 mr-2" />
-        {isRequesting ? 'Requesting access...' : 'Share screen'}
+        {isRequesting ? 'Requesting access…' : 'Share screen'}
       </Button>
 
       {/* Camera preview in bottom-right corner */}
@@ -275,7 +275,7 @@ export function VideoStreams() {
   const mainStream = layout === 'cameraOnly' ? cameraStream : screenshareStream;
 
   return (
-    <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
+    <div className="relative w-full aspect-video bg-zinc-950 rounded-lg overflow-hidden">
       {/* Change screen button (only show when screenshare is active and NOT recording) */}
       {screenshareStream && layout !== 'cameraOnly' && !isRecording && (
         <div className="absolute top-4 right-4 z-20">
@@ -287,7 +287,7 @@ export function VideoStreams() {
             className="shadow-lg"
           >
             <RefreshCw className={cn('size-4 mr-2', isChangingScreen && 'animate-spin')} />
-            {isChangingScreen ? 'Selecting...' : 'Change screen'}
+            {isChangingScreen ? 'Selecting…' : 'Change screen'}
           </Button>
         </div>
       )}

@@ -15,6 +15,7 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+
 import { createLogger } from '@/lib/utils/logger';
 import {
   SEGMENTATION_CONFIG,
@@ -61,7 +62,8 @@ export interface SplitOptions {
 }
 
 // Re-export from content types for backwards compatibility
-export const SPLIT_THRESHOLD_SECONDS = SEGMENTATION_CONFIG.SPLIT_THRESHOLD_SECONDS;
+export const SPLIT_THRESHOLD_SECONDS =
+  SEGMENTATION_CONFIG.SPLIT_THRESHOLD_SECONDS;
 
 /**
  * Check if a video should be split based on duration
@@ -73,7 +75,7 @@ export function shouldSplitVideo(durationSeconds: number): boolean {
 /**
  * Get segment configuration for a given duration
  */
-export function getSegmentConfig(totalDurationSeconds: number): {
+function getSegmentConfig(totalDurationSeconds: number): {
   shouldSplit: boolean;
   segmentDuration: number;
   expectedSegments: number;
@@ -100,16 +102,19 @@ const FFPROBE_TIMEOUT_MS = 30000;
  */
 export async function getVideoDuration(
   inputPath: string,
-  timeoutMs: number = FFPROBE_TIMEOUT_MS
+  timeoutMs: number = FFPROBE_TIMEOUT_MS,
 ): Promise<number> {
   return new Promise((resolve, reject) => {
     let isSettled = false;
     let timeoutTimer: NodeJS.Timeout | null = null;
 
     const ffprobe = spawn('ffprobe', [
-      '-v', 'quiet',
-      '-show_entries', 'format=duration',
-      '-of', 'default=noprint_wrappers=1:nokey=1',
+      '-v',
+      'quiet',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'default=noprint_wrappers=1:nokey=1',
       inputPath,
     ]);
 
@@ -166,15 +171,17 @@ export async function getVideoDuration(
       safeReject(
         new Error(
           `ffprobe timed out after ${timeoutMs}ms for file: ${inputPath}. ` +
-            `This may indicate a corrupted file or inaccessible path.`
-        )
+            `This may indicate a corrupted file or inaccessible path.`,
+        ),
       );
     }, timeoutMs);
 
     // Handle spawn errors (e.g., ffprobe not found, permission denied)
     ffprobe.on('error', (error) => {
       safeReject(
-        new Error(`Failed to spawn ffprobe: ${error.message}. Is ffprobe installed?`)
+        new Error(
+          `Failed to spawn ffprobe: ${error.message}. Is ffprobe installed?`,
+        ),
       );
     });
 
@@ -198,8 +205,8 @@ export async function getVideoDuration(
         safeReject(
           new Error(
             `Invalid duration value from ffprobe: "${output.trim()}". ` +
-              `Expected a positive number.`
-          )
+              `Expected a positive number.`,
+          ),
         );
         return;
       }
@@ -207,8 +214,8 @@ export async function getVideoDuration(
       safeReject(
         new Error(
           `ffprobe failed with exit code ${code}: ${stderrOutput || 'Unknown error'}. ` +
-            `File: ${inputPath}`
-        )
+            `File: ${inputPath}`,
+        ),
       );
     });
   });
@@ -230,7 +237,7 @@ export async function getVideoDuration(
  */
 export async function splitVideoIntoSegments(
   inputPath: string,
-  options: SplitOptions = {}
+  options: SplitOptions = {},
 ): Promise<SplitResult> {
   const inputDir = path.dirname(inputPath);
   const inputExt = path.extname(inputPath);
@@ -250,7 +257,8 @@ export async function splitVideoIntoSegments(
 
     // Get optimal segment configuration
     const segmentConfig = getSegmentConfig(totalDuration);
-    const segmentDuration = options.segmentDuration || segmentConfig.segmentDuration;
+    const segmentDuration =
+      options.segmentDuration || segmentConfig.segmentDuration;
 
     logger.info('Video duration detected', {
       context: {
@@ -280,13 +288,15 @@ export async function splitVideoIntoSegments(
       });
       return {
         success: true,
-        segments: [{
-          index: 0,
-          path: inputPath,
-          duration: totalDuration,
-          startTime: 0,
-          endTime: totalDuration,
-        }],
+        segments: [
+          {
+            index: 0,
+            path: inputPath,
+            duration: totalDuration,
+            startTime: 0,
+            endTime: totalDuration,
+          },
+        ],
         totalDuration,
         segmentDuration: totalDuration,
         processingStrategy: 'single',
@@ -298,12 +308,18 @@ export async function splitVideoIntoSegments(
 
     // Create segment list file path
     const segmentListPath = path.join(segmentDir, `${inputBase}_segments.csv`);
-    const outputPattern = path.join(segmentDir, `${inputBase}_segment_%03d${inputExt}`);
+    const outputPattern = path.join(
+      segmentDir,
+      `${inputBase}_segment_%03d${inputExt}`,
+    );
 
     const { onProgress } = options;
 
     if (onProgress) {
-      onProgress(5, `Preparing to split video into ~${segmentConfig.expectedSegments} segments...`);
+      onProgress(
+        5,
+        `Preparing to split video into ~${segmentConfig.expectedSegments} segments...`,
+      );
     }
 
     // Execute FFmpeg segmentation
@@ -313,7 +329,7 @@ export async function splitVideoIntoSegments(
       segmentListPath,
       segmentDuration,
       totalDuration,
-      onProgress
+      onProgress,
     );
 
     logger.info('Video split complete', {
@@ -321,7 +337,7 @@ export async function splitVideoIntoSegments(
         segmentCount: segments.length,
         segmentDurationMinutes: Math.round(segmentDuration / 60),
         strategy: segmentConfig.strategy,
-        segments: segments.map(s => ({
+        segments: segments.map((s) => ({
           index: s.index,
           duration: Math.round(s.duration),
         })),
@@ -336,7 +352,8 @@ export async function splitVideoIntoSegments(
       processingStrategy: segmentConfig.strategy,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
     logger.error('Video split failed', {
       context: { inputPath },
       error: error as Error,
@@ -362,22 +379,30 @@ async function executeSegmentation(
   segmentListPath: string,
   segmentDuration: number,
   totalDuration: number,
-  onProgress?: (percent: number, message: string) => void
+  onProgress?: (percent: number, message: string) => void,
 ): Promise<VideoSegment[]> {
   return new Promise((resolve, reject) => {
     // Calculate timeout: minimum 2 minutes, or 4x the video duration
     const timeoutMs = Math.max(120000, totalDuration * 4 * 1000);
 
     const args = [
-      '-i', inputPath,
-      '-c', 'copy',                    // Lossless copy (no re-encoding)
-      '-map', '0',                     // Copy all streams
-      '-f', 'segment',                 // Segment muxer
-      '-segment_time', segmentDuration.toString(),
-      '-reset_timestamps', '1',        // Reset timestamps per segment
-      '-segment_list_type', 'csv',
-      '-segment_list', segmentListPath,
-      '-y',                            // Overwrite output files
+      '-i',
+      inputPath,
+      '-c',
+      'copy', // Lossless copy (no re-encoding)
+      '-map',
+      '0', // Copy all streams
+      '-f',
+      'segment', // Segment muxer
+      '-segment_time',
+      segmentDuration.toString(),
+      '-reset_timestamps',
+      '1', // Reset timestamps per segment
+      '-segment_list_type',
+      'csv',
+      '-segment_list',
+      segmentListPath,
+      '-y', // Overwrite output files
       outputPattern,
     ];
 
@@ -443,11 +468,13 @@ async function executeSegmentation(
         // Process may already be dead
       }
 
-      safeReject(new Error(
-        `FFmpeg segmentation timed out after ${Math.round(timeoutMs / 1000)}s ` +
-        `(video duration: ${Math.round(totalDuration)}s, timeout: ${Math.round(timeoutMs / 1000)}s). ` +
-        `Last output: ${stderr.slice(-200)}`
-      ));
+      safeReject(
+        new Error(
+          `FFmpeg segmentation timed out after ${Math.round(timeoutMs / 1000)}s ` +
+            `(video duration: ${Math.round(totalDuration)}s, timeout: ${Math.round(timeoutMs / 1000)}s). ` +
+            `Last output: ${stderr.slice(-200)}`,
+        ),
+      );
     }, timeoutMs);
 
     ffmpeg.stderr.on('data', (data: Buffer) => {
@@ -459,14 +486,18 @@ async function executeSegmentation(
       if (timeMatch && onProgress) {
         const [, hours, minutes, seconds] = timeMatch;
         const currentTime =
-          parseInt(hours) * 3600 +
-          parseInt(minutes) * 60 +
-          parseFloat(seconds);
+          parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
 
-        const progress = Math.min(Math.round((currentTime / totalDuration) * 90) + 5, 95);
+        const progress = Math.min(
+          Math.round((currentTime / totalDuration) * 90) + 5,
+          95,
+        );
         if (progress > lastProgress) {
           lastProgress = progress;
-          onProgress(progress, `Splitting video... ${Math.round(currentTime / 60)}/${Math.round(totalDuration / 60)} min`);
+          onProgress(
+            progress,
+            `Splitting video... ${Math.round(currentTime / 60)}/${Math.round(totalDuration / 60)} min`,
+          );
         }
       }
     });
@@ -481,7 +512,11 @@ async function executeSegmentation(
       }
 
       if (code !== 0) {
-        safeReject(new Error(`FFmpeg segmentation failed with code ${code}: ${stderr.slice(-500)}`));
+        safeReject(
+          new Error(
+            `FFmpeg segmentation failed with code ${code}: ${stderr.slice(-500)}`,
+          ),
+        );
         return;
       }
 
@@ -560,7 +595,10 @@ function parseCSVLine(line: string): string[] {
  */
 async function parseSegmentList(listPath: string): Promise<VideoSegment[]> {
   const content = await fs.readFile(listPath, 'utf-8');
-  const lines = content.trim().split('\n').filter(line => line.trim());
+  const lines = content
+    .trim()
+    .split('\n')
+    .filter((line) => line.trim());
 
   const segments: VideoSegment[] = [];
   const listDir = path.dirname(listPath);
@@ -685,19 +723,21 @@ async function parseSegmentList(listPath: string): Promise<VideoSegment[]> {
  * Clean up segment files after processing
  */
 export async function cleanupSegments(segments: VideoSegment[]): Promise<void> {
-  for (const segment of segments) {
-    try {
-      await fs.unlink(segment.path);
-      logger.debug('Cleaned up segment file', {
-        context: { path: segment.path },
-      });
-    } catch (error) {
-      logger.warn('Failed to clean up segment file', {
-        context: { path: segment.path },
-        error: error as Error,
-      });
-    }
-  }
+  await Promise.all(
+    Array.from(segments).map(async (segment) => {
+      try {
+        await fs.unlink(segment.path);
+        logger.debug('Cleaned up segment file', {
+          context: { path: segment.path },
+        });
+      } catch (error) {
+        logger.warn('Failed to clean up segment file', {
+          context: { path: segment.path },
+          error: error as Error,
+        });
+      }
+    }),
+  );
 
   // Also clean up the specific segment list file for this operation
   if (segments.length > 0) {
@@ -729,9 +769,9 @@ export async function cleanupSegments(segments: VideoSegment[]): Promise<void> {
  * @param segmentCount - Number of segments
  * @returns Estimated processing time in minutes
  */
-export function estimateSegmentedProcessingTime(
+function estimateSegmentedProcessingTime(
   totalDuration: number,
-  segmentCount: number
+  segmentCount: number,
 ): number {
   // Splitting: ~10 seconds per minute of video
   const splitTime = (totalDuration / 60) * (10 / 60);
@@ -785,7 +825,7 @@ export interface FastCompressionOptions {
  */
 export async function compressVideoBeforeSplit(
   inputPath: string,
-  options: FastCompressionOptions = {}
+  options: FastCompressionOptions = {},
 ): Promise<PreSplitCompressionResult> {
   const {
     onProgress,
@@ -824,13 +864,20 @@ export async function compressVideoBeforeSplit(
     // Using libx264 with fast preset for speed
     // CRF 30 provides good compression with acceptable quality for AI analysis
     const args = [
-      '-i', inputPath,
-      '-c:v', 'libx264',
-      '-preset', preset,
-      '-crf', crf.toString(),
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-movflags', '+faststart', // Optimize for streaming
+      '-i',
+      inputPath,
+      '-c:v',
+      'libx264',
+      '-preset',
+      preset,
+      '-crf',
+      crf.toString(),
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-movflags',
+      '+faststart', // Optimize for streaming
       '-y', // Overwrite output
       outputPath,
     ];
@@ -858,10 +905,16 @@ export async function compressVideoBeforeSplit(
             parseInt(minutes) * 60 +
             parseFloat(seconds);
 
-          const progress = Math.min(Math.round((currentTime / duration) * 95), 95);
+          const progress = Math.min(
+            Math.round((currentTime / duration) * 95),
+            95,
+          );
           if (progress > lastProgress) {
             lastProgress = progress;
-            onProgress(progress, `Compressing video... ${Math.round(currentTime / 60)}/${Math.round(duration / 60)} min`);
+            onProgress(
+              progress,
+              `Compressing video... ${Math.round(currentTime / 60)}/${Math.round(duration / 60)} min`,
+            );
           }
         }
       });
@@ -870,7 +923,11 @@ export async function compressVideoBeforeSplit(
         if (code === 0) {
           resolve();
         } else {
-          reject(new Error(`FFmpeg compression failed with code ${code}: ${stderr.slice(-500)}`));
+          reject(
+            new Error(
+              `FFmpeg compression failed with code ${code}: ${stderr.slice(-500)}`,
+            ),
+          );
         }
       });
 
@@ -896,7 +953,10 @@ export async function compressVideoBeforeSplit(
     });
 
     if (onProgress) {
-      onProgress(100, `Compression complete (${((1 - compressedSize / originalSize) * 100).toFixed(0)}% smaller)`);
+      onProgress(
+        100,
+        `Compression complete (${((1 - compressedSize / originalSize) * 100).toFixed(0)}% smaller)`,
+      );
     }
 
     return {
@@ -908,7 +968,8 @@ export async function compressVideoBeforeSplit(
       compressionTime,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Compression failed';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Compression failed';
 
     logger.error('Pre-split compression failed', {
       context: { inputPath },

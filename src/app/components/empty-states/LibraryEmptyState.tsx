@@ -40,11 +40,11 @@ interface LibraryEmptyStateProps {
 }
 
 export function LibraryEmptyState({ onUploadComplete }: LibraryEmptyStateProps) {
-  const router = useRouter();
+  const { push } = useRouter();
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   const handleRecordClick = () => {
-    router.push('/record');
+    push('/record');
   };
 
   const handleUploadClick = () => {
@@ -52,7 +52,7 @@ export function LibraryEmptyState({ onUploadComplete }: LibraryEmptyStateProps) 
   };
 
   const handleCreateNoteClick = () => {
-    router.push('/library?action=create-note');
+    push('/library?action=create-note');
   };
 
   const handleUploadComplete = () => {

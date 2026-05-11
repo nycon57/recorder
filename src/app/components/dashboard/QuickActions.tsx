@@ -39,14 +39,8 @@ export function QuickActions({
   onUploadClick,
   onCreateNoteClick,
 }: QuickActionsProps) {
-  const router = useRouter();
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const MotionDiv = mounted ? motion.div : 'div';
+  const { push } = useRouter();
+  const MotionDiv = motion.div;
 
   const actions = [
     {
@@ -54,7 +48,7 @@ export function QuickActions({
       label: 'Record Screen',
       description:
         'Capture screen, camera, and audio instantly. No downloads required.',
-      onClick: () => router.push('/record'),
+      onClick: () => push('/record'),
     },
     {
       icon: Upload,
@@ -72,19 +66,15 @@ export function QuickActions({
       icon: Search,
       label: 'Search Library',
       description: 'Find anything instantly with context-aware AI search.',
-      onClick: () => router.push('/search'),
+      onClick: () => push('/search'),
     },
   ];
 
   return (
     <MotionDiv
-      {...(mounted
-        ? {
-            variants: containerVariants,
-            initial: 'hidden',
-            animate: 'visible',
-          }
-        : {})}
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
       className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
     >
       {actions.map((action) => {
@@ -92,13 +82,9 @@ export function QuickActions({
         return (
           <MotionDiv
             key={action.label}
-            {...(mounted
-              ? {
-                  variants: itemVariants,
-                  whileHover: { scale: 1.02 },
-                  whileTap: { scale: 0.98 },
-                }
-              : {})}
+            variants={itemVariants}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
             <button
               onClick={action.onClick}

@@ -43,7 +43,6 @@ interface QuotasData {
 
 export default function AdminQuotasPage() {
   const [data, setData] = useState<QuotasData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,8 +70,6 @@ export default function AdminQuotasPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -89,10 +86,10 @@ export default function AdminQuotasPage() {
     }
   }
 
-  if (loading && !data) {
+  if (!data && !error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -101,7 +98,7 @@ export default function AdminQuotasPage() {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
@@ -139,11 +136,11 @@ export default function AdminQuotasPage() {
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Total Organizations
             </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Users className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.totalOrgs ?? 0}</div>
@@ -151,11 +148,11 @@ export default function AdminQuotasPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Near Search Limit
             </CardTitle>
-            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            <AlertTriangle className="size-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -174,11 +171,11 @@ export default function AdminQuotasPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Near Storage Limit
             </CardTitle>
-            <HardDrive className="h-4 w-4 text-yellow-500" />
+            <HardDrive className="size-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -197,9 +194,9 @@ export default function AdminQuotasPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Storage</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <Package className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -325,7 +322,7 @@ export default function AdminQuotasPage() {
                       <TableCell className="text-right">
                         {nearLimit && (
                           <Badge variant="destructive">
-                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            <AlertTriangle className="size-3 mr-1" />
                             Near Limit
                           </Badge>
                         )}

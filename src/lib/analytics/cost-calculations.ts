@@ -6,6 +6,11 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
+const USD_CURRENCY_FORMATTER = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+});
+
 /**
  * Storage cost rates per GB per month
  */
@@ -22,7 +27,7 @@ export const TIER_PRICING = {
  * Note: This function uses decimal gigabytes (1e9 bytes = 1 GB) for pricing calculations,
  * which is standard for cloud storage billing. This differs from binary gigabytes (1024^3).
  */
-export function calculateStorageCost(sizeBytes: number, tier: 'hot' | 'warm' | 'cold' | 'glacier'): number {
+function calculateStorageCost(sizeBytes: number, tier: 'hot' | 'warm' | 'cold' | 'glacier'): number {
   const GB = sizeBytes / 1e9;
   return GB * TIER_PRICING[tier];
 }
@@ -158,11 +163,8 @@ export function getLastPeriod() {
 /**
  * Format cost as currency
  */
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amount);
+function formatCurrency(amount: number): string {
+  return USD_CURRENCY_FORMATTER.format(amount);
 }
 
 /**
@@ -214,8 +216,9 @@ export async function determineDominantTier(orgId: string): Promise<'hot' | 'war
   let dominantTier: 'hot' | 'warm' | 'cold' | 'glacier' = 'hot';
 
   Object.entries(tierCounts).forEach(([tier, count]) => {
-    if (count > maxCount) {
-      maxCount = count;
+    const recordingCount = Number(count) || 0;
+    if (recordingCount > maxCount) {
+      maxCount = recordingCount;
       dominantTier = tier as 'hot' | 'warm' | 'cold' | 'glacier';
     }
   });
@@ -226,7 +229,7 @@ export async function determineDominantTier(orgId: string): Promise<'hot' | 'war
 /**
  * Calculate monthly growth rate from historical data
  */
-export async function calculateMonthlyGrowthRate(orgId: string | null, months = 6): Promise<number> {
+async function calculateMonthlyGrowthRate(orgId: string | null, months = 6): Promise<number> {
   const supabase = supabaseAdmin;
 
   const startDate = new Date();

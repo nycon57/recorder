@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 
 import type { Audience } from '@/lib/docs';
@@ -36,6 +43,12 @@ interface MiniSearchResult {
   score: number;
 }
 
+interface LoadedSearchIndex {
+  indexPayload: IndexPayload;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  miniSearch: any;
+}
+
 // ── Search index URL resolution ───────────────────────────────────────────────
 
 function getIndexUrl(audience: Audience): string | null {
@@ -68,64 +81,59 @@ function useDebounce<T>(value: T, delayMs: number): T {
  */
 export function DocsSearch() {
   const { isOpen, audience, close } = useDocsSearch();
-  const router = useRouter();
+  const { push } = useRouter();
   const [, startTransition] = useTransition();
 
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query, 150);
 
-  const [indexPayload, setIndexPayload] = useState<IndexPayload | null>(null);
-  const [isLoadingIndex, setIsLoadingIndex] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const {
+    data: loadedIndex,
+    isLoading: isLoadingIndex,
+    error: loadError,
+  } = useQuery<LoadedSearchIndex, Error>({
+    queryKey: ['docs', 'search-index', audience],
+    enabled: isOpen,
+    staleTime: Infinity,
+    queryFn: async ({ signal }) => {
+      const url = getIndexUrl(audience);
+      if (!url) {
+        throw new Error('Search index is not available for this audience.');
+      }
 
-  // Dynamic MiniSearch import — only loaded client-side after first open
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const miniSearchRef = useRef<any>(null);
+      const [payload, { default: MiniSearch }] = await Promise.all([
+        fetch(url, { signal }).then((r) => {
+          if (!r.ok) throw new Error(`Search index returned ${r.status}`);
+          return r.json() as Promise<IndexPayload>;
+        }),
+        import('minisearch'),
+      ]);
 
-  // ── Load index on first open ──────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!isOpen || indexPayload) return;
-
-    const url = getIndexUrl(audience);
-    if (!url) return;
-
-    setIsLoadingIndex(true);
-    setLoadError(null);
-
-    Promise.all([
-      fetch(url).then((r) => {
-        if (!r.ok) throw new Error(`Search index returned ${r.status}`);
-        return r.json() as Promise<IndexPayload>;
-      }),
-      import('minisearch'),
-    ])
-      .then(([payload, { default: MiniSearch }]) => {
-        setIndexPayload(payload);
-
-        // Hydrate MiniSearch from the pre-built JSON
-        const ms = MiniSearch.loadJSON<SearchEntry>(
+      return {
+        indexPayload: payload,
+        miniSearch: MiniSearch.loadJSON<SearchEntry>(
           JSON.stringify(payload.index),
           {
             idField: 'id',
             fields: ['title', 'description', 'bodyText', 'tags'],
-            storeFields: ['id', 'title', 'description', 'section', 'audience', 'tags'],
+            storeFields: [
+              'id',
+              'title',
+              'description',
+              'section',
+              'audience',
+              'tags',
+            ],
             searchOptions: {
               boost: { title: 3, description: 1.5, bodyText: 1 },
               fuzzy: 0.2,
               prefix: true,
             },
           },
-        );
-        miniSearchRef.current = ms;
-        setIsLoadingIndex(false);
-      })
-      .catch((err) => {
-        setLoadError('Could not load search index.');
-        setIsLoadingIndex(false);
-        console.error('[docs:search] index load failed:', err);
-      });
-  }, [isOpen, audience, indexPayload]);
+        ),
+      };
+    },
+  });
 
   // ── Keyboard shortcut: ⌘K / Ctrl-K ──────────────────────────────────────
 
@@ -145,18 +153,20 @@ export function DocsSearch() {
   // ── Search execution ──────────────────────────────────────────────────────
 
   const results = useMemo<SearchEntry[]>(() => {
-    if (!miniSearchRef.current || !debouncedQuery.trim()) return [];
+    if (!loadedIndex?.miniSearch || !debouncedQuery.trim()) return [];
 
-    const raw = miniSearchRef.current.search(debouncedQuery) as MiniSearchResult[];
+    const raw = loadedIndex.miniSearch.search(
+      debouncedQuery,
+    ) as MiniSearchResult[];
     const entryMap = new Map(
-      (indexPayload?.entries ?? []).map((e) => [e.id, e]),
+      loadedIndex.indexPayload.entries.map((e) => [e.id, e]),
     );
 
-    return raw
-      .slice(0, 12)
-      .map((r) => entryMap.get(r.id))
-      .filter(Boolean) as SearchEntry[];
-  }, [debouncedQuery, indexPayload]);
+    return raw.slice(0, 12).flatMap((__item, __index, __array) => {
+      const __mapped = entryMap.get(__item.id);
+      return __mapped ? [__mapped] : [];
+    }) as SearchEntry[];
+  }, [debouncedQuery, loadedIndex]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
@@ -165,10 +175,10 @@ export function DocsSearch() {
       close();
       setQuery('');
       startTransition(() => {
-        router.push(`/docs/${slug}`);
+        push(`/docs/${slug}`);
       });
     },
-    [close, router],
+    [close, push],
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -214,7 +224,7 @@ export function DocsSearch() {
             role="alert"
             className="py-6 text-center text-sm text-[color:var(--docs-text-muted)]"
           >
-            {loadError}
+            Could not load search index.
           </div>
         )}
 
@@ -222,9 +232,14 @@ export function DocsSearch() {
           <CommandEmpty>Start typing to search docs.</CommandEmpty>
         )}
 
-        {!isLoadingIndex && !loadError && debouncedQuery.trim() !== '' && results.length === 0 && (
-          <CommandEmpty>No results for &ldquo;{debouncedQuery}&rdquo;.</CommandEmpty>
-        )}
+        {!isLoadingIndex &&
+          !loadError &&
+          debouncedQuery.trim() !== '' &&
+          results.length === 0 && (
+            <CommandEmpty>
+              No results for &ldquo;{debouncedQuery}&rdquo;.
+            </CommandEmpty>
+          )}
 
         {results.length > 0 && (
           <CommandGroup heading="Pages">

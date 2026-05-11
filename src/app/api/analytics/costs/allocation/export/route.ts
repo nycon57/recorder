@@ -6,6 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import { apiHandler, requireSystemAdmin } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
@@ -14,6 +15,61 @@ import {
   calculateTrend,
   formatBytes,
 } from '@/lib/analytics/cost-calculations';
+
+type AllocationOrganization = { id: string; name: string };
+type AllocationRecording = {
+  org_id: string | null;
+  file_size: number | null;
+  storage_tier: string | null;
+};
+type AllocationUser = { org_id: string | null };
+
+async function buildAllocationRows(
+  organizations: AllocationOrganization[],
+  recordings: AllocationRecording[] | null,
+  users: AllocationUser[] | null,
+) {
+  return Promise.all(
+    organizations.map(async (org) => {
+      const orgRecordings =
+        recordings?.filter((r) => r.org_id === org.id) || [];
+
+      let totalStorage = 0;
+      let totalCost = 0;
+
+      orgRecordings.forEach((r) => {
+        const sizeBytes = r.file_size || 0;
+        const tier =
+          (r.storage_tier as 'hot' | 'warm' | 'cold' | 'glacier') || 'hot';
+        const sizeGB = sizeBytes / 1e9;
+
+        totalStorage += sizeBytes;
+        totalCost += sizeGB * TIER_PRICING[tier];
+      });
+
+      const userCount = users?.filter((u) => u.org_id === org.id).length || 0;
+      const recordingCount = orgRecordings.length;
+      const costPerUser = userCount > 0 ? totalCost / userCount : 0;
+      const costPerGB = totalStorage > 0 ? totalCost / (totalStorage / 1e9) : 0;
+      const [tier, trend] = await Promise.all([
+        determineDominantTier(org.id),
+        calculateTrend(org.id, 30),
+      ]);
+
+      return {
+        organizationName: org.name,
+        totalCost: totalCost.toFixed(2),
+        storage: (totalStorage / 1e9).toFixed(2),
+        tier,
+        userCount,
+        recordingCount,
+        costPerUser: costPerUser.toFixed(2),
+        costPerGB: costPerGB.toFixed(4),
+        trend: trend.toFixed(1),
+      };
+    }),
+  );
+}
 
 /**
  * POST /api/analytics/costs/allocation/export
@@ -36,7 +92,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   if (!organizations || organizations.length === 0) {
     // Return empty CSV
-    const csv = 'Organization,Total Cost,Storage (GB),Tier,Users,Recordings,Cost/User,Cost/GB,Trend %\n';
+    const csv =
+      'Organization,Total Cost,Storage (GB),Tier,Users,Recordings,Cost/User,Cost/GB,Trend %\n';
     return new Response(csv, {
       headers: {
         'Content-Type': 'text/csv',
@@ -46,64 +103,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   // Get all recordings with organization info
-  const { data: recordings } = await supabase
-    .from('content')
-    .select('org_id, file_size, storage_tier')
-    .is('deleted_at', null);
-
-  // Get all users
-  const { data: users } = await supabase
-    .from('users')
-    .select('org_id')
-    .is('deleted_at', null);
-
-  // Calculate metrics for each organization
-  const allocations = await Promise.all(
-    organizations.map(async (org) => {
-      // Get organization recordings
-      const orgRecordings = recordings?.filter((r) => r.org_id === org.id) || [];
-
-      // Calculate total storage and cost
-      let totalStorage = 0;
-      let totalCost = 0;
-
-      orgRecordings.forEach((r) => {
-        const sizeBytes = r.file_size || 0;
-        const tier = (r.storage_tier as 'hot' | 'warm' | 'cold' | 'glacier') || 'hot';
-        const sizeGB = sizeBytes / 1e9;
-
-        totalStorage += sizeBytes;
-        totalCost += sizeGB * TIER_PRICING[tier];
-      });
-
-      // Count users in organization
-      const userCount = users?.filter((u) => u.org_id === org.id).length || 0;
-
-      // Get recording count
-      const recordingCount = orgRecordings.length;
-
-      // Calculate per-user and per-GB metrics
-      const costPerUser = userCount > 0 ? totalCost / userCount : 0;
-      const costPerGB = totalStorage > 0 ? totalCost / (totalStorage / 1e9) : 0;
-
-      // Determine dominant tier
-      const tier = await determineDominantTier(org.id);
-
-      // Calculate trend (30-day)
-      const trend = await calculateTrend(org.id, 30);
-
-      return {
-        organizationName: org.name,
-        totalCost: totalCost.toFixed(2),
-        storage: (totalStorage / 1e9).toFixed(2), // Convert to GB
-        tier,
-        userCount,
-        recordingCount,
-        costPerUser: costPerUser.toFixed(2),
-        costPerGB: costPerGB.toFixed(4),
-        trend: trend.toFixed(1),
-      };
-    })
+  const allocations = await Promise.all([
+    supabase
+      .from('content')
+      .select('org_id, file_size, storage_tier')
+      .is('deleted_at', null),
+    supabase.from('users').select('org_id').is('deleted_at', null),
+  ]).then(([{ data: recordings }, { data: users }]) =>
+    buildAllocationRows(organizations, recordings, users),
   );
 
   // Sort by total cost (descending)
@@ -134,10 +141,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     a.trend,
   ]);
 
-  const csv = [
-    headers.join(','),
-    ...rows.map((row) => row.join(',')),
-  ].join('\n');
+  const csv = [headers.join(','), ...rows.map((row) => row.join(','))].join(
+    '\n',
+  );
 
   return new Response(csv, {
     headers: {
@@ -154,7 +160,11 @@ function escapeCSV(value: string | number): string {
   const stringValue = String(value);
 
   // If value contains comma, quote, or newline, wrap in quotes and escape existing quotes
-  if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+  if (
+    stringValue.includes(',') ||
+    stringValue.includes('"') ||
+    stringValue.includes('\n')
+  ) {
     return `"${stringValue.replace(/"/g, '""')}"`;
   }
 

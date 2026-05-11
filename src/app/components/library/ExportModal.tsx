@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useReducer } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Download,
   FileArchive,
@@ -45,74 +46,93 @@ interface ExportModalProps {
   totalItems?: number;
 }
 
+const EMPTY_SELECTED_ITEMS: string[] = [];
+
 /**
  * Export Modal Component
  * Allows users to export their library content in various formats
  */
-export default function ExportModal({
+export default function ExportModal(
+  props: Parameters<typeof useExportModalImplementation>[0],
+) {
+  return useExportModalImplementation(props);
+}
+
+function useExportModalImplementation({
   isOpen,
   onClose,
-  selectedItems = [],
+  selectedItems = EMPTY_SELECTED_ITEMS,
   totalItems = 0,
 }: ExportModalProps) {
   const { toast } = useToast();
 
-  const [format, setFormat] = useState<ExportFormat>('zip');
-  const [options, setOptions] = useState<ExportOptions>({
-    includeTranscripts: true,
-    includeDocuments: true,
-    includeMetadata: true,
-    includeMedia: true,
-  });
-  const [status, setStatus] = useState<ExportStatus>('idle');
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [estimatedSize, setEstimatedSize] = useState<number>(0);
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        format: ExportFormat;
+        options: ExportOptions;
+        status: ExportStatus;
+        progress: number;
+        error: string | null;
+      },
+      patch: Partial<{
+        format: ExportFormat;
+        options: ExportOptions;
+        status: ExportStatus;
+        progress: number;
+        error: string | null;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      format: 'zip' as ExportFormat,
+      options: {
+        includeTranscripts: true,
+        includeDocuments: true,
+        includeMetadata: true,
+        includeMedia: true,
+      },
+      status: 'idle' as ExportStatus,
+      progress: 0,
+      error: null,
+    },
+  );
+  const { format, options, status, progress, error } = state;
 
   const isExporting = status === 'preparing' || status === 'downloading';
   const hasSelectedItems = selectedItems.length > 0;
 
-  // Reset when modal opens/closes
-  useEffect(() => {
-    if (isOpen) {
-      setStatus('idle');
-      setProgress(0);
-      setError(null);
-    }
-  }, [isOpen]);
+  const resetExportState = () => {
+    dispatch({ status: 'idle', progress: 0, error: null });
+  };
 
-  // Estimate export size
-  useEffect(() => {
-    const calculateSize = async () => {
-      if (!isOpen) return;
-
-      try {
-        const params = new URLSearchParams({
-          format,
-          ids: selectedItems.join(','),
-          ...Object.entries(options).reduce((acc, [key, value]) => {
+  const { data: estimatedSize = 0 } = useQuery<number>({
+    queryKey: ['library', 'export', 'estimate', format, options, selectedItems],
+    enabled: isOpen,
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({
+        format,
+        ids: selectedItems.join(','),
+        ...Object.entries(options).reduce(
+          (acc, [key, value]) => {
             acc[key] = value.toString();
             return acc;
-          }, {} as Record<string, string>),
-        });
+          },
+          {} as Record<string, string>,
+        ),
+      });
 
-        const response = await fetch(`/api/library/export/estimate?${params}`);
-        if (response.ok) {
-          const data = await response.json();
-          setEstimatedSize(data.data?.estimatedSize || 0);
-        }
-      } catch (error) {
-        console.error('Failed to estimate export size:', error);
-      }
-    };
+      const response = await fetch(`/api/library/export/estimate?${params}`, {
+        signal,
+      });
+      if (!response.ok) return 0;
 
-    calculateSize();
-  }, [format, options, selectedItems, isOpen]);
+      const data = await response.json();
+      return data.data?.estimatedSize || 0;
+    },
+  });
 
   const handleExport = async () => {
-    setStatus('preparing');
-    setProgress(0);
-    setError(null);
+    dispatch({ status: 'preparing', progress: 0, error: null });
 
     try {
       // Prepare export request
@@ -142,13 +162,18 @@ export default function ExportModal({
       }
 
       // Poll for export status
-      setStatus('downloading');
-      let attempts = 0;
+      dispatch({ status: 'downloading' });
       const maxAttempts = 60; // 5 minutes max
       const pollInterval = 5000; // 5 seconds
 
-      while (attempts < maxAttempts) {
-        const statusResponse = await fetch(`/api/library/export/${exportId}/status`);
+      const pollExportStatus = async (attempt: number): Promise<void> => {
+        if (attempt >= maxAttempts) {
+          throw new Error('Export timed out');
+        }
+
+        const statusResponse = await fetch(
+          `/api/library/export/${exportId}/status`,
+        );
         const statusData = await statusResponse.json();
 
         if (statusData.data?.status === 'completed') {
@@ -156,13 +181,13 @@ export default function ExportModal({
           const downloadUrl = statusData.data.downloadUrl;
           const link = document.createElement('a');
           link.href = downloadUrl;
-          link.download = statusData.data.filename || `export-${Date.now()}.${format}`;
+          link.download =
+            statusData.data.filename || `export-${Date.now()}.${format}`;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
 
-          setStatus('success');
-          setProgress(100);
+          dispatch({ status: 'success', progress: 100 });
 
           toast({
             title: 'Export complete',
@@ -171,6 +196,7 @@ export default function ExportModal({
 
           // Close modal after success
           setTimeout(() => {
+            resetExportState();
             onClose();
           }, 2000);
 
@@ -180,18 +206,20 @@ export default function ExportModal({
         }
 
         // Update progress
-        setProgress(statusData.data?.progress || (attempts / maxAttempts) * 90);
+        dispatch({
+          progress: statusData.data?.progress || (attempt / maxAttempts) * 90,
+        });
 
-        attempts++;
         await new Promise((resolve) => setTimeout(resolve, pollInterval));
-      }
+        return pollExportStatus(attempt + 1);
+      };
 
-      throw new Error('Export timed out');
+      await pollExportStatus(0);
     } catch (err) {
       console.error('Export error:', err);
-      const message = err instanceof Error ? err.message : 'Failed to export content';
-      setStatus('error');
-      setError(message);
+      const message =
+        err instanceof Error ? err.message : 'Failed to export content';
+      dispatch({ status: 'error', error: message });
 
       toast({
         title: 'Export failed',
@@ -203,6 +231,7 @@ export default function ExportModal({
 
   const handleClose = () => {
     if (!isExporting) {
+      resetExportState();
       onClose();
     }
   };
@@ -227,13 +256,18 @@ export default function ExportModal({
             <Label>Export Format</Label>
             <RadioGroup
               value={format}
-              onValueChange={(value) => setFormat(value as ExportFormat)}
+              onValueChange={(value) =>
+                dispatch({ format: value as ExportFormat })
+              }
               disabled={isExporting}
             >
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <RadioGroupItem value="zip" id="zip" />
-                <Label htmlFor="zip" className="flex items-center cursor-pointer">
-                  <FileArchive className="w-4 h-4 mr-2 text-muted-foreground" />
+                <Label
+                  htmlFor="zip"
+                  className="flex items-center cursor-pointer"
+                >
+                  <FileArchive className="size-4 mr-2 text-muted-foreground" />
                   <div>
                     <div className="font-medium">ZIP Archive</div>
                     <div className="text-xs text-muted-foreground">
@@ -242,10 +276,13 @@ export default function ExportModal({
                   </div>
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <RadioGroupItem value="json" id="json" />
-                <Label htmlFor="json" className="flex items-center cursor-pointer">
-                  <FileJson className="w-4 h-4 mr-2 text-muted-foreground" />
+                <Label
+                  htmlFor="json"
+                  className="flex items-center cursor-pointer"
+                >
+                  <FileJson className="size-4 mr-2 text-muted-foreground" />
                   <div>
                     <div className="font-medium">JSON</div>
                     <div className="text-xs text-muted-foreground">
@@ -254,10 +291,13 @@ export default function ExportModal({
                   </div>
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <RadioGroupItem value="csv" id="csv" />
-                <Label htmlFor="csv" className="flex items-center cursor-pointer">
-                  <FileSpreadsheet className="w-4 h-4 mr-2 text-muted-foreground" />
+                <Label
+                  htmlFor="csv"
+                  className="flex items-center cursor-pointer"
+                >
+                  <FileSpreadsheet className="size-4 mr-2 text-muted-foreground" />
                   <div>
                     <div className="font-medium">CSV</div>
                     <div className="text-xs text-muted-foreground">
@@ -274,12 +314,17 @@ export default function ExportModal({
             <div className="space-y-3">
               <Label>Include in Export</Label>
               <div className="space-y-2">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="media"
                     checked={options.includeMedia}
                     onCheckedChange={(checked) =>
-                      setOptions({ ...options, includeMedia: checked as boolean })
+                      dispatch({
+                        options: {
+                          ...options,
+                          includeMedia: checked as boolean,
+                        },
+                      })
                     }
                     disabled={isExporting}
                   />
@@ -287,25 +332,38 @@ export default function ExportModal({
                     Media files (videos, audio)
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="transcripts"
                     checked={options.includeTranscripts}
                     onCheckedChange={(checked) =>
-                      setOptions({ ...options, includeTranscripts: checked as boolean })
+                      dispatch({
+                        options: {
+                          ...options,
+                          includeTranscripts: checked as boolean,
+                        },
+                      })
                     }
                     disabled={isExporting}
                   />
-                  <Label htmlFor="transcripts" className="text-sm cursor-pointer">
+                  <Label
+                    htmlFor="transcripts"
+                    className="text-sm cursor-pointer"
+                  >
                     Transcripts
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="documents"
                     checked={options.includeDocuments}
                     onCheckedChange={(checked) =>
-                      setOptions({ ...options, includeDocuments: checked as boolean })
+                      dispatch({
+                        options: {
+                          ...options,
+                          includeDocuments: checked as boolean,
+                        },
+                      })
                     }
                     disabled={isExporting}
                   />
@@ -313,12 +371,17 @@ export default function ExportModal({
                     Generated documents
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="metadata"
                     checked={options.includeMetadata}
                     onCheckedChange={(checked) =>
-                      setOptions({ ...options, includeMetadata: checked as boolean })
+                      dispatch({
+                        options: {
+                          ...options,
+                          includeMetadata: checked as boolean,
+                        },
+                      })
                     }
                     disabled={isExporting}
                   />
@@ -344,7 +407,9 @@ export default function ExportModal({
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
-                  {status === 'preparing' ? 'Preparing export...' : 'Downloading...'}
+                  {status === 'preparing'
+                    ? 'Preparing export...'
+                    : 'Downloading...'}
                 </span>
                 <span className="font-medium">{Math.round(progress)}%</span>
               </div>
@@ -355,15 +420,17 @@ export default function ExportModal({
           {/* Success Message */}
           {status === 'success' && (
             <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-              <CheckCircle2 className="h-5 w-5" />
-              <span className="text-sm font-medium">Export completed successfully!</span>
+              <CheckCircle2 className="size-5" />
+              <span className="text-sm font-medium">
+                Export completed successfully!
+              </span>
             </div>
           )}
 
           {/* Error Message */}
           {status === 'error' && error && (
             <div className="flex items-center gap-2 text-destructive">
-              <XCircle className="h-5 w-5" />
+              <XCircle className="size-5" />
               <span className="text-sm">{error}</span>
             </div>
           )}
@@ -380,17 +447,24 @@ export default function ExportModal({
           </Button>
           <Button
             onClick={handleExport}
-            disabled={isExporting || (!options.includeMedia && !options.includeTranscripts && !options.includeDocuments && !options.includeMetadata && format === 'zip')}
+            disabled={
+              isExporting ||
+              (!options.includeMedia &&
+                !options.includeTranscripts &&
+                !options.includeDocuments &&
+                !options.includeMetadata &&
+                format === 'zip')
+            }
             className="w-full sm:w-auto"
           >
             {isExporting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 size-4 animate-spin" />
                 {status === 'preparing' ? 'Preparing...' : 'Exporting...'}
               </>
             ) : (
               <>
-                <Download className="mr-2 h-4 w-4" />
+                <Download className="mr-2 size-4" />
                 Export
               </>
             )}

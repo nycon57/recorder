@@ -27,20 +27,20 @@ const statement = {
 
 export const ac = createAccessControl(statement);
 
-export const owner = ac.newRole({
+const owner = ac.newRole({
   ...adminAc.statements,
 });
 
-export const admin = ac.newRole({
+const admin = ac.newRole({
   ...adminAc.statements,
 });
 
-export const contributor = ac.newRole({
+const contributor = ac.newRole({
   user: [],
   session: [],
 });
 
-export const reader = ac.newRole({
+const reader = ac.newRole({
   user: [],
   session: [],
 });

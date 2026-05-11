@@ -203,7 +203,7 @@ export function ChatInput({
                   title="Attach files"
                   aria-label="Attach files (Ctrl+U)"
                 >
-                  <Paperclip className="h-4 w-4" aria-hidden="true" />
+                  <Paperclip className="size-4" aria-hidden="true" />
                 </Button>
               </PromptInputAttachFiles>
             )}

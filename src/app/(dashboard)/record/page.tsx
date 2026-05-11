@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
-import { auth } from '@/lib/auth/auth';
 import { redirect } from 'next/navigation';
 
+import { auth } from '@/lib/auth/auth';
 import RecorderApp from '@/app/components/RecorderApp';
 
 export const metadata = {

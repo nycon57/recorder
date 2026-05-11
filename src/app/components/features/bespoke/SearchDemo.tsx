@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useReducer, useRef } from 'react';
 import * as motion from 'motion/react-client';
 import { AnimatePresence } from 'motion/react';
 import {
@@ -135,34 +135,100 @@ const mockQueries = [
   },
 ];
 
+type SearchDemoState = {
+  activeQueryIndex: number;
+  displayedQuery: string;
+  isTyping: boolean;
+  showResults: boolean;
+  hoveredResult: string | null;
+  sortBy: 'relevance' | 'date' | 'name';
+};
+
+type SearchDemoAction =
+  | { type: 'start-query'; index?: number }
+  | { type: 'type-query'; value: string }
+  | { type: 'typing-complete' }
+  | { type: 'show-results' }
+  | { type: 'next-query' }
+  | { type: 'patch'; patch: Partial<SearchDemoState> };
+
+const initialSearchDemoState: SearchDemoState = {
+  activeQueryIndex: 0,
+  displayedQuery: '',
+  isTyping: true,
+  showResults: false,
+  hoveredResult: null,
+  sortBy: 'relevance',
+};
+
+function searchDemoReducer(
+  state: SearchDemoState,
+  action: SearchDemoAction,
+): SearchDemoState {
+  switch (action.type) {
+    case 'start-query':
+      return {
+        ...state,
+        activeQueryIndex: action.index ?? state.activeQueryIndex,
+        displayedQuery: '',
+        isTyping: true,
+        showResults: false,
+      };
+    case 'type-query':
+      return { ...state, displayedQuery: action.value };
+    case 'typing-complete':
+      return { ...state, isTyping: false };
+    case 'show-results':
+      return { ...state, showResults: true };
+    case 'next-query':
+      return {
+        ...state,
+        activeQueryIndex: (state.activeQueryIndex + 1) % mockQueries.length,
+      };
+    case 'patch':
+      return { ...state, ...action.patch };
+  }
+}
+
 export function SearchDemo() {
-  const [activeQueryIndex, setActiveQueryIndex] = useState(0);
-  const [displayedQuery, setDisplayedQuery] = useState('');
-  const [isTyping, setIsTyping] = useState(true);
-  const [showResults, setShowResults] = useState(false);
-  const [hoveredResult, setHoveredResult] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'relevance' | 'date' | 'name'>('relevance');
+  return useSearchDemoImplementation();
+}
+
+function useSearchDemoImplementation() {
+  const [state, dispatch] = useReducer(
+    searchDemoReducer,
+    initialSearchDemoState,
+  );
+  const {
+    activeQueryIndex,
+    displayedQuery,
+    isTyping,
+    showResults,
+    hoveredResult,
+    sortBy,
+  } = state;
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const currentQuery = mockQueries[activeQueryIndex];
 
   // Typewriter effect for query
   useEffect(() => {
-    setIsTyping(true);
-    setShowResults(false);
-    setDisplayedQuery('');
+    dispatch({ type: 'start-query' });
 
     const query = currentQuery.text;
     let charIndex = 0;
 
     const typeInterval = setInterval(() => {
       if (charIndex < query.length) {
-        setDisplayedQuery(query.slice(0, charIndex + 1));
+        dispatch({
+          type: 'type-query',
+          value: query.slice(0, charIndex + 1),
+        });
         charIndex++;
       } else {
         clearInterval(typeInterval);
-        setIsTyping(false);
-        setTimeout(() => setShowResults(true), 300);
+        dispatch({ type: 'typing-complete' });
+        setTimeout(() => dispatch({ type: 'show-results' }), 300);
       }
     }, 40);
 
@@ -172,7 +238,7 @@ export function SearchDemo() {
   // Auto-switch queries
   useEffect(() => {
     const switchInterval = setInterval(() => {
-      setActiveQueryIndex((prev) => (prev + 1) % mockQueries.length);
+      dispatch({ type: 'next-query' });
     }, 15000);
 
     return () => clearInterval(switchInterval);
@@ -181,10 +247,10 @@ export function SearchDemo() {
   const switchQuery = useCallback(
     (index: number) => {
       if (index !== activeQueryIndex) {
-        setActiveQueryIndex(index);
+        dispatch({ type: 'start-query', index });
       }
     },
-    [activeQueryIndex]
+    [activeQueryIndex],
   );
 
   const formatTime = (seconds: number) => {
@@ -226,14 +292,13 @@ export function SearchDemo() {
               className="inline-flex items-center gap-2 mb-4 px-4 py-2 rounded-full
                 bg-accent/10 border border-accent/30"
             >
-              <Search className="h-4 w-4 text-accent" />
-              <span className="text-sm font-medium text-accent">Semantic Search</span>
+              <Search className="size-4 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                Semantic Search
+              </span>
             </div>
             <h3 className="font-outfit text-2xl sm:text-3xl font-light mb-2">
-              Find by{' '}
-              <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
-                meaning
-              </span>
+              Find by <span className=" text-primary">meaning</span>
             </h3>
             <p className="text-muted-foreground">
               Ask questions in natural language, get instant answers
@@ -245,20 +310,26 @@ export function SearchDemo() {
             initial={{ opacity: 0, y: 40, scale: 0.95 }}
             whileInView={{ opacity: 1, y: 0, scale: 1 }}
             viewport={{ once: true }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30, delay: 0.2 }}
+            transition={{
+              type: 'spring',
+              stiffness: 400,
+              damping: 30,
+              delay: 0.2,
+            }}
             className={cn(
               'relative rounded-3xl overflow-hidden',
               'bg-gradient-to-b from-card/80 to-card/60',
               'backdrop-blur-xl',
               'border border-accent/20',
-              'shadow-[0_0_80px_rgba(0,223,130,0.15)]'
+              'shadow-[0_0_80px_rgba(0,223,130,0.15)]',
             )}
           >
             {/* Header */}
             <div className="p-6 border-b border-border/30">
               <h2 className="text-xl font-normal mb-1">Search Recordings</h2>
               <p className="text-sm text-muted-foreground">
-                Search across all your recordings using AI-powered semantic search
+                Search across all your recordings using AI-powered semantic
+                search
               </p>
             </div>
 
@@ -266,13 +337,13 @@ export function SearchDemo() {
             <div className="p-6 border-b border-border/30">
               <div className="flex gap-4">
                 <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-5" />
                   <Input
                     ref={searchInputRef}
                     type="text"
                     value={displayedQuery}
                     readOnly
-                    placeholder="Search for anything..."
+                    placeholder="Search for anything…"
                     className="pl-10 pr-4 py-6 text-base"
                   />
                   {isTyping && (
@@ -284,10 +355,10 @@ export function SearchDemo() {
                   )}
                 </div>
                 <Button size="lg" disabled={isTyping}>
-                  {isTyping ? 'Searching...' : 'Search'}
+                  {isTyping ? 'Searching…' : 'Search'}
                 </Button>
                 <Button variant="outline" size="lg" className="gap-2">
-                  <Filter className="w-5 h-5" />
+                  <Filter className="size-5" />
                   Filters
                 </Button>
               </div>
@@ -306,11 +377,15 @@ export function SearchDemo() {
                   >
                     <motion.div
                       animate={{ rotate: 360 }}
-                      transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                      className="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full mb-4"
+                      transition={{
+                        repeat: Infinity,
+                        duration: 1,
+                        ease: 'linear',
+                      }}
+                      className="size-8 border-2 border-accent/30 border-t-accent rounded-full mb-4"
                     />
                     <p className="text-muted-foreground">
-                      Searching your knowledge base...
+                      Searching your knowledge base…
                     </p>
                   </motion.div>
                 ) : showResults ? (
@@ -327,19 +402,26 @@ export function SearchDemo() {
                         <span className="font-medium text-foreground">
                           {currentQuery.results.length}
                         </span>{' '}
-                        result{currentQuery.results.length !== 1 ? 's' : ''} for "
-                        {currentQuery.text}"
+                        result{currentQuery.results.length !== 1 ? 's' : ''} for
+                        "{currentQuery.text}"
                       </p>
                       <Select
                         value={sortBy}
-                        onValueChange={(v) => setSortBy(v as typeof sortBy)}
+                        onValueChange={(v) =>
+                          dispatch({
+                            type: 'patch',
+                            patch: { sortBy: v as typeof sortBy },
+                          })
+                        }
                       >
                         <SelectTrigger className="w-[180px]">
-                          <SlidersHorizontal className="mr-2 h-4 w-4" />
+                          <SlidersHorizontal className="mr-2 size-4" />
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="relevance">Most Relevant</SelectItem>
+                          <SelectItem value="relevance">
+                            Most Relevant
+                          </SelectItem>
                           <SelectItem value="date">Most Recent</SelectItem>
                           <SelectItem value="name">Name A-Z</SelectItem>
                         </SelectContent>
@@ -366,11 +448,22 @@ export function SearchDemo() {
                             hidden: { opacity: 0, y: 20 },
                             visible: { opacity: 1, y: 0 },
                           }}
-                          onMouseEnter={() => setHoveredResult(result.id)}
-                          onMouseLeave={() => setHoveredResult(null)}
+                          onMouseEnter={() =>
+                            dispatch({
+                              type: 'patch',
+                              patch: { hoveredResult: result.id },
+                            })
+                          }
+                          onMouseLeave={() =>
+                            dispatch({
+                              type: 'patch',
+                              patch: { hoveredResult: null },
+                            })
+                          }
                           className={cn(
                             'border border-border rounded-lg p-5 transition-all cursor-pointer',
-                            hoveredResult === result.id && 'shadow-md border-accent/30'
+                            hoveredResult === result.id &&
+                              'shadow-md border-accent/30',
                           )}
                         >
                           {/* Result Header */}
@@ -383,17 +476,17 @@ export function SearchDemo() {
                                 <span className="flex items-center gap-1">
                                   {result.source === 'transcript' ? (
                                     <>
-                                      <Video className="w-4 h-4" /> Transcript
+                                      <Video className="size-4" /> Transcript
                                     </>
                                   ) : (
                                     <>
-                                      <FileText className="w-4 h-4" /> Document
+                                      <FileText className="size-4" /> Document
                                     </>
                                   )}
                                 </span>
                                 {result.startTime !== undefined && (
                                   <span className="flex items-center gap-1">
-                                    <Clock className="w-4 h-4" />
+                                    <Clock className="size-4" />
                                     {formatTime(result.startTime)}
                                   </span>
                                 )}
@@ -408,14 +501,14 @@ export function SearchDemo() {
                               variant="ghost"
                               size="sm"
                               className={cn(
-                                'h-8 w-8 p-0',
-                                result.isFavorite && 'text-yellow-500'
+                                'size-8 p-0',
+                                result.isFavorite && 'text-yellow-500',
                               )}
                             >
                               <Bookmark
                                 className={cn(
-                                  'h-4 w-4',
-                                  result.isFavorite && 'fill-current'
+                                  'size-4',
+                                  result.isFavorite && 'fill-current',
                                 )}
                               />
                             </Button>
@@ -437,7 +530,7 @@ export function SearchDemo() {
                                   className="text-xs"
                                 >
                                   <span
-                                    className="w-2 h-2 rounded-full mr-1.5"
+                                    className="size-2 rounded-full mr-1.5"
                                     style={{ backgroundColor: tag.color }}
                                   />
                                   {tag.name}
@@ -459,7 +552,7 @@ export function SearchDemo() {
                             }}
                             className="absolute right-4 top-1/2 -translate-y-1/2 text-accent"
                           >
-                            <ArrowRight className="h-5 w-5" />
+                            <ArrowRight className="size-5" />
                           </motion.div>
                         </motion.div>
                       ))}
@@ -474,20 +567,20 @@ export function SearchDemo() {
               className={cn(
                 'flex items-center justify-center gap-3 px-6 py-4',
                 'border-t border-border/30',
-                'bg-gradient-to-r from-accent/5 via-transparent to-secondary/5'
+                'bg-gradient-to-r from-accent/5 via-transparent to-secondary/5',
               )}
             >
               <span className="text-xs text-muted-foreground mr-2">Try:</span>
               {mockQueries.map((query, index) => (
                 <button
-                  key={index}
+                  key={JSON.stringify(query)}
                   onClick={() => switchQuery(index)}
                   className={cn(
                     'px-3 py-1.5 rounded-full text-xs font-medium',
                     'transition-all duration-300',
                     activeQueryIndex === index
                       ? 'bg-accent text-accent-foreground shadow-[0_0_15px_rgba(0,223,130,0.4)]'
-                      : 'bg-background/50 text-muted-foreground hover:text-foreground hover:bg-background/80'
+                      : 'bg-background/50 text-muted-foreground hover:text-foreground hover:bg-background/80',
                   )}
                 >
                   Query {index + 1}
@@ -504,7 +597,8 @@ export function SearchDemo() {
             transition={{ delay: 0.8 }}
             className="text-center text-sm text-muted-foreground mt-6"
           >
-            Click results to jump to exact moments · Filter by type, date, or tags
+            Click results to jump to exact moments · Filter by type, date, or
+            tags
           </motion.p>
         </div>
       </div>

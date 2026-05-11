@@ -15,7 +15,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Bot, Copy, Check, ExternalLink } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 
 import { useSession } from '@/lib/auth/auth-client';
 import { Button } from '@/app/components/ui/button';
@@ -59,14 +59,15 @@ import {
   parseCitationsToMarkdown,
 } from '../utils/message-utils';
 import type { ExtendedMessage } from '../types';
-import {
-  messageVariants,
-  usePrefersReducedMotion,
-} from '../utils/animations';
+import { messageVariants, usePrefersReducedMotion } from '../utils/animations';
 
 type DisplayToolInvocation = {
   toolName: string;
-  state?: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
+  state?:
+    | 'input-streaming'
+    | 'input-available'
+    | 'output-available'
+    | 'output-error';
   args?: unknown;
   result?: unknown;
 };
@@ -115,7 +116,10 @@ export interface MessageItemProps {
   /**
    * On feedback (thumbs up/down)
    */
-  onFeedback?: (message: ExtendedMessage, feedback: 'positive' | 'negative') => void;
+  onFeedback?: (
+    message: ExtendedMessage,
+    feedback: 'positive' | 'negative',
+  ) => void;
 
   /**
    * Custom className
@@ -131,7 +135,13 @@ export interface MessageItemProps {
 /**
  * MessageItem Component
  */
-export function MessageItem({
+export function MessageItem(
+  props: Parameters<typeof useMessageItemImplementation>[0],
+) {
+  return useMessageItemImplementation(props);
+}
+
+function useMessageItemImplementation({
   message,
   showActions = true,
   onCopy,
@@ -171,7 +181,11 @@ export function MessageItem({
   }, [isAssistant, hasSources, message, sourceKey, sources]);
 
   // Parse citations in message text to make them clickable with highlight parameters
-  const messageTextWithCitations = parseCitationsToMarkdown(messageText, sources, sourceKey);
+  const messageTextWithCitations = parseCitationsToMarkdown(
+    messageText,
+    sources,
+    sourceKey,
+  );
 
   /**
    * Handle copy
@@ -204,17 +218,25 @@ export function MessageItem({
           className="bg-primary/10"
           aria-hidden="true"
         >
-          <Bot className="h-5 w-5 text-primary" />
+          <Bot className="size-5 text-primary" />
         </MessageAvatar>
       )}
 
       {/* Message Content Container */}
-      <div className={cn('space-y-3', isAssistant && 'flex-1', isUser && 'flex flex-col items-end')}>
+      <div
+        className={cn(
+          'space-y-3',
+          isAssistant && 'flex-1',
+          isUser && 'flex flex-col items-end',
+        )}
+      >
         {/* Tool Calls */}
         {isAssistant && hasToolCalls && message.toolInvocations && (
           <div className="space-y-2">
-            {(message.toolInvocations as unknown as DisplayToolInvocation[]).map((tool, idx) => (
-              <Tool key={idx} defaultOpen={false}>
+            {(
+              message.toolInvocations as unknown as DisplayToolInvocation[]
+            ).map((tool, idx) => (
+              <Tool key={JSON.stringify(tool)} defaultOpen={false}>
                 <ToolHeader
                   title={tool.toolName}
                   type={`tool-${tool.toolName}` as ToolHeaderProps['type']}
@@ -222,12 +244,26 @@ export function MessageItem({
                 />
                 <ToolContent>
                   {tool.args != null ? (
-                    <ToolInput input={typeof tool.args === 'string' ? tool.args : JSON.stringify(tool.args)} />
+                    <ToolInput
+                      input={
+                        typeof tool.args === 'string'
+                          ? tool.args
+                          : JSON.stringify(tool.args)
+                      }
+                    />
                   ) : null}
                   {(tool.result || tool.state === 'output-error') && (
                     <ToolOutput
-                      output={typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result)}
-                      errorText={tool.state === 'output-error' ? 'Tool execution failed' : undefined}
+                      output={
+                        typeof tool.result === 'string'
+                          ? tool.result
+                          : JSON.stringify(tool.result)
+                      }
+                      errorText={
+                        tool.state === 'output-error'
+                          ? 'Tool execution failed'
+                          : undefined
+                      }
                     />
                   )}
                 </ToolContent>
@@ -248,7 +284,11 @@ export function MessageItem({
                   key={step.id || idx}
                   label={step.content}
                   description={step.type}
-                  status={idx === message.reasoning!.steps.length - 1 ? 'complete' : 'complete'}
+                  status={
+                    idx === message.reasoning!.steps.length - 1
+                      ? 'complete'
+                      : 'complete'
+                  }
                 />
               ))}
               {message.reasoning.conclusion && (
@@ -273,9 +313,10 @@ export function MessageItem({
               {sources.map((source, idx) => {
                 // Build URL with highlight parameters if available
                 const chunkId = source.metadata?.chunkId as string | undefined;
-                const sourceUrl = sourceKey && chunkId
-                  ? `${source.url}?sourceKey=${encodeURIComponent(sourceKey)}&highlight=${encodeURIComponent(chunkId)}`
-                  : source.url;
+                const sourceUrl =
+                  sourceKey && chunkId
+                    ? `${source.url}?sourceKey=${encodeURIComponent(sourceKey)}&highlight=${encodeURIComponent(chunkId)}`
+                    : source.url;
 
                 // Debug: Log URL construction for first source
                 if (idx === 0) {
@@ -304,9 +345,14 @@ export function MessageItem({
                         aria-label={`Source ${idx + 1}: ${source.title}${source.relevanceScore ? `, ${(source.relevanceScore * 100).toFixed(0)}% relevance` : ''}`}
                       >
                         <div className="flex items-start gap-3">
-                          <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+                          <ExternalLink
+                            className="size-4 mt-0.5 shrink-0 text-primary"
+                            aria-hidden="true"
+                          />
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm mb-1 truncate">{source.title}</div>
+                            <div className="font-medium text-sm mb-1 truncate">
+                              {source.title}
+                            </div>
                             {source.snippet && (
                               <div className="text-xs text-muted-foreground line-clamp-2">
                                 {source.snippet}
@@ -315,7 +361,8 @@ export function MessageItem({
                             {source.relevanceScore && (
                               <div className="flex items-center gap-2 mt-2">
                                 <Badge variant="secondary" className="text-xs">
-                                  Relevance: {(source.relevanceScore * 100).toFixed(0)}%
+                                  Relevance:{' '}
+                                  {(source.relevanceScore * 100).toFixed(0)}%
                                 </Badge>
                               </div>
                             )}
@@ -330,9 +377,14 @@ export function MessageItem({
                         aria-label={`Source ${idx + 1}: ${source.title}${source.relevanceScore ? `, ${(source.relevanceScore * 100).toFixed(0)}% relevance` : ''}`}
                       >
                         <div className="flex items-start gap-3">
-                          <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+                          <ExternalLink
+                            className="size-4 mt-0.5 shrink-0 text-primary"
+                            aria-hidden="true"
+                          />
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm mb-1 truncate">{source.title}</div>
+                            <div className="font-medium text-sm mb-1 truncate">
+                              {source.title}
+                            </div>
                             {source.snippet && (
                               <div className="text-xs text-muted-foreground line-clamp-2">
                                 {source.snippet}
@@ -341,7 +393,8 @@ export function MessageItem({
                             {source.relevanceScore && (
                               <div className="flex items-center gap-2 mt-2">
                                 <Badge variant="secondary" className="text-xs">
-                                  Relevance: {(source.relevanceScore * 100).toFixed(0)}%
+                                  Relevance:{' '}
+                                  {(source.relevanceScore * 100).toFixed(0)}%
                                 </Badge>
                               </div>
                             )}
@@ -363,7 +416,7 @@ export function MessageItem({
             className={cn(
               'relative',
               isUser && colors.bg,
-              isUser && colors.text
+              isUser && colors.text,
             )}
           >
             {/* Markdown Content */}
@@ -373,7 +426,12 @@ export function MessageItem({
           </MessageContent>
 
           {/* Timestamp and Actions Row */}
-          <div className={cn('flex items-center gap-2 mt-2 px-1', isUser && 'justify-end')}>
+          <div
+            className={cn(
+              'flex items-center gap-2 mt-2 px-1',
+              isUser && 'justify-end',
+            )}
+          >
             {/* Timestamp */}
             {message.createdAt && (
               <div className="text-xs opacity-60">
@@ -386,38 +444,46 @@ export function MessageItem({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                className="size-6 text-muted-foreground hover:text-foreground"
                 onClick={handleCopy}
-                aria-label={copied ? 'Message copied' : 'Copy message to clipboard'}
+                aria-label={
+                  copied ? 'Message copied' : 'Copy message to clipboard'
+                }
               >
                 {prefersReducedMotion ? (
                   // Static icons for reduced motion
                   copied ? (
-                    <Check className="h-3 w-3 text-green-500" aria-hidden="true" />
+                    <Check
+                      className="size-3 text-green-500"
+                      aria-hidden="true"
+                    />
                   ) : (
-                    <Copy className="h-3 w-3" aria-hidden="true" />
+                    <Copy className="size-3" aria-hidden="true" />
                   )
                 ) : (
                   // Animated icons for normal motion
                   <AnimatePresence mode="wait">
                     {copied ? (
-                      <motion.div
+                      <m.div
                         key="check"
-                        initial={{ scale: 0 }}
+                        initial={{ scale: 0.95 }}
                         animate={{ scale: 1 }}
-                        exit={{ scale: 0 }}
+                        exit={{ scale: 0.95 }}
                       >
-                        <Check className="h-3 w-3 text-green-500" aria-hidden="true" />
-                      </motion.div>
+                        <Check
+                          className="size-3 text-green-500"
+                          aria-hidden="true"
+                        />
+                      </m.div>
                     ) : (
-                      <motion.div
+                      <m.div
                         key="copy"
-                        initial={{ scale: 0 }}
+                        initial={{ scale: 0.95 }}
                         animate={{ scale: 1 }}
-                        exit={{ scale: 0 }}
+                        exit={{ scale: 0.95 }}
                       >
-                        <Copy className="h-3 w-3" aria-hidden="true" />
-                      </motion.div>
+                        <Copy className="size-3" aria-hidden="true" />
+                      </m.div>
                     )}
                   </AnimatePresence>
                 )}
@@ -434,7 +500,7 @@ export function MessageItem({
                 key={attachment.id}
                 className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2 text-xs"
               >
-                <div className="h-4 w-4 flex items-center justify-center">
+                <div className="size-4 flex items-center justify-center">
                   {attachment.type === 'image' && '🖼️'}
                   {attachment.type === 'file' && '📄'}
                   {attachment.type === 'audio' && '🎵'}
@@ -470,13 +536,13 @@ export function MessageItem({
   // Streaming messages are identified by being the last assistant message
   // and having incomplete/streaming state
   return (
-    <motion.div
+    <m.div
       variants={messageVariants}
       initial="hidden"
       animate="visible"
       exit="exit"
     >
       {messageContent}
-    </motion.div>
+    </m.div>
   );
 }

@@ -50,7 +50,7 @@ export function RecentIngestJobs() {
           <p className="px-6 pb-4 text-xs text-muted-foreground">Loading…</p>
         ) : jobs.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-6 pb-6 pt-2 text-center">
-            <Inbox className="h-6 w-6 text-muted-foreground/50" />
+            <Inbox className="size-6 text-muted-foreground/50" />
             <p className="text-xs text-muted-foreground">No ingest jobs yet.</p>
           </div>
         ) : (
@@ -100,7 +100,7 @@ export function RecentIngestJobs() {
                       className="inline-flex items-center gap-0.5 hover:text-foreground transition-colors"
                       title="Open in job queue"
                     >
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className="size-3" />
                     </Link>
                   </div>
                 </div>

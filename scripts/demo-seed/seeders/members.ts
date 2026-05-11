@@ -15,27 +15,31 @@ import { DEMO_ORG_ID, DEMO_USERS, SEED_CREATED_AT } from '../fixtures.js';
 
 export async function seedMembers(
   client: PoolClient,
-  opts: { dryRun: boolean }
+  opts: { dryRun: boolean },
 ): Promise<void> {
   const now = new Date().toISOString();
 
-  for (const user of DEMO_USERS) {
-    if (opts.dryRun) {
-      console.log(
-        `[dry-run] Would upsert member: ${user.email} role=${user.role} org=${DEMO_ORG_ID}`
-      );
-      continue;
-    }
+  await Promise.all(
+    DEMO_USERS.map(async (user) => {
+      if (opts.dryRun) {
+        console.log(
+          `[dry-run] Would upsert member: ${user.email} role=${user.role} org=${DEMO_ORG_ID}`,
+        );
+        return;
+      }
 
-    await client.query(
-      `INSERT INTO "member" (id, "organizationId", "userId", role, "createdAt", "updatedAt")
+      await client.query(
+        `INSERT INTO "member" (id, "organizationId", "userId", role, "createdAt", "updatedAt")
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (id) DO UPDATE SET
          role        = EXCLUDED.role,
          "updatedAt" = EXCLUDED."updatedAt"`,
-      [user.memberId, DEMO_ORG_ID, user.id, user.role, SEED_CREATED_AT, now]
-    );
+        [user.memberId, DEMO_ORG_ID, user.id, user.role, SEED_CREATED_AT, now],
+      );
 
-    console.log(`[seed] member upserted: ${user.email} role=${user.role} (${user.memberId})`);
-  }
+      console.log(
+        `[seed] member upserted: ${user.email} role=${user.role} (${user.memberId})`,
+      );
+    }),
+  );
 }

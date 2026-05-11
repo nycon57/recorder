@@ -77,7 +77,7 @@ export function getAdaptiveChunkConfig(
  * @param contentType - Content type classification
  * @returns Recommended chunk size
  */
-export function calculateOptimalChunkSize(
+function calculateOptimalChunkSize(
   text: string,
   contentType: ContentType
 ): number {
@@ -100,7 +100,7 @@ export function calculateOptimalChunkSize(
  * @param config - Chunking configuration
  * @returns True if chunk should be split
  */
-export function shouldSplitChunk(
+function shouldSplitChunk(
   chunkSize: number,
   config: ChunkingConfig
 ): boolean {
@@ -115,7 +115,7 @@ export function shouldSplitChunk(
  * @param config - Chunking configuration
  * @returns True if chunks should be merged
  */
-export function shouldMergeChunks(
+function shouldMergeChunks(
   chunk1Size: number,
   chunk2Size: number,
   config: ChunkingConfig

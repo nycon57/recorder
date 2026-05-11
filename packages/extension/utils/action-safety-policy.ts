@@ -1,6 +1,6 @@
 /* global HTMLLabelElement */
 
-export type BrowserToolName =
+type BrowserToolName =
   | 'get_page_context'
   | 'search_page_elements'
   | 'inspect_element'
@@ -13,9 +13,9 @@ export type BrowserToolName =
   | 'type_in_element'
   | 'press_key';
 
-export type ActionSafetyDecision = 'allow' | 'confirm' | 'block';
+type ActionSafetyDecision = 'allow' | 'confirm' | 'block';
 
-export type ActionSafetyRisk =
+type ActionSafetyRisk =
   | 'read'
   | 'navigation'
   | 'input'
@@ -334,7 +334,10 @@ function targetDescriptor(target: HTMLElement): string {
     target.textContent,
   ];
 
-  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement
+  ) {
     const label = findExternalLabelText(target);
     if (label) pieces.push(label);
   }
@@ -357,15 +360,17 @@ function describeTarget(target: HTMLElement, selector?: string): string {
 
 function bestTargetLabel(target: HTMLElement): string {
   const explicitLabel = [
-    target.getAttribute('aria-label') ??
-      '',
+    target.getAttribute('aria-label') ?? '',
     target.getAttribute('aria-labelledby') ? collectLabelledByText(target) : '',
     target.getAttribute('title') ?? '',
     target.getAttribute('placeholder') ?? '',
   ].find((candidate) => candidate.trim());
   if (explicitLabel) return explicitLabel.replace(/\s+/g, ' ').trim();
 
-  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement
+  ) {
     const label =
       target.closest('label')?.textContent ?? findExternalLabelText(target);
     if (label.trim()) return label.replace(/\s+/g, ' ').trim();
@@ -414,14 +419,17 @@ function normalizeKeyPress(args: Pick<ActionSafetyArgs, 'key' | 'modifiers'>): {
   modifiers: string[];
 } {
   const rawKey = String(args.key ?? '').trim();
-  const keyParts = rawKey
-    .split('+')
-    .map((part) => part.trim())
-    .filter(Boolean);
+  const keyParts: string[] = [];
+  for (const part of rawKey.split('+')) {
+    const trimmed = part.trim();
+    if (trimmed) keyParts.push(trimmed);
+  }
   const key = normalizeKeyName(keyParts.pop() ?? rawKey);
-  const modifiers = [...keyParts, ...(args.modifiers ?? [])]
-    .map(normalizeModifier)
-    .filter((modifier): modifier is string => Boolean(modifier));
+  const modifiers: string[] = [];
+  for (const modifier of [...keyParts, ...(args.modifiers ?? [])]) {
+    const normalized = normalizeModifier(modifier);
+    if (normalized) modifiers.push(normalized);
+  }
   return {
     key,
     modifiers: Array.from(new Set(modifiers)).sort(sortModifiers),

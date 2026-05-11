@@ -1,15 +1,16 @@
 import {
-  SOURCE_STATUS,
-  isErrorStatus,
-  isProcessingStatus,
-  normalizeSourceStatus,
-} from './status-helpers';
-import {
   KNOWLEDGE_STATUS,
   type KnowledgeStatusCounts,
   type KnowledgeStatus,
   type KnowledgeStatusMeta,
 } from '../types/knowledge-status';
+
+import {
+  SOURCE_STATUS,
+  isErrorStatus,
+  isProcessingStatus,
+  normalizeSourceStatus,
+} from './status-helpers';
 
 const KNOWLEDGE_STATUS_META: Record<KnowledgeStatus, KnowledgeStatusMeta> = {
   [KNOWLEDGE_STATUS.PROCESSING]: {
@@ -127,8 +128,9 @@ export function resolveSourceWikiPageStatus(
     KNOWLEDGE_STATUS.PROCESSING,
   ];
 
+  const wikiPageStatusSet = new Set(wikiPageStatuses);
   for (const status of priorityOrder) {
-    if (wikiPageStatuses.includes(status)) {
+    if (wikiPageStatusSet.has(status)) {
       return status;
     }
   }

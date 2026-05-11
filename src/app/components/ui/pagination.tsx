@@ -12,7 +12,6 @@ import { buttonVariants } from "@/app/components/ui/button"
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
     <nav
-      role="navigation"
       aria-label="pagination"
       data-slot="pagination"
       className={cn("mx-auto flex w-full justify-center", className)}
@@ -76,7 +75,7 @@ function PaginationPrevious({
       className={cn("gap-1 px-2.5 sm:pl-2.5", className)}
       {...props}
     >
-      <ChevronLeft className="h-4 w-4" />
+      <ChevronLeft className="size-4" />
       <span className="hidden sm:block">Previous</span>
     </PaginationLink>
   )
@@ -93,7 +92,7 @@ function PaginationNext({
       {...props}
     >
       <span className="hidden sm:block">Next</span>
-      <ChevronRight className="h-4 w-4" />
+      <ChevronRight className="size-4" />
     </PaginationLink>
   )
 }
@@ -118,9 +117,7 @@ function PaginationEllipsis({
 export {
   Pagination,
   PaginationContent,
-  PaginationLink,
   PaginationItem,
   PaginationPrevious,
   PaginationNext,
-  PaginationEllipsis,
 }

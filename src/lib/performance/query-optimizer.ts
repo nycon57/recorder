@@ -11,6 +11,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+
 import { getCached, setCached, CacheTTL } from '@/lib/services/cache-manager';
 
 /**
@@ -100,7 +101,7 @@ const queryTracker = new QueryPerformanceTracker();
 /**
  * Optimized query executor with caching and monitoring
  */
-export async function executeQuery<T>(
+async function executeQuery<T>(
   supabase: SupabaseClient,
   queryBuilder: () => any,
   options?: {
@@ -172,7 +173,7 @@ export async function executeQuery<T>(
 /**
  * Batch query executor for parallel operations
  */
-export async function executeBatchQueries<T extends Record<string, any>>(
+async function executeBatchQueries<T extends Record<string, any>>(
   queries: Record<string, () => Promise<any>>
 ): Promise<T> {
   const startTime = Date.now();
@@ -208,13 +209,13 @@ export async function executeBatchQueries<T extends Record<string, any>>(
 /**
  * Optimized paginated query with cursor-based pagination
  */
-export interface PaginationParams {
+interface PaginationParams {
   limit?: number;
   cursor?: string;
   direction?: 'next' | 'prev';
 }
 
-export interface PaginatedResponse<T> {
+interface PaginatedResponse<T> {
   data: T[];
   nextCursor?: string;
   prevCursor?: string;
@@ -222,7 +223,7 @@ export interface PaginatedResponse<T> {
   totalCount?: number;
 }
 
-export async function paginatedQuery<T extends { id: string; created_at: string }>(
+async function paginatedQuery<T extends { id: string; created_at: string }>(
   supabase: SupabaseClient,
   table: string,
   params: PaginationParams & {
@@ -326,7 +327,7 @@ export async function paginatedQuery<T extends { id: string; created_at: string 
 /**
  * Query optimization recommendations
  */
-export const OPTIMIZATION_QUERIES = {
+const OPTIMIZATION_QUERIES = {
   // Add missing indexes for new content type support
   contentTypeIndexes: `
     -- Content type filtering optimization
@@ -407,7 +408,7 @@ export const OPTIMIZATION_QUERIES = {
 /**
  * Connection pool optimization settings
  */
-export const CONNECTION_POOL_CONFIG = {
+const CONNECTION_POOL_CONFIG = {
   // Maximum number of connections
   max: 20,
 
@@ -444,7 +445,7 @@ export function resetQueryStats() {
 /**
  * Export query plan analyzer (for debugging)
  */
-export async function analyzeQuery(
+async function analyzeQuery(
   supabase: SupabaseClient,
   sql: string
 ): Promise<any> {

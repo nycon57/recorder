@@ -6,7 +6,12 @@
  */
 
 import { NextRequest } from 'next/server';
-import { apiHandler, requireSystemAdmin, successResponse } from '@/lib/utils/api';
+
+import {
+  apiHandler,
+  requireSystemAdmin,
+  successResponse,
+} from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   TIER_PRICING,
@@ -34,7 +39,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .order('name');
 
   if (orgsError) {
-    console.error('[GET /api/analytics/costs/allocation] Error fetching organizations:', orgsError);
+    console.error(
+      '[GET /api/analytics/costs/allocation] Error fetching organizations:',
+      orgsError,
+    );
     throw new Error(`Failed to fetch organizations: ${orgsError.message}`);
   }
 
@@ -57,7 +65,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .is('deleted_at', null);
 
   if (recordingsError) {
-    console.error('[GET /api/analytics/costs/allocation] Error fetching recordings:', recordingsError);
+    console.error(
+      '[GET /api/analytics/costs/allocation] Error fetching recordings:',
+      recordingsError,
+    );
     throw new Error(`Failed to fetch recordings: ${recordingsError.message}`);
   }
 
@@ -68,7 +79,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .is('deleted_at', null);
 
   if (usersError) {
-    console.error('[GET /api/analytics/costs/allocation] Error fetching users:', usersError);
+    console.error(
+      '[GET /api/analytics/costs/allocation] Error fetching users:',
+      usersError,
+    );
     throw new Error(`Failed to fetch users: ${usersError.message}`);
   }
 
@@ -76,7 +90,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const allocations = await Promise.all(
     organizations.map(async (org) => {
       // Get organization recordings
-      const orgRecordings = recordings?.filter((r) => r.org_id === org.id) || [];
+      const orgRecordings =
+        recordings?.filter((r) => r.org_id === org.id) || [];
 
       // Calculate total storage and cost
       let totalStorage = 0;
@@ -84,7 +99,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
       orgRecordings.forEach((r) => {
         const sizeBytes = r.file_size || 0;
-        const tier = (r.storage_tier as 'hot' | 'warm' | 'cold' | 'glacier') || 'hot';
+        const tier =
+          (r.storage_tier as 'hot' | 'warm' | 'cold' | 'glacier') || 'hot';
         const sizeGB = sizeBytes / 1e9;
 
         totalStorage += sizeBytes;
@@ -102,10 +118,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
       const costPerGB = totalStorage > 0 ? totalCost / (totalStorage / 1e9) : 0;
 
       // Determine dominant tier
-      const tier = await determineDominantTier(org.id);
-
-      // Calculate trend (30-day)
-      const trend = await calculateTrend(org.id, 30);
+      const [tier, trend] = await Promise.all([
+        determineDominantTier(org.id),
+        calculateTrend(org.id, 30),
+      ]);
 
       return {
         organizationId: org.id,
@@ -119,12 +135,14 @@ export const GET = apiHandler(async (request: NextRequest) => {
         costPerGB: parseFloat(costPerGB.toFixed(4)),
         trend: parseFloat(trend.toFixed(1)),
       };
-    })
+    }),
   );
 
   // Calculate totals
   const totals = {
-    totalCost: parseFloat(allocations.reduce((sum, a) => sum + a.totalCost, 0).toFixed(2)),
+    totalCost: parseFloat(
+      allocations.reduce((sum, a) => sum + a.totalCost, 0).toFixed(2),
+    ),
     totalStorage: allocations.reduce((sum, a) => sum + a.storage, 0),
     totalUsers: allocations.reduce((sum, a) => sum + a.userCount, 0),
     totalRecordings: allocations.reduce((sum, a) => sum + a.recordingCount, 0),

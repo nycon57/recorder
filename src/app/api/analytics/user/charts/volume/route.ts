@@ -4,8 +4,10 @@ import { apiHandler, requireAuth, successResponse } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { userId } = await requireAuth();
-  const supabase = await createClient();
+  const [{ userId }, supabase] = await Promise.all([
+    requireAuth(),
+    createClient(),
+  ]);
 
   const { searchParams } = new URL(request.url);
   const timeRange = searchParams.get('timeRange') || '30d';
@@ -69,14 +71,23 @@ export const GET = apiHandler(async (request: NextRequest) => {
     let key: string;
 
     if (groupByFormat === 'day') {
-      key = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      key = date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
     } else if (groupByFormat === 'week') {
       // Get week start (Monday)
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay() + 1);
-      key = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      key = weekStart.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
     } else {
-      key = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      key = date.toLocaleDateString('en-US', {
+        month: 'short',
+        year: 'numeric',
+      });
     }
 
     dataMap.set(key, (dataMap.get(key) || 0) + 1);

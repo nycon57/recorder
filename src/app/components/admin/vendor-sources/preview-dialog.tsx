@@ -8,8 +8,8 @@
  * which now includes the `content` field (extended in TRIB-152).
  *
  * Props:
- *   pageId  — UUID of the vendor_wiki_pages row
- *   trigger — React node used as the Dialog trigger (e.g. <Button>)
+ *   pageId  - UUID of the vendor_wiki_pages row
+ *   trigger - React node used as the Dialog trigger (e.g. <Button>)
  *
  * TRIB-152
  */
@@ -27,6 +27,8 @@ import {
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
+import { formatStableDate } from '@/lib/utils/formatting';
+
 import { PreviewMarkdown } from './preview-markdown';
 
 // ---------------------------------------------------------------------------
@@ -124,7 +126,7 @@ export function PreviewDialog({ pageId, trigger }: PreviewDialogProps) {
 
             {state.status === 'error' && (
               <div className="flex flex-col items-center gap-3 py-8 text-center">
-                <AlertCircle className="h-8 w-8 text-destructive" />
+                <AlertCircle className="size-8 text-destructive" />
                 <p className="text-sm text-muted-foreground">{state.message}</p>
                 <Button
                   variant="outline"
@@ -132,21 +134,20 @@ export function PreviewDialog({ pageId, trigger }: PreviewDialogProps) {
                   onClick={fetchPage}
                   className="gap-1.5"
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
+                  <RefreshCw className="size-3.5" />
                   Retry
                 </Button>
               </div>
             )}
 
-            {state.status === 'ok' && (
-              state.page.content ? (
+            {state.status === 'ok' &&
+              (state.page.content ? (
                 <PreviewMarkdown content={state.page.content} />
               ) : (
                 <p className="text-sm text-muted-foreground py-4">
-                  This page has no markdown content — likely an old crawl.
+                  This page has no markdown content - likely an old crawl.
                 </p>
-              )
-            )}
+              ))}
           </div>
 
           {/* ── Metadata rail ── */}
@@ -169,25 +170,24 @@ export function PreviewDialog({ pageId, trigger }: PreviewDialogProps) {
                     className="inline-flex items-center gap-1 text-primary hover:underline break-all"
                   >
                     Open
-                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    <ExternalLink className="size-3 shrink-0" />
                   </a>
                 </MetaItem>
               ) : null}
 
               <MetaItem label="Updated">
-                {new Date(state.page.updated_at).toLocaleDateString()}
+                {formatStableDate(state.page.updated_at)}
               </MetaItem>
 
               <MetaItem label="Curated by">
-                {state.curatedByEmail ?? (
-                  state.page.curated_by ? (
+                {state.curatedByEmail ??
+                  (state.page.curated_by ? (
                     <code className="font-mono break-all">
                       {state.page.curated_by.slice(0, 8)}…
                     </code>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )
-                )}
+                    <span className="text-muted-foreground">-</span>
+                  ))}
               </MetaItem>
 
               {state.page.ingest_job_id ? (
@@ -197,7 +197,7 @@ export function PreviewDialog({ pageId, trigger }: PreviewDialogProps) {
                     className="inline-flex items-center gap-1 text-primary hover:underline font-mono break-all"
                   >
                     {state.page.ingest_job_id.slice(0, 8)}…
-                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    <ExternalLink className="size-3 shrink-0" />
                   </a>
                 </MetaItem>
               ) : null}
@@ -213,7 +213,13 @@ export function PreviewDialog({ pageId, trigger }: PreviewDialogProps) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
+function MetaItem({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-0.5">
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

@@ -46,13 +46,7 @@ const itemVariants = {
 };
 
 export function StatsRow({ stats, isLoading = false }: StatsRowProps) {
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const MotionDiv = mounted ? motion.div : 'div';
+  const MotionDiv = motion.div;
 
   if (isLoading) {
     return (
@@ -107,26 +101,15 @@ export function StatsRow({ stats, isLoading = false }: StatsRowProps) {
 
   return (
     <MotionDiv
-      {...(mounted
-        ? {
-            variants: containerVariants,
-            initial: 'hidden',
-            animate: 'visible',
-          }
-        : {})}
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
       className="grid grid-cols-2 lg:grid-cols-4 gap-4"
     >
       {statItems.map((item) => {
         const Icon = item.icon;
         return (
-          <MotionDiv
-            key={item.label}
-            {...(mounted
-              ? {
-                  variants: itemVariants,
-                }
-              : {})}
-          >
+          <MotionDiv key={item.label} variants={itemVariants}>
             <Card className="overflow-hidden card-interactive h-full">
               <CardContent className="p-4 lg:p-6">
                 <div className="flex items-start justify-between mb-3">

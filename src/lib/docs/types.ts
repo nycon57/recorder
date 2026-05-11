@@ -1,6 +1,6 @@
 export type Audience = 'public' | 'org-admin' | 'system-admin';
 
-export type DocsSource = 'git' | 'db';
+type DocsSource = 'git' | 'db';
 
 export type SectionId =
   | 'getting-started'

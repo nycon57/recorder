@@ -1,12 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { HardDrive, TrendingUp, DollarSign, Users, FileVideo } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  HardDrive,
+  TrendingUp,
+  DollarSign,
+  Users,
+  FileVideo,
+} from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Skeleton } from '@/app/components/ui/skeleton';
-import { formatBytes, formatCurrency, formatPercentage } from '@/lib/utils/formatting';
+import {
+  formatBytes,
+  formatCurrency,
+  formatPercentage,
+} from '@/lib/utils/formatting';
 
 interface OrgMetrics {
   name: string;
@@ -23,37 +38,30 @@ interface OrgStorageOverviewProps {
   organizationId: string;
 }
 
-export default function OrgStorageOverview({ organizationId }: OrgStorageOverviewProps) {
-  const [metrics, setMetrics] = useState<OrgMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function OrgStorageOverview({
+  organizationId,
+}: OrgStorageOverviewProps) {
+  const {
+    data: metrics,
+    isLoading,
+    error,
+  } = useQuery<OrgMetrics, Error>({
+    queryKey: ['analytics', 'organizations', organizationId, 'metrics'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        `/api/analytics/organizations/${organizationId}/metrics`,
+        { signal },
+      );
 
-  useEffect(() => {
-    const fetchMetrics = async () => {
-      try {
-        const response = await fetch(`/api/analytics/organizations/${organizationId}/metrics`);
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch organization metrics');
-        }
-
-        const { data } = await response.json();
-        setMetrics(data);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching organization metrics:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load metrics');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch organization metrics');
       }
-    };
 
-    fetchMetrics();
-
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchMetrics, 30000);
-    return () => clearInterval(interval);
-  }, [organizationId]);
+      const { data } = await response.json();
+      return data;
+    },
+    refetchInterval: 30000,
+  });
 
   const getTierColor = (tier: string): string => {
     switch (tier) {
@@ -70,7 +78,7 @@ export default function OrgStorageOverview({ organizationId }: OrgStorageOvervie
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <Card>
@@ -79,11 +87,16 @@ export default function OrgStorageOverview({ organizationId }: OrgStorageOvervie
           </CardHeader>
         </Card>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          {[
+            'org-storage-1',
+            'org-storage-2',
+            'org-storage-3',
+            'org-storage-4',
+          ].map((skeletonId) => (
+            <Card key={skeletonId}>
+              <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
                 <Skeleton className="h-4 w-[100px]" />
-                <Skeleton className="h-4 w-4 rounded-full" />
+                <Skeleton className="size-4 rounded-full" />
               </CardHeader>
               <CardContent>
                 <Skeleton className="h-8 w-[120px] mb-2" />
@@ -100,7 +113,9 @@ export default function OrgStorageOverview({ organizationId }: OrgStorageOvervie
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading organization metrics: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading organization metrics: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -128,20 +143,23 @@ export default function OrgStorageOverview({ organizationId }: OrgStorageOvervie
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Total Storage */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Storage</CardTitle>
-            <HardDrive className="h-4 w-4 text-muted-foreground" />
+            <HardDrive className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatBytes(metrics.totalStorage)}</div>
+            <div className="text-2xl font-bold">
+              {formatBytes(metrics.totalStorage)}
+            </div>
             <div className="flex items-center gap-2 mt-1">
               <TrendingUp
-                className={`h-3 w-3 ${
+                className={`size-3 ${
                   metrics.growthRate > 0 ? 'text-orange-600' : 'text-green-600'
                 }`}
               />
               <p className="text-xs text-muted-foreground">
-                {metrics.growthRate > 0 ? '+' : ''}{metrics.growthRate.toFixed(1)}% this month
+                {metrics.growthRate > 0 ? '+' : ''}
+                {metrics.growthRate.toFixed(1)}% this month
               </p>
             </div>
           </CardContent>
@@ -149,12 +167,14 @@ export default function OrgStorageOverview({ organizationId }: OrgStorageOvervie
 
         {/* Monthly Cost */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Monthly Cost</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(metrics.monthlyCost)}</div>
+            <div className="text-2xl font-bold">
+              {formatCurrency(metrics.monthlyCost)}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
               Current billing cycle
             </p>
@@ -163,28 +183,39 @@ export default function OrgStorageOverview({ organizationId }: OrgStorageOvervie
 
         {/* Recordings */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Recordings</CardTitle>
-            <FileVideo className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Total Recordings
+            </CardTitle>
+            <FileVideo className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.recordingCount.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              {metrics.recordingCount.toLocaleString()}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Avg. {formatBytes(metrics.totalStorage / Math.max(metrics.recordingCount, 1))} per file
+              Avg.{' '}
+              {formatBytes(
+                metrics.totalStorage / Math.max(metrics.recordingCount, 1),
+              )}{' '}
+              per file
             </p>
           </CardContent>
         </Card>
 
         {/* Users */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Users</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Users className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{metrics.userCount}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {formatBytes(metrics.totalStorage / Math.max(metrics.userCount, 1))} per user
+              {formatBytes(
+                metrics.totalStorage / Math.max(metrics.userCount, 1),
+              )}{' '}
+              per user
             </p>
           </CardContent>
         </Card>
@@ -193,12 +224,18 @@ export default function OrgStorageOverview({ organizationId }: OrgStorageOvervie
       {/* Compression Efficiency */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">Compression Efficiency</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            Compression Efficiency
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-muted-foreground">Compression Rate</span>
-            <span className="text-sm font-medium">{formatPercentage(metrics.compressionRate)}</span>
+            <span className="text-sm text-muted-foreground">
+              Compression Rate
+            </span>
+            <span className="text-sm font-medium">
+              {formatPercentage(metrics.compressionRate)}
+            </span>
           </div>
           <div className="w-full bg-muted rounded-full h-2">
             <div
@@ -207,7 +244,11 @@ export default function OrgStorageOverview({ organizationId }: OrgStorageOvervie
             />
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Saving {formatBytes(metrics.totalStorage * (metrics.compressionRate / 100))} through compression
+            Saving{' '}
+            {formatBytes(
+              metrics.totalStorage * (metrics.compressionRate / 100),
+            )}{' '}
+            through compression
           </p>
         </CardContent>
       </Card>

@@ -11,7 +11,13 @@ import {
   Loader2,
 } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import {
   AlertDialog,
@@ -37,7 +43,15 @@ type LoadingState = {
   report: boolean;
 };
 
-export default function AdminActionsPanel({ organizationId }: AdminActionsPanelProps) {
+export default function AdminActionsPanel(
+  props: Parameters<typeof useAdminActionsPanelImplementation>[0],
+) {
+  return useAdminActionsPanelImplementation(props);
+}
+
+function useAdminActionsPanelImplementation({
+  organizationId,
+}: AdminActionsPanelProps) {
   const [loadingStates, setLoadingStates] = useState<LoadingState>({
     compress: false,
     migrate: false,
@@ -45,7 +59,10 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
     report: false,
   });
   const [confirmAction, setConfirmAction] = useState<ActionType>(null);
-  const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [result, setResult] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const timeoutIdRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -90,12 +107,15 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
     const localController = abortControllerRef.current;
 
     try {
-      const response = await fetch(`/api/analytics/organizations/${organizationId}/actions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        `/api/analytics/organizations/${organizationId}/actions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action }),
+          signal: controller.signal,
+        },
+      );
 
       if (!response.ok) {
         throw new Error('Failed to execute action');
@@ -119,7 +139,8 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
       } else {
         setResult({
           type: 'error',
-          message: err instanceof Error ? err.message : 'Failed to execute action',
+          message:
+            err instanceof Error ? err.message : 'Failed to execute action',
         });
       }
     } finally {
@@ -180,7 +201,7 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5" />
+            <Zap className="size-5" />
             Admin Actions
           </CardTitle>
           <CardDescription>
@@ -198,9 +219,9 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
               }`}
             >
               {result.type === 'success' ? (
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="size-4" />
               ) : (
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircle className="size-4" />
               )}
               <p>{result.message}</p>
             </div>
@@ -223,9 +244,9 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
                 disabled={loadingStates.compress}
               >
                 {loadingStates.compress ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Zap className="h-4 w-4" />
+                  <Zap className="size-4" />
                 )}
                 <span className="ml-2">Compress</span>
               </Button>
@@ -246,9 +267,9 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
                 disabled={loadingStates.migrate}
               >
                 {loadingStates.migrate ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Archive className="h-4 w-4" />
+                  <Archive className="size-4" />
                 )}
                 <span className="ml-2">Migrate</span>
               </Button>
@@ -269,9 +290,9 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
                 disabled={loadingStates.cleanup}
               >
                 {loadingStates.cleanup ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="size-4" />
                 )}
                 <span className="ml-2">Clean Up</span>
               </Button>
@@ -292,9 +313,9 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
                 disabled={loadingStates.report}
               >
                 {loadingStates.report ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <FileDown className="h-4 w-4" />
+                  <FileDown className="size-4" />
                 )}
                 <span className="ml-2">Generate</span>
               </Button>
@@ -303,16 +324,20 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
 
           {/* Warning Note */}
           <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
-            <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <AlertCircle className="size-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-xs text-muted-foreground">
-              All actions will be queued as background jobs. You will be notified when they complete.
+              All actions will be queued as background jobs. You will be
+              notified when they complete.
             </p>
           </div>
         </CardContent>
       </Card>
 
       {/* Confirmation Dialog */}
-      <AlertDialog open={!!confirmAction} onOpenChange={() => setConfirmAction(null)}>
+      <AlertDialog
+        open={!!confirmAction}
+        onOpenChange={() => setConfirmAction(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{actionConfig?.title}</AlertDialogTitle>
@@ -321,15 +346,19 @@ export default function AdminActionsPanel({ organizationId }: AdminActionsPanelP
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={confirmAction ? loadingStates[confirmAction] : false}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel
+              disabled={confirmAction ? loadingStates[confirmAction] : false}
+            >
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => handleAction(confirmAction)}
               disabled={confirmAction ? loadingStates[confirmAction] : false}
             >
               {confirmAction && loadingStates[confirmAction] ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Processing...
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                  Processing…
                 </>
               ) : (
                 actionConfig?.confirmText

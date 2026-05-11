@@ -13,8 +13,17 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { apiHandler, requireOrg, successResponse, parseBody, errors } from '@/lib/utils/api';
-import { vectorSearch, hybridSearch } from '@/lib/services/vector-search-google';
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  parseBody,
+  errors,
+} from '@/lib/utils/api';
+import {
+  vectorSearch,
+  hybridSearch,
+} from '@/lib/services/vector-search-google';
 import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
 import { agenticSearch } from '@/lib/services/agentic-retrieval';
 import {
@@ -38,8 +47,10 @@ type SearchBody = z.infer<typeof multimodalSearchSchema>;
  */
 export const POST = withRateLimit(
   apiHandler(async (request: NextRequest) => {
-    const { orgId, userId } = await requireOrg();
-    const body = await parseBody(request, multimodalSearchSchema);
+    const [{ orgId, userId }, body] = await Promise.all([
+      requireOrg(),
+      parseBody(request, multimodalSearchSchema),
+    ]);
     const startTime = Date.now();
 
     // Check rate limit first before consuming quota
@@ -55,7 +66,11 @@ export const POST = withRateLimit(
 
     // Only consume quota after rate limit check passes
     // SECURITY: Using atomic checkAndConsumeQuota to prevent race conditions
-    const quotaCheck = await QuotaManager.checkAndConsumeQuota(orgId, 'search', 1);
+    const quotaCheck = await QuotaManager.checkAndConsumeQuota(
+      orgId,
+      'search',
+      1,
+    );
 
     // Check quota result (already consumed if allowed)
     if (!quotaCheck.allowed) {
@@ -67,54 +82,120 @@ export const POST = withRateLimit(
       });
     }
 
-  const {
-    query,
-    limit,
-    threshold,
-    recordingIds,
-    source,
-    dateFrom,
-    dateTo,
-    mode,
-    rerank,
-    maxIterations,
-    enableSelfReflection,
-    includeVisual,
-    audioWeight,
-    visualWeight,
-    includeOcr,
-    contentTypes,
-    tagIds,
-    tagFilterMode,
-    collectionId,
-    favoritesOnly,
-  } = body as SearchBody;
+    const {
+      query,
+      limit,
+      threshold,
+      recordingIds,
+      source,
+      dateFrom,
+      dateTo,
+      mode,
+      rerank,
+      maxIterations,
+      enableSelfReflection,
+      includeVisual,
+      audioWeight,
+      visualWeight,
+      includeOcr,
+      contentTypes,
+      tagIds,
+      tagFilterMode,
+      collectionId,
+      favoritesOnly,
+    } = body as SearchBody;
 
-  // Handle multimodal search mode
-  if (mode === 'multimodal') {
-    // Check if visual search is enabled
-    if (!isVisualSearchEnabled()) {
-      console.warn(
-        '[Search API] Multimodal mode requested but visual search not enabled, falling back to vector mode'
-      );
-      // Fall through to standard vector search
-    } else {
-      const multimodalResult = await multimodalSearch(query, {
+    // Handle multimodal search mode
+    if (mode === 'multimodal') {
+      // Check if visual search is enabled
+      if (!isVisualSearchEnabled()) {
+        console.warn(
+          '[Search API] Multimodal mode requested but visual search not enabled, falling back to vector mode',
+        );
+        // Fall through to standard vector search
+      } else {
+        const multimodalResult = await multimodalSearch(query, {
+          orgId,
+          limit,
+          threshold,
+          recordingIds,
+          includeVisual: includeVisual ?? true,
+          audioWeight: audioWeight ?? 0.7,
+          visualWeight: visualWeight ?? 0.3,
+          includeOcr: includeOcr ?? true,
+          dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+          dateTo: dateTo ? new Date(dateTo) : undefined,
+          contentTypes,
+          tagIds,
+          tagFilterMode,
+          collectionId,
+          favoritesOnly,
+        });
+
+        const latencyMs = Date.now() - startTime;
+
+        // Track analytics (non-blocking)
+        SearchTracker.trackSearch({
+          query,
+          mode: 'semantic',
+          resultsCount:
+            multimodalResult.combinedResults?.length ||
+            multimodalResult.audioResults?.length ||
+            0,
+          latencyMs,
+          cacheHit: false,
+          cacheLayer: 'none',
+          filters: {
+            recordingIds,
+            source,
+            dateFrom,
+            dateTo,
+            contentTypes,
+            tagIds,
+            tagFilterMode,
+            collectionId,
+            favoritesOnly,
+          },
+          orgId,
+          userId,
+        }).catch((error) =>
+          console.error('[Search API] Analytics tracking failed:', error),
+        );
+
+        return successResponse({
+          query: multimodalResult.query,
+          mode: multimodalResult.mode,
+          retrievalMode: 'discovery',
+          evidenceLayer: 'raw',
+          results:
+            multimodalResult.combinedResults || multimodalResult.audioResults,
+          audioResults: multimodalResult.audioResults,
+          visualResults: multimodalResult.visualResults,
+          count:
+            multimodalResult.combinedResults?.length ||
+            multimodalResult.audioResults?.length ||
+            0,
+          metadata: multimodalResult.metadata,
+        });
+      }
+    }
+
+    // Handle agentic search mode
+    if (mode === 'agentic') {
+      const agenticResult = await agenticSearch(query, {
         orgId,
-        limit,
-        threshold,
-        recordingIds,
-        includeVisual: includeVisual ?? true,
-        audioWeight: audioWeight ?? 0.7,
-        visualWeight: visualWeight ?? 0.3,
-        includeOcr: includeOcr ?? true,
-        dateFrom: dateFrom ? new Date(dateFrom) : undefined,
-        dateTo: dateTo ? new Date(dateTo) : undefined,
+        userId,
+        maxIterations,
+        enableSelfReflection,
+        enableReranking: rerank,
+        chunksPerQuery: Math.ceil(limit * 1.5),
+        contentIds: recordingIds, // Map recordingIds to contentIds
         contentTypes,
         tagIds,
         tagFilterMode,
         collectionId,
         favoritesOnly,
+        logResults: true,
       });
 
       const latencyMs = Date.now() - startTime;
@@ -122,216 +203,197 @@ export const POST = withRateLimit(
       // Track analytics (non-blocking)
       SearchTracker.trackSearch({
         query,
-        mode: 'semantic',
-        resultsCount: multimodalResult.combinedResults?.length || multimodalResult.audioResults?.length || 0,
+        mode: 'agentic',
+        resultsCount: agenticResult.finalResults.length,
         latencyMs,
         cacheHit: false,
         cacheLayer: 'none',
-        filters: { recordingIds, source, dateFrom, dateTo, contentTypes, tagIds, tagFilterMode, collectionId, favoritesOnly },
+        filters: {
+          recordingIds,
+          maxIterations,
+          enableSelfReflection,
+          contentTypes,
+          tagIds,
+          tagFilterMode,
+          collectionId,
+          favoritesOnly,
+        },
         orgId,
         userId,
-      }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));
+      }).catch((error) =>
+        console.error('[Search API] Analytics tracking failed:', error),
+      );
 
       return successResponse({
-        query: multimodalResult.query,
-        mode: multimodalResult.mode,
+        query,
         retrievalMode: 'discovery',
         evidenceLayer: 'raw',
-        results: multimodalResult.combinedResults || multimodalResult.audioResults,
-        audioResults: multimodalResult.audioResults,
-        visualResults: multimodalResult.visualResults,
-        count:
-          multimodalResult.combinedResults?.length ||
-          multimodalResult.audioResults?.length ||
-          0,
-        metadata: multimodalResult.metadata,
+        results: agenticResult.finalResults,
+        count: agenticResult.finalResults.length,
+        mode: 'agentic',
+        agentic: {
+          intent: agenticResult.intent,
+          complexity: agenticResult.decomposition.complexity,
+          subQueries: agenticResult.decomposition.subQueries,
+          iterations: agenticResult.iterations.length,
+          reasoning: agenticResult.reasoning,
+          confidence: agenticResult.confidence,
+          citationMap: Object.fromEntries(agenticResult.citationMap),
+        },
+        timings: {
+          totalMs: agenticResult.totalDurationMs,
+        },
+        metadata: agenticResult.metadata,
       });
     }
-  }
 
-  // Handle agentic search mode
-  if (mode === 'agentic') {
-    const agenticResult = await agenticSearch(query, {
+    // Build search options for standard/hybrid modes
+    const searchOptions = {
       orgId,
-      userId,
-      maxIterations,
-      enableSelfReflection,
-      enableReranking: rerank,
-      chunksPerQuery: Math.ceil(limit * 1.5),
-      contentIds: recordingIds, // Map recordingIds to contentIds
+      limit: rerank ? limit * 3 : limit, // Fetch 3x more results for reranking
+      threshold,
+      recordingIds,
+      source,
+      dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+      dateTo: dateTo ? new Date(dateTo) : undefined,
       contentTypes,
       tagIds,
       tagFilterMode,
       collectionId,
       favoritesOnly,
-      logResults: true,
-    });
+    };
+
+    // Multi-layer cache with 5-minute TTL
+    const cache = getCache();
+    const cacheKey = `vector:total:${JSON.stringify({
+      query,
+      recordingIds,
+      source,
+      dateFrom,
+      dateTo,
+      limit,
+      threshold,
+      rerank,
+      contentTypes,
+      tagIds,
+      collectionId,
+      favoritesOnly,
+    })}`;
+
+    let cacheHit = false;
+    let cacheLayer: 'memory' | 'redis' | 'none' = 'none';
+    let searchStartTime = Date.now();
+
+    // Try to get from cache with orgId for proper isolation
+    const cachedResult = await cache.get(
+      cacheKey,
+      async () => {
+        cacheHit = false;
+        searchStartTime = Date.now();
+
+        // Execute search based on mode
+        let results =
+          mode === 'hybrid'
+            ? await hybridSearch(query, searchOptions)
+            : await vectorSearch(query, searchOptions);
+
+        const searchTime = Date.now() - searchStartTime;
+
+        // Apply reranking if requested and Cohere is configured
+        let rerankingTime = 0;
+        let rerankMetadata;
+
+        if (rerank) {
+          if (!isCohereConfigured()) {
+            console.warn(
+              '[Search API] Reranking requested but COHERE_API_KEY not configured',
+            );
+          } else {
+            const rerankResult = await rerankResults(query, results, {
+              topN: limit,
+              timeoutMs: 500,
+            });
+
+            results = rerankResult.results;
+            rerankingTime = rerankResult.rerankingTime;
+            rerankMetadata = {
+              originalCount: rerankResult.originalCount,
+              rerankedCount: rerankResult.rerankedCount,
+              costEstimate: rerankResult.costEstimate,
+            };
+          }
+        }
+
+        return {
+          results,
+          searchTime,
+          rerankingTime,
+          rerankMetadata,
+        };
+      },
+      { ttl: 300, orgId, namespace: 'search' },
+    ); // 5 minutes with orgId for isolation
+
+    // Determine cache layer
+    if (cacheHit) {
+      // The cache system already logs which layer was hit
+      // We can infer from timing - memory hits are <1ms, Redis hits are <50ms
+      const cacheLatency = Date.now() - searchStartTime;
+      cacheLayer = cacheLatency < 10 ? 'memory' : 'redis';
+    }
 
     const latencyMs = Date.now() - startTime;
 
     // Track analytics (non-blocking)
     SearchTracker.trackSearch({
       query,
-      mode: 'agentic',
-      resultsCount: agenticResult.finalResults.length,
+      mode: (mode || 'semantic') as 'semantic' | 'keyword' | 'agentic',
+      resultsCount: cachedResult.results.length,
       latencyMs,
-      cacheHit: false,
-      cacheLayer: 'none',
-      filters: { recordingIds, maxIterations, enableSelfReflection, contentTypes, tagIds, tagFilterMode, collectionId, favoritesOnly },
+      cacheHit,
+      cacheLayer,
+      filters: {
+        recordingIds,
+        source,
+        dateFrom,
+        dateTo,
+        rerank,
+        contentTypes,
+        tagIds,
+        tagFilterMode,
+        collectionId,
+        favoritesOnly,
+      },
       orgId,
       userId,
-    }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));
+    }).catch((error) =>
+      console.error('[Search API] Analytics tracking failed:', error),
+    );
+
+    // Performance monitoring
+    if (latencyMs > 100) {
+      console.warn(`[Search API] Slow request detected: ${latencyMs}ms`);
+    }
 
     return successResponse({
       query,
       retrievalMode: 'discovery',
       evidenceLayer: 'raw',
-      results: agenticResult.finalResults,
-      count: agenticResult.finalResults.length,
-      mode: 'agentic',
-      agentic: {
-        intent: agenticResult.intent,
-        complexity: agenticResult.decomposition.complexity,
-        subQueries: agenticResult.decomposition.subQueries,
-        iterations: agenticResult.iterations.length,
-        reasoning: agenticResult.reasoning,
-        confidence: agenticResult.confidence,
-        citationMap: Object.fromEntries(agenticResult.citationMap),
-      },
+      results: cachedResult.results,
+      count: cachedResult.results.length,
+      mode: (mode || 'semantic') as 'semantic' | 'keyword' | 'agentic',
+      reranked: rerank && isCohereConfigured(),
+      cached: cacheHit,
+      cacheLayer,
       timings: {
-        totalMs: agenticResult.totalDurationMs,
+        searchMs: cachedResult.searchTime,
+        rerankMs: cachedResult.rerankingTime,
+        totalMs: cachedResult.searchTime + cachedResult.rerankingTime,
       },
-      metadata: agenticResult.metadata,
+      ...(cachedResult.rerankMetadata && {
+        rerankMetadata: cachedResult.rerankMetadata,
+      }),
     });
-  }
-
-  // Build search options for standard/hybrid modes
-  const searchOptions = {
-    orgId,
-    limit: rerank ? limit * 3 : limit, // Fetch 3x more results for reranking
-    threshold,
-    recordingIds,
-    source,
-    dateFrom: dateFrom ? new Date(dateFrom) : undefined,
-    dateTo: dateTo ? new Date(dateTo) : undefined,
-    contentTypes,
-    tagIds,
-    tagFilterMode,
-    collectionId,
-    favoritesOnly,
-  };
-
-  // Multi-layer cache with 5-minute TTL
-  const cache = getCache();
-  const cacheKey = `vector:total:${JSON.stringify({
-    query,
-    recordingIds,
-    source,
-    dateFrom,
-    dateTo,
-    limit,
-    threshold,
-    rerank,
-    contentTypes,
-    tagIds,
-    collectionId,
-    favoritesOnly,
-  })}`;
-
-  let cacheHit = false;
-  let cacheLayer: 'memory' | 'redis' | 'none' = 'none';
-  let searchStartTime = Date.now();
-
-  // Try to get from cache with orgId for proper isolation
-  const cachedResult = await cache.get(cacheKey, async () => {
-    cacheHit = false;
-    searchStartTime = Date.now();
-
-    // Execute search based on mode
-    let results =
-      mode === 'hybrid'
-        ? await hybridSearch(query, searchOptions)
-        : await vectorSearch(query, searchOptions);
-
-    const searchTime = Date.now() - searchStartTime;
-
-    // Apply reranking if requested and Cohere is configured
-    let rerankingTime = 0;
-    let rerankMetadata;
-
-    if (rerank) {
-      if (!isCohereConfigured()) {
-        console.warn('[Search API] Reranking requested but COHERE_API_KEY not configured');
-      } else {
-        const rerankResult = await rerankResults(query, results, {
-          topN: limit,
-          timeoutMs: 500,
-        });
-
-        results = rerankResult.results;
-        rerankingTime = rerankResult.rerankingTime;
-        rerankMetadata = {
-          originalCount: rerankResult.originalCount,
-          rerankedCount: rerankResult.rerankedCount,
-          costEstimate: rerankResult.costEstimate,
-        };
-      }
-    }
-
-    return {
-      results,
-      searchTime,
-      rerankingTime,
-      rerankMetadata,
-    };
-  }, { ttl: 300, orgId, namespace: 'search' }); // 5 minutes with orgId for isolation
-
-  // Determine cache layer
-  if (cacheHit) {
-    // The cache system already logs which layer was hit
-    // We can infer from timing - memory hits are <1ms, Redis hits are <50ms
-    const cacheLatency = Date.now() - searchStartTime;
-    cacheLayer = cacheLatency < 10 ? 'memory' : 'redis';
-  }
-
-  const latencyMs = Date.now() - startTime;
-
-  // Track analytics (non-blocking)
-  SearchTracker.trackSearch({
-    query,
-    mode: (mode || 'semantic') as 'semantic' | 'keyword' | 'agentic',
-    resultsCount: cachedResult.results.length,
-    latencyMs,
-    cacheHit,
-    cacheLayer,
-    filters: { recordingIds, source, dateFrom, dateTo, rerank, contentTypes, tagIds, tagFilterMode, collectionId, favoritesOnly },
-    orgId,
-    userId,
-  }).catch((error) => console.error('[Search API] Analytics tracking failed:', error));
-
-
-  // Performance monitoring
-  if (latencyMs > 100) {
-    console.warn(`[Search API] Slow request detected: ${latencyMs}ms`);
-  }
-
-  return successResponse({
-    query,
-    retrievalMode: 'discovery',
-    evidenceLayer: 'raw',
-    results: cachedResult.results,
-    count: cachedResult.results.length,
-    mode: (mode || 'semantic') as 'semantic' | 'keyword' | 'agentic',
-    reranked: rerank && isCohereConfigured(),
-    cached: cacheHit,
-    cacheLayer,
-    timings: {
-      searchMs: cachedResult.searchTime,
-      rerankMs: cachedResult.rerankingTime,
-      totalMs: cachedResult.searchTime + cachedResult.rerankingTime,
-    },
-    ...(cachedResult.rerankMetadata && { rerankMetadata: cachedResult.rerankMetadata }),
-  });
   }),
   {
     limiter: 'search',
@@ -339,5 +401,5 @@ export const POST = withRateLimit(
       const { userId } = await requireOrg();
       return userId;
     },
-  }
+  },
 );

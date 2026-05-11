@@ -25,7 +25,7 @@ const AUDIENCE_LEVEL: Record<Audience, number> = {
   'system-admin': 2,
 };
 
-export interface SearchIndexEntry {
+interface SearchIndexEntry {
   id: string;
   title: string;
   description: string;

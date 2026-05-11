@@ -96,37 +96,41 @@ function toConcept(row: KnowledgeConceptRow): Concept {
  * - relatedLimit: Max related concepts (default: 10)
  * - mentionsLimit: Max mentions (default: 10)
  */
-export const GET = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
-  const { orgId } = await requireOrg();
-  const { id } = await params;
-  const query = parseSearchParams<GetConceptQueryInput>(request, getConceptQuerySchema);
-  const supabase = await createClient();
+export const GET = apiHandler(
+  async (request: NextRequest, { params }: RouteParams) => {
+    const [{ orgId }, { id }] = await Promise.all([requireOrg(), params]);
+    const query = parseSearchParams<GetConceptQueryInput>(
+      request,
+      getConceptQuerySchema,
+    );
+    const supabase = await createClient();
 
-  // Get the concept
-  const { data: concept, error } = await supabase
-    .from('knowledge_concepts')
-    .select('*')
-    .eq('id', id)
-    .eq('org_id', orgId)
-    .single();
+    // Get the concept
+    const { data: concept, error } = await supabase
+      .from('knowledge_concepts')
+      .select('*')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .single();
 
-  if (error || !concept) {
-    return errors.notFound('Concept');
-  }
+    if (error || !concept) {
+      return errors.notFound('Concept');
+    }
 
-  // Transform concept to camelCase
-  const transformedConcept = toConcept(concept);
+    // Transform concept to camelCase
+    const transformedConcept = toConcept(concept);
 
-  let relatedConcepts: RelatedConcept[] = [];
-  let recentMentions: ConceptMention[] = [];
+    let relatedConcepts: RelatedConcept[] = [];
+    let recentMentions: ConceptMention[] = [];
 
-  // Get related concepts if requested
-  // Query concept_relationships directly (same as graph API) to ensure consistency
-  // This finds all relationships where the concept is either source (concept_a) or target (concept_b)
-  if (query.includeRelated) {
-    const { data: relationships } = await supabase
-      .from('concept_relationships')
-      .select(`
+    // Get related concepts if requested
+    // Query concept_relationships directly (same as graph API) to ensure consistency
+    // This finds all relationships where the concept is either source (concept_a) or target (concept_b)
+    if (query.includeRelated) {
+      const { data: relationships } = await supabase
+        .from('concept_relationships')
+        .select(
+          `
         id,
         concept_a_id,
         concept_b_id,
@@ -138,39 +142,44 @@ export const GET = apiHandler(async (request: NextRequest, { params }: RoutePara
         concept_b:knowledge_concepts!concept_relationships_concept_b_id_fkey (
           id, name, concept_type, mention_count
         )
-      `)
-      .eq('org_id', orgId)
-      .or(`concept_a_id.eq.${id},concept_b_id.eq.${id}`)
-      .order('strength', { ascending: false })
-      .limit(query.relatedLimit);
+      `,
+        )
+        .eq('org_id', orgId)
+        .or(`concept_a_id.eq.${id},concept_b_id.eq.${id}`)
+        .order('strength', { ascending: false })
+        .limit(query.relatedLimit);
 
-    if (relationships) {
-      relatedConcepts = (relationships as unknown as ConceptRelationshipRow[]).map((rel) => {
-        // Determine which concept is the "other" one (not the current concept)
-        const isConceptA = rel.concept_a_id === id;
-        const relatedConcept = isConceptA ? rel.concept_b : rel.concept_a;
+      if (relationships) {
+        relatedConcepts = (
+          relationships as unknown as ConceptRelationshipRow[]
+        ).flatMap((rel) => {
+          // Determine which concept is the "other" one (not the current concept)
+          const isConceptA = rel.concept_a_id === id;
+          const relatedConcept = isConceptA ? rel.concept_b : rel.concept_a;
 
-        if (!relatedConcept) {
-          return null;
-        }
+          if (!relatedConcept) {
+            return [];
+          }
 
-        const transformedRelatedConcept = toConcept(relatedConcept);
+          const transformedRelatedConcept = toConcept(relatedConcept);
 
-        return {
-          ...transformedRelatedConcept,
-          relationshipType: rel.relationship_type || 'related',
-          strength: rel.strength || 0,
-        };
-      }).filter((related): related is RelatedConcept => related !== null);
+          return [
+            {
+              ...transformedRelatedConcept,
+              relationshipType: rel.relationship_type || 'related',
+              strength: rel.strength || 0,
+            },
+          ];
+        });
+      }
     }
-  }
 
-  // Get recent mentions if requested
-  if (query.includeMentions) {
-    const { data: mentions } = await supabase
-      .from('concept_mentions')
-      .select(
-        `
+    // Get recent mentions if requested
+    if (query.includeMentions) {
+      const { data: mentions } = await supabase
+        .from('concept_mentions')
+        .select(
+          `
         id,
         concept_id,
         content_id,
@@ -185,47 +194,52 @@ export const GET = apiHandler(async (request: NextRequest, { params }: RoutePara
           content_type,
           thumbnail_url
         )
-      `
-      )
-      .eq('concept_id', id)
-      .eq('org_id', orgId)
-      .order('created_at', { ascending: false })
-      .limit(query.mentionsLimit);
+      `,
+        )
+        .eq('concept_id', id)
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(query.mentionsLimit);
 
-    if (mentions) {
-      recentMentions = (mentions as unknown as ConceptMentionRow[]).map((m) => ({
-        id: m.id,
-        conceptId: m.concept_id,
-        contentId: m.content_id,
-        chunkId: m.chunk_id,
-        context: m.context,
-        timestampSec: m.timestamp_sec,
-        confidence: m.confidence ?? 0,
-        createdAt: m.created_at ?? '',
-        content: m.content
-          ? {
-              id: m.content.id,
-              title: m.content.title,
-              contentType: m.content.content_type,
-              thumbnailUrl: m.content.thumbnail_url,
-            }
-          : undefined,
-      }));
+      if (mentions) {
+        recentMentions = (mentions as unknown as ConceptMentionRow[]).map(
+          (m) => ({
+            id: m.id,
+            conceptId: m.concept_id,
+            contentId: m.content_id,
+            chunkId: m.chunk_id,
+            context: m.context,
+            timestampSec: m.timestamp_sec,
+            confidence: m.confidence ?? 0,
+            createdAt: m.created_at ?? '',
+            content: m.content
+              ? {
+                  id: m.content.id,
+                  title: m.content.title,
+                  contentType: m.content.content_type,
+                  thumbnailUrl: m.content.thumbnail_url,
+                }
+              : undefined,
+          }),
+        );
+      }
     }
-  }
 
-  const { CacheControlHeaders, generateETag } = await import('@/lib/services/cache');
+    const { CacheControlHeaders, generateETag } = await import(
+      '@/lib/services/cache'
+    );
 
-  const responseData = {
-    concept: transformedConcept,
-    relatedConcepts,
-    recentMentions,
-  };
+    const responseData = {
+      concept: transformedConcept,
+      relatedConcepts,
+      recentMentions,
+    };
 
-  const response = successResponse(responseData);
+    const response = successResponse(responseData);
 
-  response.headers.set('Cache-Control', CacheControlHeaders.metadata);
-  response.headers.set('ETag', generateETag(responseData));
+    response.headers.set('Cache-Control', CacheControlHeaders.metadata);
+    response.headers.set('ETag', generateETag(responseData));
 
-  return response;
-});
+    return response;
+  },
+);

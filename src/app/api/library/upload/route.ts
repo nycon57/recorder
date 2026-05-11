@@ -20,6 +20,7 @@ import {
 } from '@/lib/types/content';
 import { generateStoragePath } from '@/lib/validations/library';
 import { createLogger } from '@/lib/utils/logger';
+import { mapSequentially } from '@/lib/utils/async';
 import {
   SOURCE_STATUS,
   getQueuedSourceStatusForJob,
@@ -205,7 +206,10 @@ export const POST = withRateLimit(
         ? Number.parseInt(contentLength, 10)
         : Number.NaN;
 
-      if (!Number.isFinite(declaredContentLength) || declaredContentLength < 0) {
+      if (
+        !Number.isFinite(declaredContentLength) ||
+        declaredContentLength < 0
+      ) {
         logger.warn('Library upload rejected without a valid content-length', {
           context: { requestId, orgId, userId },
           data: { contentLength },
@@ -355,181 +359,238 @@ export const POST = withRateLimit(
       const uploadResults: UploadResult[] = [...validationFailures];
 
       // Process files sequentially to avoid buffering large multipart batches concurrently.
-      for (const { file, index, contentType, fileType } of validatedFiles) {
-        let activeContentId: string | undefined;
-        let activeStoragePath: string | undefined;
-        try {
-          // Sanitize filename to prevent path traversal
-          const sanitizedFilename = file.name
-            .replace(/[^a-zA-Z0-9._-]/g, '_')
-            .substring(0, 255);
+      await mapSequentially(
+        validatedFiles,
+        async ({ file, index, contentType, fileType }) => {
+          let activeContentId: string | undefined;
+          let activeStoragePath: string | undefined;
+          try {
+            // Sanitize filename to prevent path traversal
+            const sanitizedFilename = file.name
+              .replace(/[^a-zA-Z0-9._-]/g, '_')
+              .substring(0, 255);
 
-          // Create recording entry in database
-          const { data: recording, error: dbError } = await supabaseAdmin
-            .from('content')
-            .insert({
-              org_id: orgId,
-              created_by: userId,
-              title: sanitizedFilename,
-              status: SOURCE_STATUS.UPLOADING,
-              content_type: contentType,
-              file_type: fileType,
-              original_filename: sanitizedFilename,
-              mime_type: file.type,
-              file_size: file.size,
-              analysis_type: uploadOptions.analysisType,
-              skip_analysis: uploadOptions.skipAnalysis,
-              metadata: {
-                source: 'library_upload',
-                uploaded_at: new Date().toISOString(),
-                analysisType: uploadOptions.analysisType,
-                skipAnalysis: uploadOptions.skipAnalysis,
-              },
-            })
-            .select()
-            .single();
+            // Create recording entry in database
+            const { data: recording, error: dbError } = await supabaseAdmin
+              .from('content')
+              .insert({
+                org_id: orgId,
+                created_by: userId,
+                title: sanitizedFilename,
+                status: SOURCE_STATUS.UPLOADING,
+                content_type: contentType,
+                file_type: fileType,
+                original_filename: sanitizedFilename,
+                mime_type: file.type,
+                file_size: file.size,
+                analysis_type: uploadOptions.analysisType,
+                skip_analysis: uploadOptions.skipAnalysis,
+                metadata: {
+                  source: 'library_upload',
+                  uploaded_at: new Date().toISOString(),
+                  analysisType: uploadOptions.analysisType,
+                  skipAnalysis: uploadOptions.skipAnalysis,
+                },
+              })
+              .select()
+              .single();
 
-          if (dbError || !recording) {
-            logger.error('Database record creation failed', {
-              context: { requestId, orgId, userId, filename: file.name },
-              error: dbError as Error,
-            });
-            await QuotaManager.releaseQuota(orgId, 'recording');
-            reservedQuota = Math.max(0, reservedQuota - 1);
-            uploadResults.push({
-              index,
-              status: 'error' as const,
-              title: file.name,
-              error: 'Failed to create database record',
-            });
-            continue;
-          }
-          activeContentId = recording.id;
-
-          logger.info('Database record created', {
-            context: { requestId, orgId, recordingId: recording.id },
-            data: {
-              filename: sanitizedFilename,
-              contentType,
-              fileType,
-              fileSizeBytes: file.size,
-            },
-          });
-
-          // Generate storage path
-          const storagePath = generateStoragePath(
-            orgId,
-            contentType,
-            recording.id,
-            fileType,
-          );
-          activeStoragePath = storagePath;
-
-          // Upload file to Supabase Storage
-          const fileBuffer = await file.arrayBuffer();
-          const { error: uploadError } = await supabaseAdmin.storage
-            .from('content')
-            .upload(storagePath, fileBuffer, {
-              contentType: file.type,
-              upsert: false,
-            });
-
-          if (uploadError) {
-            logger.error('Storage upload failed', {
-              context: {
-                requestId,
-                orgId,
-                recordingId: recording.id,
-                storagePath,
-              },
-              error: uploadError as Error,
-            });
-
-            const rolledBack = await rollbackContent(recording.id);
-            if (rolledBack) {
+            if (dbError || !recording) {
+              logger.error('Database record creation failed', {
+                context: { requestId, orgId, userId, filename: file.name },
+                error: dbError as Error,
+              });
               await QuotaManager.releaseQuota(orgId, 'recording');
               reservedQuota = Math.max(0, reservedQuota - 1);
+              uploadResults.push({
+                index,
+                status: 'error' as const,
+                title: file.name,
+                error: 'Failed to create database record',
+              });
+              return;
             }
+            activeContentId = recording.id;
 
-            // Provide more specific error messages
-            let errorMessage = `Storage upload failed: ${uploadError.message}`;
-
-            // Check for common error scenarios
-            // Handle statusCode as both string and number (if it exists on the error object)
-            const statusCode =
-              'statusCode' in uploadError &&
-              typeof uploadError.statusCode === 'number'
-                ? uploadError.statusCode
-                : undefined;
-
-            if (
-              uploadError.message?.includes('exceeded') ||
-              statusCode === 413
-            ) {
-              // Use shared constants for file size limits
-              const videoLimit = FILE_SIZE_LIMIT_LABELS.video;
-              const audioLimit = FILE_SIZE_LIMIT_LABELS.audio;
-              const documentLimit = FILE_SIZE_LIMIT_LABELS.document;
-              errorMessage = `File too large. Your file (${formatFileSize(file.size)}) exceeds the storage limit. Maximum: ${videoLimit} for videos, ${audioLimit} for audio, ${documentLimit} for documents.`;
-            } else if (
-              uploadError.message?.includes('mime') ||
-              uploadError.message?.includes('type')
-            ) {
-              errorMessage = `File type not supported. Supported formats: MP4, MOV, WEBM, AVI (video), MP3, WAV, M4A, OGG (audio), PDF, DOCX (documents), TXT, MD (text).`;
-            }
-
-            uploadResults.push({
-              index,
-              status: 'error' as const,
-              title: file.name,
-              error: errorMessage,
+            logger.info('Database record created', {
+              context: { requestId, orgId, recordingId: recording.id },
+              data: {
+                filename: sanitizedFilename,
+                contentType,
+                fileType,
+                fileSizeBytes: file.size,
+              },
             });
-            continue;
-          }
 
-          // Update recording with storage path
-          await supabaseAdmin
-            .from('content')
-            .update({
-              storage_path_raw: storagePath,
-              status: SOURCE_STATUS.UPLOADED,
-            })
-            .eq('id', recording.id);
+            // Generate storage path
+            const storagePath = generateStoragePath(
+              orgId,
+              contentType,
+              recording.id,
+              fileType,
+            );
+            activeStoragePath = storagePath;
 
-          logger.info('File uploaded to storage', {
-            context: { requestId, orgId, recordingId: recording.id },
-            data: { storagePath, fileSizeBytes: file.size },
-          });
+            // Upload file to Supabase Storage
+            const fileBuffer = await file.arrayBuffer();
+            const { error: uploadError } = await supabaseAdmin.storage
+              .from('content')
+              .upload(storagePath, fileBuffer, {
+                contentType: file.type,
+                upsert: false,
+              });
 
-          // Enqueue processing jobs based on content type
-          const jobTypes = getProcessingJobs(contentType, fileType);
-          const firstJobType = jobTypes[0];
+            if (uploadError) {
+              logger.error('Storage upload failed', {
+                context: {
+                  requestId,
+                  orgId,
+                  recordingId: recording.id,
+                  storagePath,
+                },
+                error: uploadError as Error,
+              });
 
-          if (firstJobType) {
-            let transcriptId: string | undefined;
+              const rolledBack = await rollbackContent(recording.id);
+              if (rolledBack) {
+                await QuotaManager.releaseQuota(orgId, 'recording');
+                reservedQuota = Math.max(0, reservedQuota - 1);
+              }
 
-            if (firstJobType === 'process_text_note') {
-              const textContent = Buffer.from(fileBuffer).toString('utf-8');
-              const { data: transcript, error: transcriptError } =
-                await supabaseAdmin
-                  .from('transcripts')
-                  .insert({
-                    content_id: recording.id,
-                    text: textContent,
-                    language: 'en',
-                    provider: 'library_upload',
-                    words_json: {
-                      source: 'library_upload',
-                      originalFilename: sanitizedFilename,
-                    },
-                  })
-                  .select('id')
-                  .single();
+              // Provide more specific error messages
+              let errorMessage = `Storage upload failed: ${uploadError.message}`;
 
-              if (transcriptError || !transcript) {
-                logger.error('Text transcript creation failed', {
+              // Check for common error scenarios
+              // Handle statusCode as both string and number (if it exists on the error object)
+              const statusCode =
+                'statusCode' in uploadError &&
+                typeof uploadError.statusCode === 'number'
+                  ? uploadError.statusCode
+                  : undefined;
+              const uploadMessageIncludes = uploadError.message?.includes.bind(
+                uploadError.message,
+              );
+
+              if (uploadMessageIncludes?.('exceeded') || statusCode === 413) {
+                // Use shared constants for file size limits
+                const videoLimit = FILE_SIZE_LIMIT_LABELS.video;
+                const audioLimit = FILE_SIZE_LIMIT_LABELS.audio;
+                const documentLimit = FILE_SIZE_LIMIT_LABELS.document;
+                errorMessage = `File too large. Your file (${formatFileSize(file.size)}) exceeds the storage limit. Maximum: ${videoLimit} for videos, ${audioLimit} for audio, ${documentLimit} for documents.`;
+              } else if (
+                uploadMessageIncludes?.('mime') ||
+                uploadMessageIncludes?.('type')
+              ) {
+                errorMessage = `File type not supported. Supported formats: MP4, MOV, WEBM, AVI (video), MP3, WAV, M4A, OGG (audio), PDF, DOCX (documents), TXT, MD (text).`;
+              }
+
+              uploadResults.push({
+                index,
+                status: 'error' as const,
+                title: file.name,
+                error: errorMessage,
+              });
+              return;
+            }
+
+            // Update recording with storage path
+            await supabaseAdmin
+              .from('content')
+              .update({
+                storage_path_raw: storagePath,
+                status: SOURCE_STATUS.UPLOADED,
+              })
+              .eq('id', recording.id);
+
+            logger.info('File uploaded to storage', {
+              context: { requestId, orgId, recordingId: recording.id },
+              data: { storagePath, fileSizeBytes: file.size },
+            });
+
+            // Enqueue processing jobs based on content type
+            const jobTypes = getProcessingJobs(contentType, fileType);
+            const firstJobType = jobTypes[0];
+
+            if (firstJobType) {
+              let transcriptId: string | undefined;
+
+              if (firstJobType === 'process_text_note') {
+                const textContent = Buffer.from(fileBuffer).toString('utf-8');
+                const { data: transcript, error: transcriptError } =
+                  await supabaseAdmin
+                    .from('transcripts')
+                    .insert({
+                      content_id: recording.id,
+                      text: textContent,
+                      language: 'en',
+                      provider: 'library_upload',
+                      words_json: {
+                        source: 'library_upload',
+                        originalFilename: sanitizedFilename,
+                      },
+                    })
+                    .select('id')
+                    .single();
+
+                if (transcriptError || !transcript) {
+                  logger.error('Text transcript creation failed', {
+                    context: { requestId, orgId, recordingId: recording.id },
+                    error: transcriptError as Error,
+                  });
+                  const rolledBack = await rollbackContent(
+                    recording.id,
+                    storagePath,
+                  );
+                  if (rolledBack) {
+                    await QuotaManager.releaseQuota(orgId, 'recording');
+                    reservedQuota = Math.max(0, reservedQuota - 1);
+                  }
+                  uploadResults.push({
+                    index,
+                    status: 'error' as const,
+                    title: file.name,
+                    error: 'Failed to create text transcript',
+                  });
+                  return;
+                }
+
+                transcriptId = transcript.id;
+              }
+
+              // Build job payload with correct path field based on job type
+              const jobPayload: JobPayload = {
+                recordingId: recording.id,
+                orgId,
+                contentType,
+                fileType,
+              };
+
+              // Add storage path with correct field name for each job type
+              if (firstJobType === 'extract_audio') {
+                jobPayload.videoPath = storagePath;
+              } else if (firstJobType === 'extract_text_pdf') {
+                jobPayload.pdfPath = storagePath;
+              } else if (firstJobType === 'extract_text_docx') {
+                jobPayload.docxPath = storagePath;
+              } else if (firstJobType === 'process_text_note') {
+                jobPayload.transcriptId = transcriptId;
+              }
+
+              const { error: jobError } = await supabaseAdmin
+                .from('jobs')
+                .insert({
+                  type: firstJobType as JobType,
+                  status: 'pending',
+                  content_id: recording.id,
+                  payload: jobPayload,
+                  dedupe_key: `${firstJobType}:${recording.id}`,
+                  run_at: new Date().toISOString(),
+                });
+
+              if (jobError) {
+                logger.error('Processing job enqueue failed', {
                   context: { requestId, orgId, recordingId: recording.id },
-                  error: transcriptError as Error,
+                  error: jobError as Error,
                 });
                 const rolledBack = await rollbackContent(
                   recording.id,
@@ -543,119 +604,67 @@ export const POST = withRateLimit(
                   index,
                   status: 'error' as const,
                   title: file.name,
-                  error: 'Failed to create text transcript',
+                  error: 'Failed to enqueue processing job',
                 });
-                continue;
+                return;
               }
 
-              transcriptId = transcript.id;
+              // Update recording status based on first job
+              const newStatus =
+                getQueuedSourceStatusForJob(firstJobType) ??
+                SOURCE_STATUS.UPLOADED;
+
+              await supabaseAdmin
+                .from('content')
+                .update({ status: newStatus })
+                .eq('id', recording.id);
+
+              logger.info('Processing job enqueued', {
+                context: { requestId, orgId, recordingId: recording.id },
+                data: { jobType: firstJobType, newStatus },
+              });
             }
 
-            // Build job payload with correct path field based on job type
-            const jobPayload: JobPayload = {
-              recordingId: recording.id,
-              orgId,
+            // Generate signed URL for immediate access
+            const { data: signedUrlData } = await supabaseAdmin.storage
+              .from('content')
+              .createSignedUrl(storagePath, 3600); // 1 hour expiry
+
+            uploadResults.push({
+              index,
+              status: 'success' as const,
+              id: recording.id,
+              title: sanitizedFilename,
               contentType,
               fileType,
-            };
-
-            // Add storage path with correct field name for each job type
-            if (firstJobType === 'extract_audio') {
-              jobPayload.videoPath = storagePath;
-            } else if (firstJobType === 'extract_text_pdf') {
-              jobPayload.pdfPath = storagePath;
-            } else if (firstJobType === 'extract_text_docx') {
-              jobPayload.docxPath = storagePath;
-            } else if (firstJobType === 'process_text_note') {
-              jobPayload.transcriptId = transcriptId;
+              fileSize: file.size,
+              uploadUrl: signedUrlData?.signedUrl,
+            });
+            reservedQuota = Math.max(0, reservedQuota - 1);
+          } catch (error: unknown) {
+            logger.error('File processing error', {
+              context: { requestId, orgId, userId, filename: file.name, index },
+              error: error as Error,
+            });
+            const rolledBack = activeContentId
+              ? await rollbackContent(activeContentId, activeStoragePath)
+              : true;
+            if (rolledBack) {
+              await QuotaManager.releaseQuota(orgId, 'recording');
+              reservedQuota = Math.max(0, reservedQuota - 1);
             }
-
-            const { error: jobError } = await supabaseAdmin
-              .from('jobs')
-              .insert({
-                type: firstJobType as JobType,
-                status: 'pending',
-                content_id: recording.id,
-                payload: jobPayload,
-                dedupe_key: `${firstJobType}:${recording.id}`,
-                run_at: new Date().toISOString(),
-              });
-
-            if (jobError) {
-              logger.error('Processing job enqueue failed', {
-                context: { requestId, orgId, recordingId: recording.id },
-                error: jobError as Error,
-              });
-              const rolledBack = await rollbackContent(
-                recording.id,
-                storagePath,
-              );
-              if (rolledBack) {
-                await QuotaManager.releaseQuota(orgId, 'recording');
-                reservedQuota = Math.max(0, reservedQuota - 1);
-              }
-              uploadResults.push({
-                index,
-                status: 'error' as const,
-                title: file.name,
-                error: 'Failed to enqueue processing job',
-              });
-              continue;
-            }
-
-            // Update recording status based on first job
-            const newStatus =
-              getQueuedSourceStatusForJob(firstJobType) ??
-              SOURCE_STATUS.UPLOADED;
-
-            await supabaseAdmin
-              .from('content')
-              .update({ status: newStatus })
-              .eq('id', recording.id);
-
-            logger.info('Processing job enqueued', {
-              context: { requestId, orgId, recordingId: recording.id },
-              data: { jobType: firstJobType, newStatus },
+            uploadResults.push({
+              index,
+              status: 'error' as const,
+              title: file.name,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Unknown error occurred',
             });
           }
-
-          // Generate signed URL for immediate access
-          const { data: signedUrlData } = await supabaseAdmin.storage
-            .from('content')
-            .createSignedUrl(storagePath, 3600); // 1 hour expiry
-
-          uploadResults.push({
-            index,
-            status: 'success' as const,
-            id: recording.id,
-            title: sanitizedFilename,
-            contentType,
-            fileType,
-            fileSize: file.size,
-            uploadUrl: signedUrlData?.signedUrl,
-          });
-          reservedQuota = Math.max(0, reservedQuota - 1);
-        } catch (error: unknown) {
-          logger.error('File processing error', {
-            context: { requestId, orgId, userId, filename: file.name, index },
-            error: error as Error,
-          });
-          const rolledBack = activeContentId
-            ? await rollbackContent(activeContentId, activeStoragePath)
-            : true;
-          if (rolledBack) {
-            await QuotaManager.releaseQuota(orgId, 'recording');
-            reservedQuota = Math.max(0, reservedQuota - 1);
-          }
-          uploadResults.push({
-            index,
-            status: 'error' as const,
-            title: file.name,
-            error:
-              error instanceof Error ? error.message : 'Unknown error occurred',
-          });
-        }
-      }
+        },
+      );
 
       uploadResults.sort((a, b) => a.index - b.index);
 

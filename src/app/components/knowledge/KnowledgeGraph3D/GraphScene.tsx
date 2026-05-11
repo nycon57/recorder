@@ -323,5 +323,3 @@ export function GraphScene({
     </>
   );
 }
-
-export default GraphScene;

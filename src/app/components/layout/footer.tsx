@@ -133,7 +133,7 @@ export default function Footer({
                 <div
                   className={cn(
                     'relative flex items-center justify-center',
-                    'w-8 h-8 rounded-lg',
+                    'size-8 rounded-lg',
                     'bg-gradient-to-br from-accent to-secondary',
                     'transition-all duration-300',
                     'group-hover:shadow-[0_0_20px_rgba(0,223,130,0.4)]',
@@ -164,7 +164,7 @@ export default function Footer({
                   <p className="text-sm font-medium text-foreground">
                     Subscribe to our newsletter
                   </p>
-                  <form className="flex gap-2" onSubmit={(e) => e.preventDefault()}>
+                  <div className="flex gap-2">
                     <Input
                       type="email"
                       placeholder="Enter your email"
@@ -176,7 +176,7 @@ export default function Footer({
                       )}
                     />
                     <Button
-                      type="submit"
+                      type="button"
                       size="sm"
                       className={cn(
                         'h-10 px-4 rounded-full',
@@ -186,9 +186,9 @@ export default function Footer({
                         'hover:shadow-[0_0_20px_rgba(0,223,130,0.3)]'
                       )}
                     >
-                      <Mail className="h-4 w-4" />
+                      <Mail className="size-4" />
                     </Button>
-                  </form>
+                  </div>
                   <p className="text-xs text-muted-foreground/60">
                     No spam, unsubscribe anytime.
                   </p>
@@ -207,7 +207,7 @@ export default function Footer({
                       rel="noopener noreferrer"
                       className={cn(
                         'flex items-center justify-center',
-                        'w-9 h-9 rounded-lg',
+                        'size-9 rounded-lg',
                         'bg-card/50 border border-border/50',
                         'text-muted-foreground',
                         'transition-all duration-300',
@@ -216,7 +216,7 @@ export default function Footer({
                       )}
                       aria-label={social.name}
                     >
-                      <Icon className="h-4 w-4" />
+                      <Icon className="size-4" />
                     </a>
                   );
                 })}
@@ -245,7 +245,7 @@ export default function Footer({
                           {link.name}
                           <ArrowRight
                             className={cn(
-                              'h-3 w-3 opacity-0 -translate-x-2',
+                              'size-3 opacity-0 -translate-x-2',
                               'transition-all duration-300',
                               'group-hover/link:opacity-100 group-hover/link:translate-x-0'
                             )}
@@ -275,7 +275,7 @@ export default function Footer({
           {/* Status & Theme */}
           <div className="flex items-center gap-6">
             {/* System Status */}
-            <a
+            <Link
               href="/status"
               className={cn(
                 'inline-flex items-center gap-2',
@@ -286,18 +286,15 @@ export default function Footer({
             >
               <span
                 className={cn(
-                  'w-2 h-2 rounded-full',
+                  'size-2 rounded-full',
                   'bg-accent animate-pulse'
                 )}
               />
               All systems operational
-            </a>
+            </Link>
           </div>
         </div>
       </div>
     </footer>
   );
 }
-
-// Named export for consistency
-export { Footer };

@@ -6,7 +6,13 @@
  */
 
 import { NextRequest } from 'next/server';
-import { apiHandler, requireAuth, successResponse, parseSearchParams } from '@/lib/utils/api';
+
+import {
+  apiHandler,
+  requireAuth,
+  successResponse,
+  parseSearchParams,
+} from '@/lib/utils/api';
 import { recommendationsQuerySchema } from '@/lib/validations/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
@@ -29,7 +35,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   const params = parseSearchParams(request, recommendationsQuerySchema);
   // Type assertion for parsed params
-  const typedParams = params as { status?: string; impact?: string; timeframe?: string; limit: number };
+  const typedParams = params as {
+    status?: string;
+    impact?: string;
+    timeframe?: string;
+    limit: number;
+  };
   const { status, impact, timeframe, limit } = typedParams;
 
   // Build query with filters
@@ -62,55 +73,89 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { data: recommendations, error: recommendationsError } = await query;
 
   if (recommendationsError) {
-    console.error('[Recommendations API] Error fetching recommendations:', recommendationsError);
+    console.error(
+      '[Recommendations API] Error fetching recommendations:',
+      recommendationsError,
+    );
     throw new Error('Failed to fetch recommendations');
   }
 
   // Fetch statistics using targeted aggregate queries
   // Run all count queries in parallel
   const [
-    totalResult,
-    pendingResult,
-    inProgressResult,
-    completedResult,
-    dismissedResult,
-    highImpactResult,
-    mediumImpactResult,
-    lowImpactResult,
+    [
+      totalResult,
+      pendingResult,
+      inProgressResult,
+      completedResult,
+      dismissedResult,
+      highImpactResult,
+      mediumImpactResult,
+      lowImpactResult,
+    ],
+    [potentialSavingsData, actualSavingsData],
   ] = await Promise.all([
-    supabaseAdmin.from('recommendations').select('id', { count: 'exact', head: true }),
-    supabaseAdmin.from('recommendations').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    supabaseAdmin.from('recommendations').select('id', { count: 'exact', head: true }).eq('status', 'in-progress'),
-    supabaseAdmin.from('recommendations').select('id', { count: 'exact', head: true }).eq('status', 'completed'),
-    supabaseAdmin.from('recommendations').select('id', { count: 'exact', head: true }).eq('status', 'dismissed'),
-    supabaseAdmin.from('recommendations').select('id', { count: 'exact', head: true }).eq('impact', 'high'),
-    supabaseAdmin.from('recommendations').select('id', { count: 'exact', head: true }).eq('impact', 'medium'),
-    supabaseAdmin.from('recommendations').select('id', { count: 'exact', head: true }).eq('impact', 'low'),
-  ]);
-
-  // Fetch only savings fields for pending/in-progress and completed recommendations
-  const [potentialSavingsData, actualSavingsData] = await Promise.all([
-    supabaseAdmin
-      .from('recommendations')
-      .select('savings')
-      .in('status', ['pending', 'in-progress']),
-    supabaseAdmin
-      .from('recommendations')
-      .select('actual_savings')
-      .eq('status', 'completed'),
+    Promise.all([
+      supabaseAdmin
+        .from('recommendations')
+        .select('id', { count: 'exact', head: true }),
+      supabaseAdmin
+        .from('recommendations')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending'),
+      supabaseAdmin
+        .from('recommendations')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'in-progress'),
+      supabaseAdmin
+        .from('recommendations')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'completed'),
+      supabaseAdmin
+        .from('recommendations')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'dismissed'),
+      supabaseAdmin
+        .from('recommendations')
+        .select('id', { count: 'exact', head: true })
+        .eq('impact', 'high'),
+      supabaseAdmin
+        .from('recommendations')
+        .select('id', { count: 'exact', head: true })
+        .eq('impact', 'medium'),
+      supabaseAdmin
+        .from('recommendations')
+        .select('id', { count: 'exact', head: true })
+        .eq('impact', 'low'),
+    ]),
+    Promise.all([
+      supabaseAdmin
+        .from('recommendations')
+        .select('savings')
+        .in('status', ['pending', 'in-progress']),
+      supabaseAdmin
+        .from('recommendations')
+        .select('actual_savings')
+        .eq('status', 'completed'),
+    ]),
   ]);
 
   if (potentialSavingsData.error || actualSavingsData.error) {
-    console.error('[Recommendations API] Error fetching savings data:',
-      potentialSavingsData.error || actualSavingsData.error);
+    console.error(
+      '[Recommendations API] Error fetching savings data:',
+      potentialSavingsData.error || actualSavingsData.error,
+    );
     throw new Error('Failed to fetch recommendation statistics');
   }
 
   // Calculate savings totals
-  const potentialSavings = (potentialSavingsData.data || []).reduce((sum, r) => {
-    const parsed = parseFloat(String(r.savings));
-    return sum + (isFinite(parsed) ? parsed : 0);
-  }, 0);
+  const potentialSavings = (potentialSavingsData.data || []).reduce(
+    (sum, r) => {
+      const parsed = parseFloat(String(r.savings));
+      return sum + (isFinite(parsed) ? parsed : 0);
+    },
+    0,
+  );
 
   const actualSavings = (actualSavingsData.data || []).reduce((sum, r) => {
     const parsed = parseFloat(String(r.actual_savings));
@@ -135,17 +180,22 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const sortedRecommendations = (recommendations || []).sort((a, b) => {
     // Impact priority: high > medium > low
     const impactOrder = { high: 0, medium: 1, low: 2 };
-    const impactDiff = impactOrder[a.impact as keyof typeof impactOrder] - impactOrder[b.impact as keyof typeof impactOrder];
+    const impactDiff =
+      impactOrder[a.impact as keyof typeof impactOrder] -
+      impactOrder[b.impact as keyof typeof impactOrder];
 
     if (impactDiff !== 0) return impactDiff;
 
     // Effort priority: low > medium > high (easier tasks first)
     const effortOrder = { low: 0, medium: 1, high: 2 };
-    return effortOrder[a.effort as keyof typeof effortOrder] - effortOrder[b.effort as keyof typeof effortOrder];
+    return (
+      effortOrder[a.effort as keyof typeof effortOrder] -
+      effortOrder[b.effort as keyof typeof effortOrder]
+    );
   });
 
   // Transform response to camelCase
-  const transformedRecommendations = sortedRecommendations.map(rec => ({
+  const transformedRecommendations = sortedRecommendations.map((rec) => ({
     id: rec.id,
     organizationId: rec.organization_id,
     title: rec.title,

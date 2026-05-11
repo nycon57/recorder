@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useReducer, useCallback } from 'react';
 import { Star, Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -18,16 +18,36 @@ export function ResponseRating({
   responseSnippet,
   className,
 }: ResponseRatingProps) {
-  const [rating, setRating] = useState<number>(0);
-  const [hoveredStar, setHoveredStar] = useState<number>(0);
-  const [comment, setComment] = useState('');
-  const [showComment, setShowComment] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        rating: number;
+        hoveredStar: number;
+        comment: string;
+        showComment: boolean;
+        isSaving: boolean;
+      },
+      patch: Partial<{
+        rating: number;
+        hoveredStar: number;
+        comment: string;
+        showComment: boolean;
+        isSaving: boolean;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      rating: 0,
+      hoveredStar: 0,
+      comment: '',
+      showComment: false,
+      isSaving: false,
+    },
+  );
+  const { rating, hoveredStar, comment, showComment, isSaving } = state;
 
   const submitRating = useCallback(
     async (score: number, userComment?: string): Promise<boolean> => {
-      setIsSaving(true);
+      dispatch({ isSaving: true });
       try {
         const res = await fetch('/api/agent-feedback', {
           method: 'POST',
@@ -36,12 +56,15 @@ export function ResponseRating({
             feedback_type: 'rating',
             score,
             comment: userComment,
-            metadata: { responseId, query, responseSnippet: responseSnippet.slice(0, 200) },
+            metadata: {
+              responseId,
+              query,
+              responseSnippet: responseSnippet.slice(0, 200),
+            },
           }),
         });
 
         if (res.ok) {
-          setSaved(true);
           return true;
         }
         return false;
@@ -49,32 +72,32 @@ export function ResponseRating({
         console.error('Rating submission error:', err);
         return false;
       } finally {
-        setIsSaving(false);
+        dispatch({ isSaving: false });
       }
     },
-    [responseId, query, responseSnippet]
+    [responseId, query, responseSnippet],
   );
 
-  const handleStarClick = useCallback(
-    (star: number) => {
-      setRating(star);
-      setShowComment(true);
-    },
-    [],
-  );
+  const handleStarClick = useCallback((star: number) => {
+    dispatch({ rating: star, showComment: true });
+  }, []);
 
   const handleCommentSubmit = useCallback(async () => {
     if (!rating) return;
-    setSaved(false);
     const success = await submitRating(rating, comment.trim() || undefined);
     if (success) {
-      setShowComment(false);
+      dispatch({ showComment: false });
     }
   }, [comment, rating, submitRating]);
 
-  if (saved && !showComment) {
+  if (rating > 0 && !showComment && !isSaving) {
     return (
-      <div className={cn('flex items-center gap-1 text-xs text-muted-foreground', className)}>
+      <div
+        className={cn(
+          'flex items-center gap-1 text-xs text-muted-foreground',
+          className,
+        )}
+      >
         <span>Rated {rating}/5</span>
       </div>
     );
@@ -88,8 +111,8 @@ export function ResponseRating({
             key={star}
             type="button"
             onClick={() => handleStarClick(star)}
-            onMouseEnter={() => setHoveredStar(star)}
-            onMouseLeave={() => setHoveredStar(0)}
+            onMouseEnter={() => dispatch({ hoveredStar: star })}
+            onMouseLeave={() => dispatch({ hoveredStar: 0 })}
             disabled={isSaving}
             className="rounded p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
             aria-label={`Rate ${star} out of 5 stars`}
@@ -97,16 +120,19 @@ export function ResponseRating({
             <Star
               aria-hidden="true"
               className={cn(
-                'h-3.5 w-3.5 transition-colors',
+                'size-3.5 transition-colors',
                 star <= (hoveredStar || rating)
                   ? 'fill-yellow-400 text-yellow-400'
-                  : 'text-muted-foreground/40'
+                  : 'text-muted-foreground/40',
               )}
             />
           </button>
         ))}
         {isSaving && (
-          <Loader2 aria-hidden="true" className="ml-1 h-3 w-3 animate-spin text-muted-foreground" />
+          <Loader2
+            aria-hidden="true"
+            className="ml-1 size-3 animate-spin text-muted-foreground"
+          />
         )}
       </div>
 
@@ -115,7 +141,7 @@ export function ResponseRating({
           <input
             type="text"
             value={comment}
-            onChange={(e) => setComment(e.target.value)}
+            onChange={(e) => dispatch({ comment: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();

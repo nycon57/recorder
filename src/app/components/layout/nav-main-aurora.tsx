@@ -1,11 +1,11 @@
-"use client"
+'use client';
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import * as motion from "motion/react-client"
-import { HugeiconsIcon } from "@hugeicons/react"
-import type { IconSvgElement } from "@hugeicons/react"
+import * as React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import * as motion from 'motion/react-client';
+import { HugeiconsIcon } from '@hugeicons/react';
+import type { IconSvgElement } from '@hugeicons/react';
 import {
   Home01Icon,
   Layers01Icon,
@@ -14,7 +14,7 @@ import {
   AiBrain01Icon,
   MessageMultiple01Icon,
   BookOpen01Icon,
-} from "@hugeicons/core-free-icons"
+} from '@hugeicons/core-free-icons';
 
 import {
   SidebarGroup,
@@ -22,7 +22,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-} from "@/app/components/ui/sidebar"
+} from '@/app/components/ui/sidebar';
 
 /**
  * NavMainAurora Component
@@ -37,60 +37,60 @@ import {
  */
 
 interface NavItem {
-  title: string
-  url: string
-  icon: IconSvgElement
-  description: string
+  title: string;
+  url: string;
+  icon: IconSvgElement;
+  description: string;
 }
 
 const baseNavItems: NavItem[] = [
   {
-    title: "Dashboard",
-    url: "/dashboard",
+    title: 'Dashboard',
+    url: '/dashboard',
     icon: Home01Icon,
-    description: "Overview and recent activity",
+    description: 'Overview and recent activity',
   },
   {
-    title: "Library",
-    url: "/library",
+    title: 'Library',
+    url: '/library',
     icon: Layers01Icon,
-    description: "Browse all content",
+    description: 'Browse all content',
   },
   {
-    title: "Record",
-    url: "/record",
+    title: 'Record',
+    url: '/record',
     icon: PlayCircleIcon,
-    description: "Create new recording",
+    description: 'Create new recording',
   },
   {
-    title: "Search",
-    url: "/search",
+    title: 'Search',
+    url: '/search',
     icon: AiSearchIcon,
-    description: "Semantic and visual search",
+    description: 'Semantic and visual search',
   },
   {
-    title: "Knowledge",
-    url: "/knowledge",
+    title: 'Knowledge',
+    url: '/knowledge',
     icon: AiBrain01Icon,
-    description: "Explore your knowledge graph",
+    description: 'Explore your knowledge graph',
   },
   {
-    title: "Assistant",
-    url: "/assistant",
+    title: 'Assistant',
+    url: '/assistant',
     icon: MessageMultiple01Icon,
-    description: "AI-powered chat assistant",
+    description: 'AI-powered chat assistant',
   },
-]
+];
 
 const onboardingNavItem: NavItem = {
-  title: "Onboarding",
-  url: "/onboarding",
+  title: 'Onboarding',
+  url: '/onboarding',
   icon: BookOpen01Icon,
-  description: "Your learning path",
-}
+  description: 'Your learning path',
+};
 
 interface NavMainAuroraProps {
-  hasOnboardingPlan?: boolean
+  hasOnboardingPlan?: boolean;
 }
 
 // Motion variants for staggered entrance
@@ -103,7 +103,7 @@ const containerVariants = {
       delayChildren: 0.1,
     },
   },
-}
+};
 
 const itemVariants = {
   hidden: { opacity: 0, x: -12 },
@@ -111,58 +111,49 @@ const itemVariants = {
     opacity: 1,
     x: 0,
     transition: {
-      type: "spring" as const,
+      type: 'spring' as const,
       stiffness: 400,
       damping: 30,
     },
   },
-}
+};
 
-export function NavMainAurora({ hasOnboardingPlan = false }: NavMainAuroraProps) {
-  const pathname = usePathname()
-  const [mounted, setMounted] = React.useState(false)
-
+export function NavMainAurora({
+  hasOnboardingPlan = false,
+}: NavMainAuroraProps) {
+  const pathname = usePathname();
   const navItems = React.useMemo(() => {
     return hasOnboardingPlan
       ? [...baseNavItems, onboardingNavItem]
-      : baseNavItems
-  }, [hasOnboardingPlan])
-
-  // Prevent hydration mismatch
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // Use motion only after mount
-  const MotionDiv = mounted ? motion.div : "div"
+      : baseNavItems;
+  }, [hasOnboardingPlan]);
+  const MotionDiv = motion.div;
 
   return (
     <SidebarGroup>
       <SidebarGroupContent>
         <SidebarMenu>
           <MotionDiv
-            {...(mounted ? {
-              variants: containerVariants,
-              initial: "hidden",
-              animate: "visible",
-            } : {})}
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
             className="space-y-1"
           >
             {navItems.map((item, index) => {
               // Determine active state based on pathname
-              const isActive = item.url === '/library'
-                ? pathname === '/library' || pathname.startsWith('/library/')
-                : item.url === '/knowledge'
-                  ? pathname === '/knowledge' || pathname.startsWith('/knowledge/')
-                : pathname === item.url
+              const isActive =
+                item.url === '/library'
+                  ? pathname === '/library' || pathname.startsWith('/library/')
+                  : item.url === '/knowledge'
+                    ? pathname === '/knowledge' ||
+                      pathname.startsWith('/knowledge/')
+                    : pathname === item.url;
 
               return (
                 <MotionDiv
                   key={item.title}
-                  {...(mounted ? {
-                    variants: itemVariants,
-                    custom: index,
-                  } : {})}
+                  variants={itemVariants}
+                  custom={index}
                 >
                   <SidebarMenuItem>
                     <SidebarMenuButton
@@ -179,11 +170,11 @@ export function NavMainAurora({ hasOnboardingPlan = false }: NavMainAuroraProps)
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </MotionDiv>
-              )
+              );
             })}
           </MotionDiv>
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  )
+  );
 }

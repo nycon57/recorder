@@ -9,8 +9,13 @@
  */
 
 import { createClient } from '@/lib/supabase/admin';
+import type {
+  ContentType,
+  JobType,
+  OrganizationPlan,
+} from '@/lib/types/database';
+
 import type { ContentAnalysisResult } from './content-analyzer';
-import type { ContentType, JobType, OrganizationPlan } from '@/lib/types/database';
 
 /**
  * Organization budget configuration
@@ -33,7 +38,7 @@ export interface OrganizationBudget {
 /**
  * Processing decision result
  */
-export interface ProcessingDecision {
+interface ProcessingDecision {
   /** Whether to proceed with processing */
   shouldProcess: boolean;
   /** Jobs to create and their priority */
@@ -55,8 +60,8 @@ export interface ProcessingDecision {
  * Default budget limits by plan
  */
 const DEFAULT_BUDGETS: Record<OrganizationPlan, number> = {
-  free: 100,        // $1.00/month in credits
-  pro: 1000,        // $10.00/month
+  free: 100, // $1.00/month in credits
+  pro: 1000, // $10.00/month
   enterprise: 10000, // $100.00/month
 };
 
@@ -64,18 +69,20 @@ const DEFAULT_BUDGETS: Record<OrganizationPlan, number> = {
  * Job cost multipliers
  */
 const JOB_COSTS = {
-  transcribe: 0.10,           // $0.10 per minute
-  compress_video: 0.05,       // $0.05 per GB
-  compress_audio: 0.02,       // $0.02 per GB
-  doc_generate: 0.05,         // $0.05 per document
-  generate_embeddings: 0.03,  // $0.03 per document
-  extract_frames: 0.02,       // $0.02 per minute
+  transcribe: 0.1, // $0.10 per minute
+  compress_video: 0.05, // $0.05 per GB
+  compress_audio: 0.02, // $0.02 per GB
+  doc_generate: 0.05, // $0.05 per document
+  generate_embeddings: 0.03, // $0.03 per document
+  extract_frames: 0.02, // $0.02 per minute
 };
 
 /**
  * Get organization budget status
  */
-export async function getOrganizationBudget(orgId: string): Promise<OrganizationBudget> {
+export async function getOrganizationBudget(
+  orgId: string,
+): Promise<OrganizationBudget> {
   const supabase = createClient();
 
   // Get organization plan
@@ -101,8 +108,8 @@ export async function getOrganizationBudget(orgId: string): Promise<Organization
   const creditsUsed = usage
     ? Math.round(
         (usage.minutes_transcribed || 0) * 0.1 +
-        (usage.storage_gb || 0) * 0.05 +
-        (usage.recordings_count || 0) * 0.08
+          (usage.storage_gb || 0) * 0.05 +
+          (usage.recordings_count || 0) * 0.08,
       )
     : 0;
 
@@ -119,9 +126,9 @@ export async function getOrganizationBudget(orgId: string): Promise<Organization
 /**
  * Check if organization has sufficient budget
  */
-export async function checkBudget(
+async function checkBudget(
   orgId: string,
-  estimatedCost: number
+  estimatedCost: number,
 ): Promise<{ allowed: boolean; budget: OrganizationBudget; warning?: string }> {
   const budget = await getOrganizationBudget(orgId);
 
@@ -151,7 +158,8 @@ export async function checkBudget(
   }
 
   // Warn if approaching budget limit (80%)
-  const usagePercent = ((budget.creditsUsed + estimatedCost) / budget.monthlyBudget) * 100;
+  const usagePercent =
+    ((budget.creditsUsed + estimatedCost) / budget.monthlyBudget) * 100;
   if (usagePercent >= 80) {
     return {
       allowed: true,
@@ -166,13 +174,13 @@ export async function checkBudget(
 /**
  * Make intelligent processing decision based on content analysis
  */
-export async function makeProcessingDecision(
+async function makeProcessingDecision(
   recordingId: string,
   orgId: string,
   contentType: ContentType,
   analysisResult: ContentAnalysisResult,
   fileSize: number,
-  duration: number
+  duration: number,
 ): Promise<ProcessingDecision> {
   const supabase = createClient();
 
@@ -263,7 +271,8 @@ export async function makeProcessingDecision(
   if (
     analysisResult.category === 'code_demo' ||
     analysisResult.category === 'tutorial' ||
-    (analysisResult.sceneComplexity && analysisResult.sceneComplexity.complexity > 0.6)
+    (analysisResult.sceneComplexity &&
+      analysisResult.sceneComplexity.complexity > 0.6)
   ) {
     jobs.push({
       type: 'extract_frames',
@@ -288,7 +297,10 @@ export async function makeProcessingDecision(
       .sort((a, b) => a.priority - b.priority) // Sort by priority (lower = higher priority)
       .filter((job) => job.priority <= 3); // Keep only high-priority jobs
 
-    const reducedCost = reducedJobs.reduce((sum, job) => sum + job.estimatedCost, 0);
+    const reducedCost = reducedJobs.reduce(
+      (sum, job) => sum + job.estimatedCost,
+      0,
+    );
     const reducedBudgetCheck = await checkBudget(orgId, reducedCost);
 
     if (reducedBudgetCheck.allowed) {
@@ -305,14 +317,15 @@ export async function makeProcessingDecision(
       shouldProcess: false,
       jobs: [],
       totalCost: 0,
-      reason: finalBudgetCheck.warning || 'Budget exceeded even with reduced job set',
+      reason:
+        finalBudgetCheck.warning || 'Budget exceeded even with reduced job set',
       budgetWarning: finalBudgetCheck.warning,
     };
   }
 
   // 5. Log decision
   console.log(
-    `[ProcessingDecision] Recording ${recordingId}: ${jobs.length} jobs, $${(totalCost / 100).toFixed(2)} cost`
+    `[ProcessingDecision] Recording ${recordingId}: ${jobs.length} jobs, $${(totalCost / 100).toFixed(2)} cost`,
   );
 
   return {
@@ -327,11 +340,11 @@ export async function makeProcessingDecision(
 /**
  * Track processing cost
  */
-export async function trackProcessingCost(
+async function trackProcessingCost(
   orgId: string,
   jobType: JobType,
   actualCost: number,
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>,
 ): Promise<void> {
   const supabase = createClient();
 
@@ -339,23 +352,23 @@ export async function trackProcessingCost(
   const currentPeriod = new Date().toISOString().slice(0, 7);
 
   // Simplified cost tracking - in production, you'd have a detailed costs table
-  await supabase
-    .from('usage_counters')
-    .upsert(
-      {
-        org_id: orgId,
-        period: currentPeriod,
-        // Increment appropriate counter based on job type
-        ...(jobType === 'transcribe' && { minutes_transcribed: metadata?.duration || 0 }),
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'org_id,period',
-      }
-    );
+  await supabase.from('usage_counters').upsert(
+    {
+      org_id: orgId,
+      period: currentPeriod,
+      // Increment appropriate counter based on job type
+      ...(jobType === 'transcribe' && {
+        minutes_transcribed: metadata?.duration || 0,
+      }),
+      updated_at: new Date().toISOString(),
+    },
+    {
+      onConflict: 'org_id,period',
+    },
+  );
 
   console.log(
-    `[ProcessingCost] Tracked ${jobType} cost: $${(actualCost / 100).toFixed(2)} for org ${orgId}`
+    `[ProcessingCost] Tracked ${jobType} cost: $${(actualCost / 100).toFixed(2)} for org ${orgId}`,
   );
 }
 
@@ -365,7 +378,7 @@ export async function trackProcessingCost(
 export async function getProcessingCostAnalytics(
   orgId: string,
   startDate?: Date,
-  endDate?: Date
+  endDate?: Date,
 ): Promise<{
   totalCost: number;
   costByJobType: Record<JobType, number>;
@@ -389,8 +402,8 @@ export async function getProcessingCostAnalytics(
       period: u.period,
       cost: Math.round(
         (u.minutes_transcribed || 0) * 0.1 +
-        (u.storage_gb || 0) * 0.05 +
-        (u.recordings_count || 0) * 0.08
+          (u.storage_gb || 0) * 0.05 +
+          (u.recordings_count || 0) * 0.08,
       ),
     })) || [];
 
@@ -419,16 +432,17 @@ export async function getProcessingCostAnalytics(
  */
 export async function optimizeProcessingQueue(
   orgId: string,
-  maxJobs: number = 10
+  maxJobs: number = 10,
 ): Promise<{
-  optimizedJobs: Array<{ jobId: string; priority: number; estimatedCost: number }>;
+  optimizedJobs: Array<{
+    jobId: string;
+    priority: number;
+    estimatedCost: number;
+  }>;
   totalCost: number;
   skippedJobs: number;
 }> {
   const supabase = createClient();
-  const budget = await getOrganizationBudget(orgId);
-
-  // Get pending jobs for organization
   const { data: pendingJobs } = await supabase
     .from('jobs')
     .select('*')
@@ -443,6 +457,8 @@ export async function optimizeProcessingQueue(
       skippedJobs: 0,
     };
   }
+
+  const budget = await getOrganizationBudget(orgId);
 
   // Estimate cost for each job
   const jobsWithCost = pendingJobs.map((job) => ({
@@ -462,7 +478,10 @@ export async function optimizeProcessingQueue(
   for (const job of jobsWithCost) {
     if (optimizedJobs.length >= maxJobs) break;
 
-    if (budget.plan !== 'enterprise' && totalCost + job.estimatedCost > budget.creditsRemaining) {
+    if (
+      budget.plan !== 'enterprise' &&
+      totalCost + job.estimatedCost > budget.creditsRemaining
+    ) {
       break; // Budget exceeded
     }
 

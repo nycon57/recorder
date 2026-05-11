@@ -6,7 +6,7 @@ import { CreditCard, Download, AlertCircle } from 'lucide-react';
 import { DocLink } from '@/app/components/docs/doc-link';
 
 export default function BillingSettingsPage() {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isBillingActionPending, setIsBillingActionPending] = useState(false);
 
   // Placeholder data - in production, fetch from API
   const currentPlan = 'Free';
@@ -18,7 +18,7 @@ export default function BillingSettingsPage() {
   };
 
   const handleUpgrade = async () => {
-    setIsLoading(true);
+    setIsBillingActionPending(true);
     try {
       // Call API to create Stripe checkout session
       const response = await fetch('/api/billing/create-checkout', {
@@ -34,12 +34,12 @@ export default function BillingSettingsPage() {
     } catch (error) {
       console.error('Error creating checkout session:', error);
     } finally {
-      setIsLoading(false);
+      setIsBillingActionPending(false);
     }
   };
 
   const handleManageBilling = async () => {
-    setIsLoading(true);
+    setIsBillingActionPending(true);
     try {
       // Call API to create Stripe customer portal session
       const response = await fetch('/api/billing/create-portal', {
@@ -53,7 +53,7 @@ export default function BillingSettingsPage() {
     } catch (error) {
       console.error('Error creating portal session:', error);
     } finally {
-      setIsLoading(false);
+      setIsBillingActionPending(false);
     }
   };
 
@@ -62,9 +62,7 @@ export default function BillingSettingsPage() {
       <div className="mb-8">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h1 className="trbd-page-title mb-2">Billing &amp; Subscription</h1>
-          <DocLink href="/docs/org-admin/billing">
-            Billing guide
-          </DocLink>
+          <DocLink href="/docs/org-admin/billing">Billing guide</DocLink>
         </div>
         <p className="text-muted-foreground">
           Manage your subscription, billing information, and usage
@@ -86,7 +84,7 @@ export default function BillingSettingsPage() {
         {currentPlan === 'Free' && (
           <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-4">
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+              <AlertCircle className="size-5 text-primary flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium text-foreground mb-1">
                   Upgrade to unlock more features
@@ -102,10 +100,10 @@ export default function BillingSettingsPage() {
 
         <button
           onClick={currentPlan === 'Free' ? handleUpgrade : handleManageBilling}
-          disabled={isLoading}
+          disabled={isBillingActionPending}
           className="px-6 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 transition disabled:opacity-50"
         >
-          {isLoading
+          {isBillingActionPending
             ? 'Loading...'
             : currentPlan === 'Free'
               ? 'Upgrade to Pro'
@@ -169,8 +167,8 @@ export default function BillingSettingsPage() {
           <p className="text-muted-foreground">No payment method on file</p>
         ) : (
           <div className="flex items-center gap-3 p-4 border border-border rounded-lg">
-            <div className="w-10 h-10 bg-muted rounded flex items-center justify-center">
-              <CreditCard className="w-5 h-5" />
+            <div className="size-10 bg-muted rounded flex items-center justify-center">
+              <CreditCard className="size-5" />
             </div>
             <div>
               <p className="font-medium">Visa ending in 4242</p>
@@ -198,7 +196,7 @@ export default function BillingSettingsPage() {
               <div className="flex items-center gap-4">
                 <span className="font-semibold">$29.00</span>
                 <button className="text-primary hover:underline text-sm flex items-center gap-1">
-                  <Download className="w-4 h-4" />
+                  <Download className="size-4" />
                   Invoice
                 </button>
               </div>
@@ -212,7 +210,7 @@ export default function BillingSettingsPage() {
               <div className="flex items-center gap-4">
                 <span className="font-semibold">$29.00</span>
                 <button className="text-primary hover:underline text-sm flex items-center gap-1">
-                  <Download className="w-4 h-4" />
+                  <Download className="size-4" />
                   Invoice
                 </button>
               </div>

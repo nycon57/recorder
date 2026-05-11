@@ -172,16 +172,16 @@ export async function POST(request: NextRequest) {
         },
       }));
 
-    for (const row of rows) {
-      // Repo-wide Supabase typing currently narrows admin inserts to `never`
-      // during full `tsc --noEmit`, even for valid rows.
-      const { error } = await supabase.from('events').insert(row as never);
-      if (error) {
-        throw new Error(
-          `Failed to store extension debug events: ${error.message}`,
-        );
-      }
-    }
+    await Promise.all(
+      Array.from(rows).map(async (row) => {
+        const { error } = await supabase.from('events').insert(row as never);
+        if (error) {
+          throw new Error(
+            `Failed to store extension debug events: ${error.message}`,
+          );
+        }
+      }),
+    );
 
     return NextResponse.json(
       {

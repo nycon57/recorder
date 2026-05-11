@@ -11,6 +11,7 @@ import {
 } from '@/lib/types/knowledge-docs';
 import { getKnowledgeStatusMeta } from '@/lib/utils/knowledge-status';
 import { requireOrg } from '@/lib/utils/api';
+import { formatStableDateTime } from '@/lib/utils/formatting';
 
 export const metadata = {
   title: 'Knowledge Docs | Dashboard',
@@ -29,13 +30,13 @@ function toTitleCase(value: string) {
 }
 
 function normalizeSearchParams(
-  params: Record<string, string | string[] | undefined>
+  params: Record<string, string | string[] | undefined>,
 ) {
   return Object.fromEntries(
     Object.entries(params).map(([key, value]) => [
       key,
       Array.isArray(value) ? value[0] : value,
-    ])
+    ]),
   );
 }
 
@@ -44,9 +45,13 @@ export default async function KnowledgeDocsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { orgId } = await requireOrg();
-  const rawSearchParams = await searchParams;
-  const query = knowledgeDocsQuerySchema.parse(normalizeSearchParams(rawSearchParams));
+  const [{ orgId }, rawSearchParams] = await Promise.all([
+    requireOrg(),
+    searchParams,
+  ]);
+  const query = knowledgeDocsQuerySchema.parse(
+    normalizeSearchParams(rawSearchParams),
+  );
 
   const payload = await buildKnowledgeDocsList({
     orgId,
@@ -56,10 +61,12 @@ export default async function KnowledgeDocsPage({
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Docs Workspace</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Docs Workspace
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Canonical compiled knowledge pages with operational filters for routing,
-          coverage, and cluster workflows.
+          Canonical compiled knowledge pages with operational filters for
+          routing, coverage, and cluster workflows.
         </p>
       </header>
 
@@ -144,8 +151,9 @@ export default async function KnowledgeDocsPage({
               <option value="">All coverage</option>
               {KNOWLEDGE_VENDOR_COVERAGE.map((value) => {
                 const count =
-                  payload.facets.vendorCoverage.find((item) => item.value === value)
-                    ?.count ?? 0;
+                  payload.facets.vendorCoverage.find(
+                    (item) => item.value === value,
+                  )?.count ?? 0;
                 return (
                   <option key={value} value={value}>
                     {toTitleCase(value)} ({count})
@@ -243,7 +251,7 @@ export default async function KnowledgeDocsPage({
                         className="inline-flex items-start gap-1 font-medium text-primary hover:underline"
                       >
                         <span>{item.topic}</span>
-                        <ExternalLink className="mt-0.5 h-3.5 w-3.5" />
+                        <ExternalLink className="mt-0.5 size-3.5" />
                       </Link>
                     </td>
                     <td className="px-4 py-3">{toTitleCase(item.type)}</td>
@@ -258,18 +266,27 @@ export default async function KnowledgeDocsPage({
                         {item.screen ?? 'No screen'}
                       </div>
                     </td>
-                    <td className="px-4 py-3">{toTitleCase(item.vendorCoverage)}</td>
-                    <td className="px-4 py-3">{item.clusterName ?? 'Unclustered'}</td>
-                    <td className="px-4 py-3">{formatConfidence(item.confidence)}</td>
                     <td className="px-4 py-3">
-                      {new Date(item.updatedAt).toLocaleString()}
+                      {toTitleCase(item.vendorCoverage)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {item.clusterName ?? 'Unclustered'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {formatConfidence(item.confidence)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {formatStableDateTime(item.updatedAt)}
                     </td>
                   </tr>
                 );
               })}
               {payload.items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                  <td
+                    colSpan={8}
+                    className="px-4 py-8 text-center text-muted-foreground"
+                  >
                     No compiled knowledge pages matched these filters.
                   </td>
                 </tr>
@@ -306,7 +323,8 @@ function PaginationControls({
     if (query.type) params.set('type', query.type);
     if (query.status) params.set('status', query.status);
     if (query.app) params.set('app', query.app);
-    if (query.vendorCoverage) params.set('vendorCoverage', query.vendorCoverage);
+    if (query.vendorCoverage)
+      params.set('vendorCoverage', query.vendorCoverage);
     if (query.cluster) params.set('cluster', query.cluster);
     if (query.sort) params.set('sort', query.sort);
     params.set('limit', String(query.limit));
@@ -318,7 +336,11 @@ function PaginationControls({
     <div className="flex items-center gap-2">
       <Button asChild size="sm" variant="outline" disabled={!hasPrevious}>
         <Link
-          href={hasPrevious ? buildHref(Math.max(0, query.offset - query.limit)) : '#'}
+          href={
+            hasPrevious
+              ? buildHref(Math.max(0, query.offset - query.limit))
+              : '#'
+          }
         >
           Previous
         </Link>

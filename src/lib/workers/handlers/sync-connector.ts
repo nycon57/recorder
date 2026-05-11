@@ -8,7 +8,11 @@
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/lib/types/database';
 import { ConnectorRegistry } from '@/lib/connectors/registry';
-import { ConnectorType, type ConnectorCredentials, type SyncOptions } from '@/lib/connectors/base';
+import {
+  ConnectorType,
+  type ConnectorCredentials,
+  type SyncOptions,
+} from '@/lib/connectors/base';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger({ service: 'sync-connector' });
@@ -26,7 +30,7 @@ interface SyncConnectorPayload {
 
 function jsonObject(value: Json | null | unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {};
 }
 
@@ -41,7 +45,14 @@ function stringArray(value: unknown): string[] | undefined {
  */
 export async function syncConnector(job: Job): Promise<void> {
   const payload = job.payload as unknown as SyncConnectorPayload;
-  const { connectorId, orgId, syncType = 'scheduled', fullSync, since, limit } = payload;
+  const {
+    connectorId,
+    orgId,
+    syncType = 'scheduled',
+    fullSync,
+    since,
+    limit,
+  } = payload;
 
   logger.info('Starting connector sync', {
     context: { connectorId, orgId, syncType },
@@ -60,7 +71,9 @@ export async function syncConnector(job: Job): Promise<void> {
       .single();
 
     if (configError || !connectorConfig) {
-      throw new Error(`Connector config not found: ${configError?.message || 'Not found'}`);
+      throw new Error(
+        `Connector config not found: ${configError?.message || 'Not found'}`,
+      );
     }
 
     // Check if connector is active
@@ -83,7 +96,9 @@ export async function syncConnector(job: Job): Promise<void> {
 
     // Create connector instance
     const connectorType = connectorConfig.connector_type as ConnectorType;
-    const credentials = jsonObject(connectorConfig.credentials) as ConnectorCredentials;
+    const credentials = jsonObject(
+      connectorConfig.credentials,
+    ) as ConnectorCredentials;
     const connectorSettings = jsonObject(connectorConfig.settings);
     const settings = {
       ...connectorSettings,
@@ -95,7 +110,11 @@ export async function syncConnector(job: Job): Promise<void> {
       context: { connectorType, connectorId },
     });
 
-    const connector = ConnectorRegistry.create(connectorType, credentials, settings);
+    const connector = ConnectorRegistry.create(
+      connectorType,
+      credentials,
+      settings,
+    );
 
     // Test connection first
     const testResult = await connector.testConnection();
@@ -182,10 +201,17 @@ export async function syncConnector(job: Job): Promise<void> {
 
       // Insert jobs in batches of 50
       const batchSize = 50;
-      for (let i = 0; i < jobInserts.length; i += batchSize) {
-        const batch = jobInserts.slice(i, i + batchSize);
-        await supabase.from('jobs').insert(batch);
-      }
+      await Promise.all(
+        Array.from(
+          {
+            length: Math.max(0, Math.ceil((jobInserts.length - 0) / batchSize)),
+          },
+          (_, __loopIndex) => 0 + __loopIndex * batchSize,
+        ).map(async (i) => {
+          const batch = jobInserts.slice(i, i + batchSize);
+          await supabase.from('jobs').insert(batch);
+        }),
+      );
 
       logger.info('Processing jobs enqueued', {
         context: { connectorId },

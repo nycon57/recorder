@@ -36,6 +36,17 @@ export class ConnectorRegistry {
     credentials: ConnectorCredentials,
     config?: Record<string, any>
   ): Connector {
+    return this.instantiate(type, credentials, config);
+  }
+
+  /**
+   * Instantiate connector from type and credentials.
+   */
+  static instantiate(
+    type: ConnectorType,
+    credentials: ConnectorCredentials,
+    config?: Record<string, any>
+  ): Connector {
     const ConnectorClass = this.connectors.get(type);
 
     if (!ConnectorClass) {

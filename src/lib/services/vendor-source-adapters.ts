@@ -1,5 +1,4 @@
-import type { VendorFetchStrategy } from './vendor-source-registry';
-import type { VendorSourceRow } from './vendor-source-registry';
+import type { VendorFetchStrategy , VendorSourceRow } from './vendor-source-registry';
 
 export type VendorSourceSyncMode = 'scheduled' | 'manual';
 
@@ -21,7 +20,7 @@ export interface VendorSourceAdapterResolution {
   buildPayload: (mode: VendorSourceSyncMode) => VendorSourceSyncPayload;
 }
 
-export const VENDOR_FETCH_PRIORITY: VendorFetchStrategy[] = [
+const VENDOR_FETCH_PRIORITY: VendorFetchStrategy[] = [
   'markdown_export',
   'llms_txt',
   'static_site',
@@ -79,7 +78,7 @@ export function getVendorSourcePriorityRank(
   return rank >= 0 ? rank : VENDOR_FETCH_PRIORITY.length;
 }
 
-export function getTier1VendorSyncConfig(app: string): { maxPages: number } {
+function getTier1VendorSyncConfig(app: string): { maxPages: number } {
   return (
     TIER1_VENDOR_SYNC_CONFIG[app.toLowerCase()] ?? {
       maxPages: DEFAULT_VENDOR_SYNC_MAX_PAGES,

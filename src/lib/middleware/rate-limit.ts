@@ -19,10 +19,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
  * Using sliding window algorithm for accurate rate limiting
  */
 export enum RateLimitTier {
-  AUTH = 'auth',           // 5 req/min - Authentication endpoints
-  API = 'api',             // 100 req/min - Standard API endpoints
-  PUBLIC = 'public',       // 20 req/min - Public endpoints
-  ADMIN = 'admin',         // 500 req/min - Admin endpoints (higher limit)
+  AUTH = 'auth', // 5 req/min - Authentication endpoints
+  API = 'api', // 100 req/min - Standard API endpoints
+  PUBLIC = 'public', // 20 req/min - Public endpoints
+  ADMIN = 'admin', // 500 req/min - Admin endpoints (higher limit)
 }
 
 // Lazy-initialized Redis client and rate limiters (avoid build-time errors)
@@ -35,7 +35,10 @@ let rateLimiters: Record<RateLimitTier, Ratelimit> | null = null;
  */
 function getRateLimiters(): Record<RateLimitTier, Ratelimit> | null {
   // Skip if env vars not available (e.g., during build)
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+  if (
+    !process.env.UPSTASH_REDIS_REST_URL ||
+    !process.env.UPSTASH_REDIS_REST_TOKEN
+  ) {
     return null;
   }
 
@@ -88,9 +91,9 @@ function getClientIdentifier(request: NextRequest, userId?: string): string {
 
   // Fallback to IP address for unauthenticated requests
   const forwarded = request.headers.get('x-forwarded-for');
-  const ip = forwarded ? forwarded.split(',')[0].trim() :
-             request.headers.get('x-real-ip') ||
-             'unknown';
+  const ip = forwarded
+    ? forwarded.split(',')[0].trim()
+    : request.headers.get('x-real-ip') || 'unknown';
 
   return `ip:${ip}`;
 }
@@ -102,12 +105,14 @@ async function logRateLimitViolation(
   request: NextRequest,
   tier: RateLimitTier,
   identifier: string,
-  userId?: string
+  userId?: string,
 ): Promise<void> {
   try {
     const url = new URL(request.url);
     const forwarded = request.headers.get('x-forwarded-for');
-    const ip = forwarded ? forwarded.split(',')[0].trim() : request.headers.get('x-real-ip');
+    const ip = forwarded
+      ? forwarded.split(',')[0].trim()
+      : request.headers.get('x-real-ip');
 
     // Only log if we have a userId (authenticated request)
     if (userId) {
@@ -160,11 +165,14 @@ async function logRateLimitViolation(
  */
 export function rateLimit(
   tier: RateLimitTier,
-  getUserId?: (request: NextRequest) => Promise<string | undefined>
+  getUserId?: (request: NextRequest) => Promise<string | undefined>,
 ) {
-  return function <T extends (request: NextRequest, ...args: any[]) => Promise<NextResponse | Response>>(
-    handler: T
-  ): T {
+  return function <
+    T extends (
+      request: NextRequest,
+      ...args: any[]
+    ) => Promise<NextResponse | Response>,
+  >(handler: T): T {
     return (async (request: NextRequest, ...args: any[]) => {
       try {
         // Get rate limiters (lazy initialization)
@@ -172,7 +180,9 @@ export function rateLimit(
 
         // Skip rate limiting if Redis is not configured (e.g., during build or development)
         if (!limiters) {
-          console.warn('[Rate Limit] Redis not configured - skipping rate limit');
+          console.warn(
+            '[Rate Limit] Redis not configured - skipping rate limit',
+          );
           return handler(request, ...args);
         }
 
@@ -183,7 +193,8 @@ export function rateLimit(
         const identifier = getClientIdentifier(request, userId);
 
         // Check rate limit
-        const { success, limit, remaining, reset } = await limiters[tier].limit(identifier);
+        const { success, limit, remaining, reset } =
+          await limiters[tier].limit(identifier);
 
         // Add rate limit headers to response
         const headers = {
@@ -213,7 +224,7 @@ export function rateLimit(
                 'Retry-After': retryAfter.toString(),
                 'Content-Type': 'application/json',
               },
-            }
+            },
           );
         }
 
@@ -240,13 +251,19 @@ export function rateLimit(
  * Helper to extract userId from request using Better Auth session
  * Use this for authenticated endpoints
  */
-export async function extractUserIdFromAuth(request: NextRequest): Promise<string | undefined> {
+export async function extractUserIdFromAuth(
+  request: NextRequest,
+): Promise<string | undefined> {
   try {
-    const { auth } = await import('@/lib/auth/auth');
-    const { headers } = await import('next/headers');
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
+    const [{ auth }, { headers }] = await Promise.all([
+      import('@/lib/auth/auth'),
+      import('next/headers'),
+    ]);
+    const session = await headers().then((requestHeaders) =>
+      auth.api.getSession({
+        headers: requestHeaders,
+      }),
+    );
     return session?.user?.id || undefined;
   } catch (error) {
     // If auth fails, return undefined and rate limit by IP
@@ -257,7 +274,7 @@ export async function extractUserIdFromAuth(request: NextRequest): Promise<strin
 /**
  * Pre-configured rate limiters for common use cases
  */
-export const rateLimiters_preset = {
+const rateLimiters_preset = {
   /**
    * Auth endpoints (sign-in, sign-up, password reset)
    * 5 requests per minute
@@ -286,13 +303,19 @@ export const rateLimiters_preset = {
 /**
  * Check if user is admin for admin-tier rate limiting
  */
-export async function extractAdminUserId(request: NextRequest): Promise<string | undefined> {
+async function extractAdminUserId(
+  request: NextRequest,
+): Promise<string | undefined> {
   try {
-    const { auth } = await import('@/lib/auth/auth');
-    const { headers } = await import('next/headers');
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
+    const [{ auth }, { headers }] = await Promise.all([
+      import('@/lib/auth/auth'),
+      import('next/headers'),
+    ]);
+    const session = await headers().then((requestHeaders) =>
+      auth.api.getSession({
+        headers: requestHeaders,
+      }),
+    );
 
     if (!session?.user?.id) return undefined;
 
@@ -305,7 +328,11 @@ export async function extractAdminUserId(request: NextRequest): Promise<string |
       .eq('id', userId)
       .single();
 
-    if (user && ['admin', 'owner'].includes(user.role)) {
+    if (
+      user &&
+      typeof user.role === 'string' &&
+      ['admin', 'owner'].includes(user.role)
+    ) {
       return userId;
     }
 

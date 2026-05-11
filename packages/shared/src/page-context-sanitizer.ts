@@ -17,7 +17,7 @@ import type {
   ViewportSnapshot,
   WorkspaceContext,
   WorkspaceContextItem,
-} from './types.js';
+} from './types';
 
 export const PAGE_CONTEXT_SANITIZER_LIMITS = {
   title: 180,
@@ -126,8 +126,6 @@ export function sanitizePageContextSelector(
   return clipText(normalized, limit);
 }
 
-export const sanitizePageContextLocator = sanitizePageContextSelector;
-
 function hasSensitiveLocatorText(value: string): boolean {
   return (
     /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(value) ||
@@ -147,8 +145,10 @@ function sanitizeStringList(
 ): string[] | undefined {
   const sanitized = (values ?? [])
     .slice(0, limit)
-    .map((value) => sanitizePageContextText(value, textLimit))
-    .filter((value): value is string => Boolean(value));
+    .flatMap((__item, __index, __array) => {
+      const __mapped = sanitizePageContextText(__item, textLimit);
+      return __mapped ? [__mapped] : [];
+    });
   return sanitized.length ? sanitized : undefined;
 }
 
@@ -235,8 +235,10 @@ function sanitizeSelectorList(
 ): string[] | undefined {
   const sanitized = (values ?? [])
     .slice(0, limit)
-    .map((value) => sanitizePageContextSelector(value))
-    .filter((value): value is string => Boolean(value));
+    .flatMap((__item, __index, __array) => {
+      const __mapped = sanitizePageContextSelector(__item);
+      return __mapped ? [__mapped] : [];
+    });
   return sanitized.length ? sanitized : undefined;
 }
 
@@ -405,8 +407,10 @@ function sanitizeForm(form: FormSurface): FormSurface {
     selector: sanitizePageContextSelector(form.selector),
     fields: form.fields
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.formFields)
-      .map(sanitizeFormField)
-      .filter((field): field is FormField => Boolean(field)),
+      .flatMap((__item, __index, __array) => {
+        const __mapped = sanitizeFormField(__item);
+        return __mapped ? [__mapped] : [];
+      }),
   };
 }
 
@@ -472,8 +476,10 @@ export function sanitizePageContextForNetwork(
       ) ?? '',
     interactiveElements: (context.interactiveElements ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.interactiveElements)
-      .map(sanitizeInteractiveElement)
-      .filter((element): element is InteractiveElement => Boolean(element)),
+      .flatMap((__item, __index, __array) => {
+        const __mapped = sanitizeInteractiveElement(__item);
+        return __mapped ? [__mapped] : [];
+      }),
     detectionConfidence: context.detectionConfidence,
     pageSummary: sanitizePageContextText(
       context.pageSummary,
@@ -487,19 +493,25 @@ export function sanitizePageContextForNetwork(
       .map(sanitizeNavigationItem),
     primaryActions: (context.primaryActions ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.primaryActions)
-      .map(sanitizePageAction)
-      .filter((action): action is PageAction => Boolean(action)),
+      .flatMap((__item, __index, __array) => {
+        const __mapped = sanitizePageAction(__item);
+        return __mapped ? [__mapped] : [];
+      }),
     selectedEntity: sanitizeSelectedEntity(context.selectedEntity),
     workspaceContext: sanitizeWorkspaceContext(context.workspaceContext),
     viewport: sanitizeViewport(context.viewport),
     regions: (context.regions ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.regions)
-      .map(sanitizeRegion)
-      .filter((region): region is PageRegion => Boolean(region)),
+      .flatMap((__item, __index, __array) => {
+        const __mapped = sanitizeRegion(__item);
+        return __mapped ? [__mapped] : [];
+      }),
     snippets: (context.snippets ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.snippets)
-      .map(sanitizeSnippet)
-      .filter((snippet): snippet is ContextSnippet => Boolean(snippet)),
+      .flatMap((__item, __index, __array) => {
+        const __mapped = sanitizeSnippet(__item);
+        return __mapped ? [__mapped] : [];
+      }),
     forms: (context.forms ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.forms)
       .map(sanitizeForm),
@@ -508,8 +520,10 @@ export function sanitizePageContextForNetwork(
       .map(sanitizeTable),
     dialogs: (context.dialogs ?? [])
       .slice(0, PAGE_CONTEXT_SANITIZER_LIMITS.dialogs)
-      .map(sanitizeDialog)
-      .filter((dialog): dialog is DialogSurface => Boolean(dialog)),
+      .flatMap((__item, __index, __array) => {
+        const __mapped = sanitizeDialog(__item);
+        return __mapped ? [__mapped] : [];
+      }),
     vendorKnowledgeMatch: sanitizeKnowledgeMatch(context.vendorKnowledgeMatch),
     orgKnowledgeMatch: sanitizeKnowledgeMatch(context.orgKnowledgeMatch),
     knowledgeAvailability: sanitizeKnowledgeAvailability(
@@ -540,7 +554,7 @@ export function sanitizePageContextForNetwork(
             sanitizePageContextText(context.knowledgeResolvedFor.host, 140) ??
             'unknown',
           path:
-            sanitizePageContextLocator(
+            sanitizePageContextSelector(
               context.knowledgeResolvedFor.path,
               PAGE_CONTEXT_SANITIZER_LIMITS.selector,
             ) ?? '/',

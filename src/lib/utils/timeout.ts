@@ -2,13 +2,15 @@
  * Timeout utility for async operations
  */
 
+import { mapBatchesSequentially } from './async';
+
 /**
  * Wraps an async function with a timeout
  */
 export async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
-  errorMessage = 'Operation timed out'
+  errorMessage = 'Operation timed out',
 ): Promise<T> {
   const timeout = new Promise<never>((_, reject) => {
     const id = setTimeout(() => {
@@ -23,7 +25,7 @@ export async function withTimeout<T>(
 /**
  * Retry an async function with exponential backoff
  */
-export async function retryWithBackoff<T>(
+async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options: {
     maxAttempts?: number;
@@ -31,7 +33,7 @@ export async function retryWithBackoff<T>(
     maxDelayMs?: number;
     backoffMultiplier?: number;
     shouldRetry?: (error: Error) => boolean;
-  } = {}
+  } = {},
 ): Promise<T> {
   const {
     maxAttempts = 3,
@@ -41,14 +43,11 @@ export async function retryWithBackoff<T>(
     shouldRetry = () => true,
   } = options;
 
-  let lastError: Error | undefined;
-  let delayMs = initialDelayMs;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  const runAttempt = async (attempt: number, delayMs: number): Promise<T> => {
     try {
       return await fn();
     } catch (error) {
-      lastError = error as Error;
+      const lastError = error as Error;
 
       // Check if we should retry
       if (!shouldRetry(lastError)) {
@@ -57,55 +56,55 @@ export async function retryWithBackoff<T>(
 
       // Don't delay on the last attempt
       if (attempt === maxAttempts) {
-        break;
+        throw lastError;
       }
 
       console.log(
         `Attempt ${attempt}/${maxAttempts} failed, retrying in ${delayMs}ms...`,
-        lastError.message
+        lastError.message,
       );
 
       // Wait before retrying
       await new Promise((resolve) => setTimeout(resolve, delayMs));
 
       // Increase delay for next attempt
-      delayMs = Math.min(delayMs * backoffMultiplier, maxDelayMs);
+      const nextDelayMs = Math.min(delayMs * backoffMultiplier, maxDelayMs);
+      return runAttempt(attempt + 1, nextDelayMs);
     }
-  }
+  };
 
-  throw lastError || new Error('All retry attempts failed');
+  return runAttempt(1, initialDelayMs);
 }
 
 /**
  * Run multiple promises in parallel with individual timeouts
  */
-export async function parallelWithTimeouts<T>(
+async function parallelWithTimeouts<T>(
   tasks: Array<() => Promise<T>>,
   timeoutMs: number,
-  maxConcurrency = Infinity
+  maxConcurrency = Infinity,
 ): Promise<Array<{ success: boolean; result?: T; error?: Error }>> {
-  const results: Array<{ success: boolean; result?: T; error?: Error }> = [];
+  const normalizeResults = (batchResults: PromiseSettledResult<T>[]) =>
+    batchResults.map((result) => {
+      if (result.status === 'fulfilled') {
+        return { success: true, result: result.value };
+      }
+      return { success: false, error: result.reason };
+    });
 
-  // Process in batches if maxConcurrency is set
-  for (let i = 0; i < tasks.length; i += maxConcurrency) {
-    const batch = tasks.slice(i, i + maxConcurrency);
-
-    const batchResults = await Promise.allSettled(
-      batch.map((task) =>
-        withTimeout(task(), timeoutMs, `Task timed out after ${timeoutMs}ms`)
-      )
-    );
-
-    results.push(
-      ...batchResults.map((result) => {
-        if (result.status === 'fulfilled') {
-          return { success: true, result: result.value };
-        } else {
-          return { success: false, error: result.reason };
-        }
-      })
-    );
+  if (!Number.isFinite(maxConcurrency)) {
+    return Promise.allSettled(
+      tasks.map((task) =>
+        withTimeout(task(), timeoutMs, `Task timed out after ${timeoutMs}ms`),
+      ),
+    ).then(normalizeResults);
   }
 
-  return results;
+  return mapBatchesSequentially(tasks, maxConcurrency, (batch) =>
+    Promise.allSettled(
+      batch.map((task) =>
+        withTimeout(task(), timeoutMs, `Task timed out after ${timeoutMs}ms`),
+      ),
+    ).then(normalizeResults),
+  );
 }

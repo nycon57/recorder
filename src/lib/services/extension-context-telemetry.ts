@@ -112,9 +112,7 @@ function hasMarketingSignal(context: PageContext): boolean {
   );
 }
 
-export function classifyPageType(
-  context: PageContext,
-): ExtensionContextPageType {
+function classifyPageType(context: PageContext): ExtensionContextPageType {
   if ((context.dialogs?.length ?? 0) > 0) return 'dialog';
   if (hasSettingsSignal(context)) return 'settings';
   if ((context.tables?.length ?? 0) > 0 && (context.forms?.length ?? 0) === 0) {
@@ -182,8 +180,9 @@ export function buildExtensionContextTelemetry(args: {
     orgMatchConfidence: context.orgKnowledgeMatch?.confidence ?? null,
     selectedEntityTitle: context.selectedEntity?.title ?? null,
     currentNavigationLabels: (context.navigation ?? [])
-      .filter((item) => item.current)
-      .map((item) => item.label)
+      .flatMap((__item, __index, __array) =>
+        __item.current ? [__item.label] : [],
+      )
       .slice(0, 4),
     workspaceValues: (context.workspaceContext?.items ?? [])
       .map((item) => item.value)

@@ -31,7 +31,7 @@ export interface MemberFiltersState {
   statuses: string[];
 }
 
-export interface ActivityLogEntry {
+interface ActivityLogEntry {
   id: string;
   action: string;
   resource_type: string;

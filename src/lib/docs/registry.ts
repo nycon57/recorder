@@ -264,6 +264,3 @@ export const getDocsRegistry = cache(async (): Promise<DocsRegistry> => {
 
   return buildRegistry(gitPages, dbPages);
 });
-
-// Re-export helpers so callers can use them standalone
-export { canView as canViewPage };

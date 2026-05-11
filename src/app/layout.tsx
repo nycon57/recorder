@@ -1,12 +1,27 @@
 import type { Metadata } from 'next';
+import { Inter, Outfit } from 'next/font/google';
 import Script from 'next/script';
+import { Analytics } from '@vercel/analytics/next';
 
 import { Toaster } from '@/app/components/ui/sonner';
 import { PostHogProvider } from '@/providers/posthog-provider';
 import { QueryProvider } from '@/lib/providers/query-provider';
-import { Analytics } from '@vercel/analytics/next';
 
 import './globals.css';
+
+const outfit = Outfit({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700', '800', '900'],
+  variable: '--font-outfit',
+  display: 'swap',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-inter',
+  display: 'swap',
+});
 
 // Force dynamic rendering to prevent static generation at build time
 // Root layout uses runtime env vars
@@ -54,12 +69,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={`dark ${outfit.variable} ${inter.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Outfit (Axiforma alternative) for headers, Inter for body */}
-        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
         <link rel="manifest" href="/manifest.json" />
         {process.env.NODE_ENV === 'development' && (
           <Script

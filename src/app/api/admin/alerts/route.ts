@@ -12,7 +12,7 @@ import { NextRequest } from 'next/server';
 
 import {
   apiHandler,
-  requireAdmin,
+  requireSystemAdmin,
   successResponse,
   errors,
   parseBody,
@@ -28,8 +28,8 @@ import {
  * List alert incidents with optional filtering
  */
 export const GET = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  const { userId } = await requireAdmin();
+  // SECURITY: Cross-org alert incidents — require Tribora staff (system admin)
+  const { userId } = await requireSystemAdmin();
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status') || null;
@@ -39,10 +39,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const offset = (page - 1) * limit;
 
   // Build query with alert rule join
-  let query = supabaseAdmin
-    .from('alert_incidents')
-    .select(
-      `
+  let query = supabaseAdmin.from('alert_incidents').select(
+    `
       *,
       alert_rules (
         id,
@@ -65,8 +63,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
         email
       )
     `,
-      { count: 'exact' }
-    );
+    { count: 'exact' },
+  );
 
   // Apply filters
   if (status) {
@@ -74,7 +72,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   // Execute query
-  const { data: incidents, error, count } = await query
+  const {
+    data: incidents,
+    error,
+    count,
+  } = await query
     .order('triggered_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -134,11 +136,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
       .length,
     totalResolved: results.filter((i: any) => i.status === 'resolved').length,
     bySeverity: {
-      critical: results.filter((i: any) => i.alert_rules?.severity === 'critical')
-        .length,
+      critical: results.filter(
+        (i: any) => i.alert_rules?.severity === 'critical',
+      ).length,
       warning: results.filter((i: any) => i.alert_rules?.severity === 'warning')
         .length,
-      info: results.filter((i: any) => i.alert_rules?.severity === 'info').length,
+      info: results.filter((i: any) => i.alert_rules?.severity === 'info')
+        .length,
     },
   };
 
@@ -160,10 +164,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * Acknowledge an alert incident
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  const { userId } = await requireAdmin();
-
-  const body = await parseBody(request, adminAcknowledgeAlertSchema);
+  // SECURITY: Cross-org alert incidents — require Tribora staff (system admin)
+  const [{ userId }, body] = await Promise.all([
+    requireSystemAdmin(),
+    parseBody(request, adminAcknowledgeAlertSchema),
+  ]);
   const { incidentId, notes } = body as { incidentId: string; notes?: string };
 
   // Update incident
@@ -184,7 +189,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
         severity,
         metric_name
       )
-    `
+    `,
     )
     .single();
 
@@ -204,10 +209,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
  * Resolve an alert incident
  */
 export const PUT = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  const { userId } = await requireAdmin();
-
-  const body = await parseBody(request, adminResolveAlertSchema);
+  // SECURITY: Cross-org alert incidents — require Tribora staff (system admin)
+  const [{ userId }, body] = await Promise.all([
+    requireSystemAdmin(),
+    parseBody(request, adminResolveAlertSchema),
+  ]);
   const { incidentId, notes } = body as { incidentId: string; notes?: string };
 
   // Update incident
@@ -228,7 +234,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
         severity,
         metric_name
       )
-    `
+    `,
     )
     .single();
 

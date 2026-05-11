@@ -3,7 +3,14 @@
 /* eslint-env browser */
 /* global KeyboardEvent, DOMException */
 
-import { useState, useRef, useEffect, useCallback, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import {
+  useReducer,
+  useRef,
+  useEffect,
+  useCallback,
+  useEffectEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { MessageSquare, Send, Trash2, X, Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -39,16 +46,45 @@ interface ContentChatWidgetProps {
   className?: string;
 }
 
-export function ContentChatWidget({
+interface ContentChatState {
+  isOpen: boolean;
+  messages: Message[];
+  input: string;
+  isStreaming: boolean;
+  error: string | null;
+}
+
+type ContentChatAction =
+  | Partial<ContentChatState>
+  | ((state: ContentChatState) => ContentChatState);
+
+const initialContentChatState: ContentChatState = {
+  isOpen: false,
+  messages: [],
+  input: '',
+  isStreaming: false,
+  error: null,
+};
+
+const contentChatReducer = (
+  state: ContentChatState,
+  action: ContentChatAction,
+): ContentChatState =>
+  typeof action === 'function' ? action(state) : { ...state, ...action };
+
+export function ContentChatWidget(
+  props: Parameters<typeof useContentChatWidgetImplementation>[0],
+) {
+  return useContentChatWidgetImplementation(props);
+}
+
+function useContentChatWidgetImplementation({
   contentId,
   contentTitle,
   className,
 }: ContentChatWidgetProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [{ isOpen, messages, input, isStreaming, error }, updateChatState] =
+    useReducer(contentChatReducer, initialContentChatState);
   const abortControllerRef = useRef<AbortController | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -60,15 +96,6 @@ export function ContentChatWidget({
   }, [messages]);
 
   useEffect(() => {
-    if (isOpen) {
-      const timer = setTimeout(() => inputRef.current?.focus(), 100);
-      return () => clearTimeout(timer);
-    } else {
-      triggerRef.current?.focus();
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
     return () => {
       abortControllerRef.current?.abort();
     };
@@ -77,31 +104,40 @@ export function ContentChatWidget({
   const cancelStream = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
-    setIsStreaming(false);
+    updateChatState({ isStreaming: false });
   }, []);
 
   const handleToggle = useCallback(() => {
-    setIsOpen((prev) => !prev);
-    if (isOpen) cancelStream();
+    const nextOpen = !isOpen;
+    updateChatState({ isOpen: nextOpen });
+    if (nextOpen) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    } else {
+      cancelStream();
+      triggerRef.current?.focus();
+    }
   }, [isOpen, cancelStream]);
+  const handleToggleEvent = useEffectEvent(handleToggle);
 
   useEffect(() => {
     if (!isOpen) return;
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        handleToggle();
+        handleToggleEvent();
       }
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, handleToggle]);
+  }, [isOpen]);
 
   const handleClear = useCallback(() => {
     cancelStream();
-    setMessages([]);
-    setInput('');
-    setError(null);
+    updateChatState({
+      messages: [],
+      input: '',
+      error: null,
+    });
     conversationIdRef.current = null;
     inputRef.current?.focus();
   }, [cancelStream]);
@@ -110,18 +146,27 @@ export function ContentChatWidget({
   const sessionIdRef = useRef(crypto.randomUUID().slice(0, 8));
 
   const appendToken = useCallback((token: string) => {
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (last?.role !== 'assistant') return prev;
-      return [...prev.slice(0, -1), { ...last, content: last.content + token }];
+    updateChatState((state) => {
+      const last = state.messages[state.messages.length - 1];
+      if (last?.role !== 'assistant') return state;
+      return {
+        ...state,
+        messages: [
+          ...state.messages.slice(0, -1),
+          { ...last, content: last.content + token },
+        ],
+      };
     });
   }, []);
 
   const appendSources = useCallback((sources: ChatSource[]) => {
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (last?.role !== 'assistant') return prev;
-      return [...prev.slice(0, -1), { ...last, sources }];
+    updateChatState((state) => {
+      const last = state.messages[state.messages.length - 1];
+      if (last?.role !== 'assistant') return state;
+      return {
+        ...state,
+        messages: [...state.messages.slice(0, -1), { ...last, sources }],
+      };
     });
   }, []);
 
@@ -129,13 +174,22 @@ export function ContentChatWidget({
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
 
-    setError(null);
-    setInput('');
+    updateChatState({
+      error: null,
+      input: '',
+    });
 
     const userMessage: Message = { role: 'user', content: trimmed };
     const currentQuery = trimmed;
-    setMessages((prev) => [...prev, userMessage, { role: 'assistant', content: '', query: currentQuery }]);
-    setIsStreaming(true);
+    updateChatState((state) => ({
+      ...state,
+      messages: [
+        ...state.messages,
+        userMessage,
+        { role: 'assistant', content: '', query: currentQuery },
+      ],
+      isStreaming: true,
+    }));
     trackChatQuestion(trimmed);
 
     const controller = new AbortController();
@@ -170,66 +224,81 @@ export function ContentChatWidget({
       const decoder = new TextDecoder();
       let buffer = '';
 
-      while (true) {
+      const processLine = (line: string) => {
+        if (!line.startsWith('data: ')) return;
+        const jsonStr = line.slice(6);
+
+        try {
+          const event = JSON.parse(jsonStr);
+
+          switch (event.type) {
+            case 'sources':
+              if (Array.isArray(event.sources)) {
+                appendSources(event.sources);
+              }
+              break;
+            case 'token':
+              appendToken(event.token);
+              break;
+            case 'done':
+              if (event.conversationId) {
+                conversationIdRef.current = event.conversationId;
+              }
+              messageCounterRef.current += 1;
+              updateChatState((state) => {
+                const last = state.messages[state.messages.length - 1];
+                if (last?.role !== 'assistant') return state;
+                const ratingId = `${sessionIdRef.current}-${messageCounterRef.current}`;
+                return {
+                  ...state,
+                  messages: [
+                    ...state.messages.slice(0, -1),
+                    { ...last, done: true, ratingId },
+                  ],
+                };
+              });
+              break;
+            case 'error':
+              updateChatState({ error: DEFAULT_ERROR });
+              break;
+          }
+        } catch {
+          // skip malformed JSON
+        }
+      };
+
+      const readChunk = async (): Promise<void> => {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) return;
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() ?? '';
+        lines.forEach(processLine);
 
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const jsonStr = line.slice(6);
+        return readChunk();
+      };
 
-          try {
-            const event = JSON.parse(jsonStr);
-
-            switch (event.type) {
-              case 'sources':
-                if (Array.isArray(event.sources)) {
-                  appendSources(event.sources);
-                }
-                break;
-              case 'token':
-                appendToken(event.token);
-                break;
-              case 'done':
-                if (event.conversationId) {
-                  conversationIdRef.current = event.conversationId;
-                }
-                messageCounterRef.current += 1;
-                setMessages((prev) => {
-                  const last = prev[prev.length - 1];
-                  if (last?.role !== 'assistant') return prev;
-                  const ratingId = `${sessionIdRef.current}-${messageCounterRef.current}`;
-                  return [...prev.slice(0, -1), { ...last, done: true, ratingId }];
-                });
-                break;
-              case 'error':
-                setError(DEFAULT_ERROR);
-                break;
-            }
-          } catch {
-            // skip malformed JSON
-          }
-        }
-      }
+      await readChunk();
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
 
       const message = err instanceof Error ? err.message : '';
-      setError(message || DEFAULT_ERROR);
-      setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.role === 'assistant' && !last.content) {
-          return prev.slice(0, -1);
-        }
-        return prev;
+      updateChatState((state) => {
+        const last = state.messages[state.messages.length - 1];
+        const messages =
+          last?.role === 'assistant' && !last.content
+            ? state.messages.slice(0, -1)
+            : state.messages;
+        return {
+          ...state,
+          error: message || DEFAULT_ERROR,
+          messages,
+        };
       });
     } finally {
       abortControllerRef.current = null;
-      setIsStreaming(false);
+      updateChatState({ isStreaming: false });
     }
   }, [input, isStreaming, contentId, appendToken, appendSources]);
 
@@ -240,7 +309,7 @@ export function ContentChatWidget({
         handleSend();
       }
     },
-    [handleSend]
+    [handleSend],
   );
 
   return (
@@ -264,7 +333,7 @@ export function ContentChatWidget({
                   className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   aria-label="Clear conversation"
                 >
-                  <Trash2 aria-hidden="true" className="h-4 w-4" />
+                  <Trash2 aria-hidden="true" className="size-4" />
                 </button>
               )}
               <button
@@ -273,7 +342,7 @@ export function ContentChatWidget({
                 className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 aria-label="Close chat"
               >
-                <X aria-hidden="true" className="h-4 w-4" />
+                <X aria-hidden="true" className="size-4" />
               </button>
             </div>
           </div>
@@ -290,10 +359,10 @@ export function ContentChatWidget({
             )}
             {messages.map((msg, i) => (
               <div
-                key={i}
+                key={JSON.stringify(msg)}
                 className={cn(
                   'mb-3 text-sm',
-                  msg.role === 'user' ? 'text-right' : 'text-left'
+                  msg.role === 'user' ? 'text-right' : 'text-left',
                 )}
               >
                 <div
@@ -301,66 +370,87 @@ export function ContentChatWidget({
                     'inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2',
                     msg.role === 'user'
                       ? 'bg-accent/20 text-foreground'
-                      : 'bg-muted text-foreground'
+                      : 'bg-muted text-foreground',
                   )}
                 >
                   {msg.content || (
                     <>
-                      <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <Loader2
+                        aria-hidden="true"
+                        className="size-4 animate-spin text-muted-foreground"
+                      />
                       <span className="sr-only">Generating response</span>
                     </>
                   )}
                 </div>
-                {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
-                  <div className="mt-2 space-y-1 text-left">
-                    {msg.sources.slice(0, 3).map((source, sourceIndex) => {
-                      const label = source.title || source.contentTitle || 'Source';
-                      const href = source.url || (source.contentId ? `/library/${source.contentId}` : null);
-                      const detail = source.snippet || source.chunkText || '';
-                      const timestamp = source.timestampRange ||
-                        (typeof source.timestamp === 'number'
-                          ? `${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')}`
-                          : null);
+                {msg.role === 'assistant' &&
+                  msg.sources &&
+                  msg.sources.length > 0 && (
+                    <div className="mt-2 space-y-1 text-left">
+                      {msg.sources.slice(0, 3).map((source, sourceIndex) => {
+                        const label =
+                          source.title || source.contentTitle || 'Source';
+                        const href =
+                          source.url ||
+                          (source.contentId
+                            ? `/library/${source.contentId}`
+                            : null);
+                        const detail = source.snippet || source.chunkText || '';
+                        const timestamp =
+                          source.timestampRange ||
+                          (typeof source.timestamp === 'number'
+                            ? `${Math.floor(source.timestamp / 60)}:${String(Math.floor(source.timestamp % 60)).padStart(2, '0')}`
+                            : null);
 
-                      return (
-                        <div
-                          key={`${label}-${sourceIndex}`}
-                          className="max-w-[85%] rounded-md border border-border/50 bg-background px-2 py-1.5 text-xs text-muted-foreground"
-                        >
-                          <div className="flex items-center gap-1 text-foreground">
-                            <span className="font-medium">[{sourceIndex + 1}]</span>
-                            {href ? (
-                              <a href={href} className="truncate underline-offset-2 hover:underline">
-                                {label}
-                              </a>
-                            ) : (
-                              <span className="truncate">{label}</span>
+                        return (
+                          <div
+                            key={`${label}-${sourceIndex}`}
+                            className="max-w-[85%] rounded-md border border-border/50 bg-background px-2 py-1.5 text-xs text-muted-foreground"
+                          >
+                            <div className="flex items-center gap-1 text-foreground">
+                              <span className="font-medium">
+                                [{sourceIndex + 1}]
+                              </span>
+                              {href ? (
+                                <a
+                                  href={href}
+                                  className="truncate underline-offset-2 hover:underline"
+                                >
+                                  {label}
+                                </a>
+                              ) : (
+                                <span className="truncate">{label}</span>
+                              )}
+                              {timestamp && (
+                                <span className="shrink-0 text-muted-foreground">
+                                  {timestamp}
+                                </span>
+                              )}
+                            </div>
+                            {detail && (
+                              <p className="mt-1 line-clamp-2">{detail}</p>
                             )}
-                            {timestamp && <span className="shrink-0 text-muted-foreground">{timestamp}</span>}
                           </div>
-                          {detail && (
-                            <p className="mt-1 line-clamp-2">
-                              {detail}
-                            </p>
-                          )}
+                        );
+                      })}
+                      {msg.sources.length > 3 && (
+                        <div className="text-xs text-muted-foreground">
+                          +{msg.sources.length - 3} more sources
                         </div>
-                      );
-                    })}
-                    {msg.sources.length > 3 && (
-                      <div className="text-xs text-muted-foreground">
-                        +{msg.sources.length - 3} more sources
-                      </div>
-                    )}
-                  </div>
-                )}
-                {msg.role === 'assistant' && msg.done && msg.content && msg.ratingId && (
-                  <ResponseRating
-                    responseId={msg.ratingId}
-                    query={msg.query ?? ''}
-                    responseSnippet={msg.content}
-                    className="mt-1"
-                  />
-                )}
+                      )}
+                    </div>
+                  )}
+                {msg.role === 'assistant' &&
+                  msg.done &&
+                  msg.content &&
+                  msg.ratingId && (
+                    <ResponseRating
+                      responseId={msg.ratingId}
+                      query={msg.query ?? ''}
+                      responseSnippet={msg.content}
+                      className="mt-1"
+                    />
+                  )}
               </div>
             ))}
 
@@ -381,7 +471,7 @@ export function ContentChatWidget({
                 ref={inputRef}
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => updateChatState({ input: e.target.value })}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a question..."
                 disabled={isStreaming}
@@ -396,9 +486,9 @@ export function ContentChatWidget({
                 aria-label="Send message"
               >
                 {isStreaming ? (
-                  <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                 ) : (
-                  <Send aria-hidden="true" className="h-4 w-4" />
+                  <Send aria-hidden="true" className="size-4" />
                 )}
               </button>
             </div>
@@ -414,13 +504,13 @@ export function ContentChatWidget({
           'flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg transition-all hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2',
           isOpen
             ? 'bg-muted text-foreground'
-            : 'bg-accent text-background hover:bg-accent/90'
+            : 'bg-accent text-background hover:bg-accent/90',
         )}
         aria-label={isOpen ? 'Close chat' : 'Ask about this'}
         aria-expanded={isOpen}
         aria-controls="content-chat-panel"
       >
-        <MessageSquare aria-hidden="true" className="h-5 w-5" />
+        <MessageSquare aria-hidden="true" className="size-5" />
         {!isOpen && <span>Ask about this</span>}
       </button>
     </div>

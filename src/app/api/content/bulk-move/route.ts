@@ -26,8 +26,10 @@ type BulkMoveInput = z.infer<typeof bulkMoveSchema>;
  * - collection_id: Target collection UUID, or null to remove from collections
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireOrg();
-  const body = await parseBody<BulkMoveInput>(request, bulkMoveSchema);
+  const [{ orgId, userId }, body] = await Promise.all([
+    requireOrg(),
+    parseBody<BulkMoveInput>(request, bulkMoveSchema),
+  ]);
   const supabase = supabaseAdmin;
 
   // 1. If target collection specified, verify it exists and belongs to this org
@@ -54,15 +56,20 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .in('id', body.content_ids);
 
   if (contentError) {
-    console.error('[POST /api/content/bulk-move] Content lookup error:', contentError);
+    console.error(
+      '[POST /api/content/bulk-move] Content lookup error:',
+      contentError,
+    );
     throw new Error('Failed to verify content items');
   }
 
-  const foundIds = new Set(existingContent?.map(c => c.id) || []);
-  const notFoundIds = body.content_ids.filter(id => !foundIds.has(id));
+  const foundIds = new Set(existingContent?.map((c) => c.id) || []);
+  const notFoundIds = body.content_ids.filter((id) => !foundIds.has(id));
 
   if (notFoundIds.length > 0) {
-    return errors.badRequest(`Content items not found: ${notFoundIds.slice(0, 5).join(', ')}${notFoundIds.length > 5 ? '...' : ''}`);
+    return errors.badRequest(
+      `Content items not found: ${notFoundIds.slice(0, 5).join(', ')}${notFoundIds.length > 5 ? '...' : ''}`,
+    );
   }
 
   // 3. Update all content items
@@ -97,7 +104,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
       },
     });
   } catch (activityError) {
-    console.error('[POST /api/content/bulk-move] Failed to log activity:', activityError);
+    console.error(
+      '[POST /api/content/bulk-move] Failed to log activity:',
+      activityError,
+    );
   }
 
   return successResponse({

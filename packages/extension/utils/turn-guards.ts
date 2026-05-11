@@ -2,7 +2,7 @@ export type NoReplyWatchdogReason =
   | 'user_message_timeout'
   | 'post_tool_timeout';
 
-export interface NoReplyWatchdogEvent {
+interface NoReplyWatchdogEvent {
   turnId: string;
   reason: NoReplyWatchdogReason;
 }

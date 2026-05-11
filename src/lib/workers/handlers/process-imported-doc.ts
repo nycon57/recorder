@@ -15,6 +15,7 @@ import { GOOGLE_CONFIG } from '@/lib/google/client';
 import { createSemanticChunker } from '@/lib/services/semantic-chunker';
 import { classifyContent } from '@/lib/services/content-classifier';
 import { getAdaptiveChunkConfig } from '@/lib/services/adaptive-sizing';
+import { mapBatchesSequentially } from '@/lib/utils/async';
 import { sanitizeMetadata } from '@/lib/utils/config-validation';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
@@ -35,7 +36,9 @@ export async function processImportedDocument(job: Job): Promise<void> {
   const payload = job.payload as unknown as ProcessImportedDocPayload;
   const { documentId, connectorId, orgId } = payload;
 
-  console.log(`[Process-Imported-Doc] Starting processing for document ${documentId}`);
+  console.log(
+    `[Process-Imported-Doc] Starting processing for document ${documentId}`,
+  );
 
   const supabase = createAdminClient();
 
@@ -48,12 +51,16 @@ export async function processImportedDocument(job: Job): Promise<void> {
       .single();
 
     if (docError || !importedDoc) {
-      throw new Error(`Document not found: ${docError?.message || 'Not found'}`);
+      throw new Error(
+        `Document not found: ${docError?.message || 'Not found'}`,
+      );
     }
 
     // Check if already processed (idempotency)
     if (importedDoc.sync_status === 'completed') {
-      console.log(`[Process-Imported-Doc] Document ${documentId} already processed`);
+      console.log(
+        `[Process-Imported-Doc] Document ${documentId} already processed`,
+      );
       return;
     }
 
@@ -73,7 +80,7 @@ export async function processImportedDocument(job: Job): Promise<void> {
 
     const content = importedDoc.content;
     console.log(
-      `[Process-Imported-Doc] Processing document: ${importedDoc.title || 'Untitled'} (${content.length} chars)`
+      `[Process-Imported-Doc] Processing document: ${importedDoc.title || 'Untitled'} (${content.length} chars)`,
     );
 
     // Check if embeddings already exist in transcript_chunks table
@@ -86,7 +93,7 @@ export async function processImportedDocument(job: Job): Promise<void> {
 
     if (existingChunks && existingChunks > 0) {
       console.log(
-        `[Process-Imported-Doc] Embeddings already exist (${existingChunks} chunks), updating status`
+        `[Process-Imported-Doc] Embeddings already exist (${existingChunks} chunks), updating status`,
       );
 
       await supabase
@@ -103,7 +110,7 @@ export async function processImportedDocument(job: Job): Promise<void> {
     // Classify content type for adaptive chunking
     const contentClassification = classifyContent(content);
     console.log(
-      `[Process-Imported-Doc] Content type: ${contentClassification.type} (confidence: ${contentClassification.confidence.toFixed(2)})`
+      `[Process-Imported-Doc] Content type: ${contentClassification.type} (confidence: ${contentClassification.confidence.toFixed(2)})`,
     );
 
     // Get adaptive chunk config based on content type
@@ -119,135 +126,151 @@ export async function processImportedDocument(job: Job): Promise<void> {
       contentType: contentClassification.type,
     });
 
-    console.log(`[Process-Imported-Doc] Created ${chunks.length} semantic chunks`);
+    console.log(
+      `[Process-Imported-Doc] Created ${chunks.length} semantic chunks`,
+    );
 
     // Generate embeddings for chunks
     console.log(`[Process-Imported-Doc] Generating embeddings...`);
 
     const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
-    const embeddingRecords = [];
+    const embeddingRecords = await mapBatchesSequentially(
+      chunks,
+      BATCH_SIZE,
+      async (batch, batchIndex) => {
+        const i = batchIndex * BATCH_SIZE;
 
-    for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-      const batch = chunks.slice(i, i + BATCH_SIZE);
+        console.log(
+          `[Process-Imported-Doc] Embedding batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)}`,
+        );
 
-      console.log(
-        `[Process-Imported-Doc] Embedding batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(chunks.length / BATCH_SIZE)}`
-      );
+        // Process chunks in parallel
+        const batchResults = await Promise.all(
+          batch.map(async (chunk, batchIndex) => {
+            const result = await genai.models.embedContent({
+              model: GOOGLE_CONFIG.EMBEDDING_MODEL,
+              contents: chunk.text,
+              config: {
+                taskType: GOOGLE_CONFIG.EMBEDDING_TASK_TYPE,
+                outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS,
+              },
+            });
 
-      // Process chunks in parallel
-      const batchResults = await Promise.all(
-        batch.map(async (chunk, batchIndex) => {
-          const result = await genai.models.embedContent({
-            model: GOOGLE_CONFIG.EMBEDDING_MODEL,
-            contents: chunk.text,
-            config: {
-              taskType: GOOGLE_CONFIG.EMBEDDING_TASK_TYPE,
-              outputDimensionality: GOOGLE_CONFIG.EMBEDDING_DIMENSIONS,
-            },
-          });
+            const embedding = result.embeddings?.[0]?.values;
 
-          const embedding = result.embeddings?.[0]?.values;
+            if (!embedding) {
+              throw new Error(
+                `No embedding returned for chunk ${i + batchIndex}`,
+              );
+            }
 
-          if (!embedding) {
-            throw new Error(`No embedding returned for chunk ${i + batchIndex}`);
-          }
+            // Sanitize metadata
+            const metadata = sanitizeMetadata({
+              chunkIndex: i + batchIndex,
+              startPosition: chunk.startPosition,
+              endPosition: chunk.endPosition,
+              semanticScore: chunk.semanticScore,
+              structureType: chunk.structureType,
+              boundaryType: chunk.boundaryType,
+              tokenCount: chunk.tokenCount,
+              sentenceCount: chunk.sentences.length,
+              contentType: contentClassification.type,
+              externalId: importedDoc.external_id,
+              sourceUrl: importedDoc.external_url,
+              fileType: importedDoc.file_type,
+            });
 
-          // Sanitize metadata
-          const metadata = sanitizeMetadata({
-            chunkIndex: i + batchIndex,
-            startPosition: chunk.startPosition,
-            endPosition: chunk.endPosition,
-            semanticScore: chunk.semanticScore,
-            structureType: chunk.structureType,
-            boundaryType: chunk.boundaryType,
-            tokenCount: chunk.tokenCount,
-            sentenceCount: chunk.sentences.length,
-            contentType: contentClassification.type,
-            externalId: importedDoc.external_id,
-            sourceUrl: importedDoc.source_url,
-            fileType: importedDoc.file_type,
-          });
+            return {
+              org_id: orgId,
+              chunk_index: i + batchIndex,
+              chunk_text: chunk.text,
+              embedding: JSON.stringify(embedding),
+              // Semantic chunking metadata
+              chunking_strategy: 'semantic',
+              semantic_score: chunk.semanticScore,
+              structure_type: chunk.structureType,
+              boundary_type: chunk.boundaryType,
+              metadata: {
+                ...metadata,
+                connector_id: connectorId,
+                imported_document_id: documentId,
+              },
+            };
+          }),
+        );
 
-          return {
-            org_id: orgId,
-            chunk_index: i + batchIndex,
-            chunk_text: chunk.text,
-            embedding: JSON.stringify(embedding),
-            // Semantic chunking metadata
-            chunking_strategy: 'semantic',
-            semantic_score: chunk.semanticScore,
-            structure_type: chunk.structureType,
-            boundary_type: chunk.boundaryType,
-            metadata: {
-              ...metadata,
-              connector_id: connectorId,
-              imported_document_id: documentId,
-            },
-          };
-        })
-      );
+        // Small delay to avoid rate limits
+        if (i + BATCH_SIZE < chunks.length) {
+          await sleep(100);
+        }
 
-      embeddingRecords.push(...batchResults);
-
-      // Small delay to avoid rate limits
-      if (i + BATCH_SIZE < chunks.length) {
-        await sleep(100);
-      }
-    }
+        return batchResults;
+      },
+    );
 
     console.log(
-      `[Process-Imported-Doc] Generated ${embeddingRecords.length} embeddings, saving to database`
+      `[Process-Imported-Doc] Generated ${embeddingRecords.length} embeddings, saving to database`,
     );
 
     // Save embeddings to database in batches
     // Note: Using transcript_chunks table until imported_doc_chunks is created in Phase 5 migration
-    for (let i = 0; i < embeddingRecords.length; i += DB_INSERT_BATCH_SIZE) {
-      const batch = embeddingRecords.slice(
-        i,
-        Math.min(i + DB_INSERT_BATCH_SIZE, embeddingRecords.length)
-      );
-
-      console.log(
-        `[Process-Imported-Doc] Saving batch ${Math.floor(i / DB_INSERT_BATCH_SIZE) + 1}/${Math.ceil(embeddingRecords.length / DB_INSERT_BATCH_SIZE)}`
-      );
-
-      // Transform to transcript_chunks format
-      const transcriptChunksBatch = batch.map(record => ({
-        content_id: documentId, // Use documentId as recording_id temporarily
-        org_id: record.org_id,
-        chunk_index: record.chunk_index,
-        chunk_text: record.chunk_text,
-        embedding: record.embedding,
-        chunking_strategy: record.chunking_strategy,
-        semantic_score: record.semantic_score,
-        structure_type: record.structure_type,
-        boundary_type: record.boundary_type,
-        metadata: {
-          ...record.metadata,
-          imported_document_id: documentId,
-          connector_id: connectorId,
-          source_type: 'imported_document',
+    await Promise.all(
+      Array.from(
+        {
+          length: Math.max(
+            0,
+            Math.ceil((embeddingRecords.length - 0) / DB_INSERT_BATCH_SIZE),
+          ),
         },
-      }));
-
-      const { error: insertError } = await supabase
-        .from('transcript_chunks')
-        .insert(transcriptChunksBatch);
-
-      if (insertError) {
-        throw new Error(
-          `Failed to save embeddings batch: ${insertError.message}`
+        (_, __loopIndex) => 0 + __loopIndex * DB_INSERT_BATCH_SIZE,
+      ).map(async (i) => {
+        const batch = embeddingRecords.slice(
+          i,
+          Math.min(i + DB_INSERT_BATCH_SIZE, embeddingRecords.length),
         );
-      }
 
-      // Small delay between batches
-      if (i + DB_INSERT_BATCH_SIZE < embeddingRecords.length) {
-        await sleep(50);
-      }
-    }
+        console.log(
+          `[Process-Imported-Doc] Saving batch ${Math.floor(i / DB_INSERT_BATCH_SIZE) + 1}/${Math.ceil(embeddingRecords.length / DB_INSERT_BATCH_SIZE)}`,
+        );
+
+        // Transform to transcript_chunks format
+        const transcriptChunksBatch = batch.map((record) => ({
+          content_id: documentId, // Use documentId as recording_id temporarily
+          org_id: record.org_id,
+          chunk_index: record.chunk_index,
+          chunk_text: record.chunk_text,
+          embedding: record.embedding,
+          chunking_strategy: record.chunking_strategy,
+          semantic_score: record.semantic_score,
+          structure_type: record.structure_type,
+          boundary_type: record.boundary_type,
+          metadata: {
+            ...record.metadata,
+            imported_document_id: documentId,
+            connector_id: connectorId,
+            source_type: 'imported_document',
+          },
+        }));
+
+        const { error: insertError } = await supabase
+          .from('transcript_chunks')
+          .insert(transcriptChunksBatch);
+
+        if (insertError) {
+          throw new Error(
+            `Failed to save embeddings batch: ${insertError.message}`,
+          );
+        }
+
+        // Small delay between batches
+        if (i + DB_INSERT_BATCH_SIZE < embeddingRecords.length) {
+          await sleep(50);
+        }
+      }),
+    );
 
     console.log(
-      `[Process-Imported-Doc] Successfully saved ${embeddingRecords.length} embeddings`
+      `[Process-Imported-Doc] Successfully saved ${embeddingRecords.length} embeddings`,
     );
 
     // Update imported document status
@@ -273,7 +296,7 @@ export async function processImportedDocument(job: Job): Promise<void> {
     });
 
     console.log(
-      `[Process-Imported-Doc] Processing complete for document ${documentId}`
+      `[Process-Imported-Doc] Processing complete for document ${documentId}`,
     );
   } catch (error) {
     console.error(`[Process-Imported-Doc] Error:`, error);

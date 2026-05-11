@@ -6,7 +6,3 @@
 export { DashboardContent } from './DashboardContent';
 export { KnowledgeHealthWidget } from './KnowledgeHealthWidget';
 export { AgentStatusWidget } from './AgentStatusWidget';
-export { RecentItems } from './RecentItems';
-export { QuickActions } from './QuickActions';
-export { EmptyState } from './EmptyState';
-export { StatsRow } from './StatsRow';

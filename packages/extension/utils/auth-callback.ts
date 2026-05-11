@@ -1,7 +1,7 @@
 import type { SessionState } from '@tribora/shared';
 
-export const EXTENSION_AUTH_CALLBACK_PATH = '/extension/auth/callback';
-export const EXTENSION_AUTH_STATE_PARAM = 'extension_auth_state';
+const EXTENSION_AUTH_CALLBACK_PATH = '/extension/auth/callback';
+const EXTENSION_AUTH_STATE_PARAM = 'extension_auth_state';
 export const EXTENSION_AUTH_PENDING_KEY = 'tribora_extension_auth_pending';
 
 export interface PendingExtensionAuthState {
@@ -18,7 +18,7 @@ export interface ExtensionAuthCallbackInput {
   now: number;
 }
 
-export function buildExtensionCallbackUrl(
+function buildExtensionCallbackUrl(
   apiBaseUrl: string,
   state: string,
 ): string {

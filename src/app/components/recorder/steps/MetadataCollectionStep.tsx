@@ -1,6 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, type ChangeEvent } from 'react';
+import Image from 'next/image';
+import {
+  useReducer,
+  useEffect,
+  useCallback,
+  useRef,
+  type ChangeEvent,
+} from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -51,7 +58,9 @@ interface MetadataCollectionStepProps {
 const metadataSchema = z.object({
   title: z.string().min(1, 'Title is required').max(255, 'Title is too long'),
   description: z.string().max(5000, 'Description is too long').optional(),
-  tags: z.array(z.object({ id: z.string(), name: z.string(), color: z.string() })).max(20, 'Maximum 20 tags allowed'),
+  tags: z
+    .array(z.object({ id: z.string(), name: z.string(), color: z.string() }))
+    .max(20, 'Maximum 20 tags allowed'),
 });
 
 type MetadataFormData = z.infer<typeof metadataSchema>;
@@ -66,22 +75,56 @@ type MetadataFormData = z.infer<typeof metadataSchema>;
  * - Thumbnail preview and override
  * - Form validation with React Hook Form + Zod
  */
-export default function MetadataCollectionStep({
+export default function MetadataCollectionStep(
+  props: Parameters<typeof useMetadataCollectionStepImplementation>[0],
+) {
+  return useMetadataCollectionStepImplementation(props);
+}
+
+function useMetadataCollectionStepImplementation({
   defaultTitle,
   defaultThumbnail,
   onNext,
   onBack,
 }: MetadataCollectionStepProps) {
-  const [thumbnail, setThumbnail] = useState<string | undefined>(defaultThumbnail);
-  const [thumbnailFile, setThumbnailFile] = useState<File | undefined>(undefined);
-  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-  const [, setIsLoadingTags] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        thumbnailOverride?: string;
+        thumbnailFile?: File;
+        availableTags: Tag[];
+        error: string | null;
+        analysisType: AnalysisType;
+        skipAnalysis: boolean;
+      },
+      patch: Partial<{
+        thumbnailOverride?: string;
+        thumbnailFile?: File;
+        availableTags: Tag[];
+        error: string | null;
+        analysisType: AnalysisType;
+        skipAnalysis: boolean;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      thumbnailOverride: undefined,
+      thumbnailFile: undefined,
+      availableTags: [],
+      error: null,
+      analysisType: 'general' as AnalysisType,
+      skipAnalysis: false,
+    },
+  );
+  const {
+    thumbnailOverride,
+    thumbnailFile,
+    availableTags,
+    error,
+    analysisType,
+    skipAnalysis,
+  } = state;
+  const thumbnail = thumbnailOverride ?? defaultThumbnail;
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
-
-  // Processing options state (AI analysis)
-  const [analysisType, setAnalysisType] = useState<AnalysisType>('general');
-  const [skipAnalysis, setSkipAnalysis] = useState(false);
 
   const form = useForm<MetadataFormData>({
     resolver: zodResolver(metadataSchema),
@@ -96,7 +139,6 @@ export default function MetadataCollectionStep({
    * Load available tags from API
    */
   const loadTags = useCallback(async (search: string = '') => {
-    setIsLoadingTags(true);
     try {
       const params = new URLSearchParams();
       if (search) {
@@ -112,13 +154,11 @@ export default function MetadataCollectionStep({
       // API returns { data: { tags: [...], pagination: {...} } }
       const tags = data.data?.tags || [];
 
-      setAvailableTags(tags);
+      dispatch({ availableTags: tags });
       return tags;
     } catch (err) {
       console.error('[MetadataCollectionStep] Failed to load tags:', err);
       return [];
-    } finally {
-      setIsLoadingTags(false);
     }
   }, []);
 
@@ -132,37 +172,40 @@ export default function MetadataCollectionStep({
   /**
    * Create new tag via API
    */
-  const handleCreateTag = useCallback(async (
-    name: string,
-    color: string
-  ): Promise<Tag | null> => {
-    try {
-      const response = await fetch('/api/tags', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, color }),
-      });
+  const handleCreateTag = useCallback(
+    async (name: string, color: string): Promise<Tag | null> => {
+      try {
+        const response = await fetch('/api/tags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, color }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        const errorMessage = errorData.message || 'Failed to create tag';
-        console.error('[MetadataCollectionStep] Tag creation failed:', errorMessage);
-        throw new Error(errorMessage);
+        if (!response.ok) {
+          const errorData = await response.json();
+          const errorMessage = errorData.message || 'Failed to create tag';
+          console.error(
+            '[MetadataCollectionStep] Tag creation failed:',
+            errorMessage,
+          );
+          throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        const newTag = data.data;
+
+        // Add to available tags
+        dispatch({ availableTags: [...availableTags, newTag] });
+
+        return newTag;
+      } catch (err) {
+        console.error('[MetadataCollectionStep] Failed to create tag:', err);
+        // Re-throw with the actual error message for better UX
+        throw err;
       }
-
-      const data = await response.json();
-      const newTag = data.data;
-
-      // Add to available tags
-      setAvailableTags((prev) => [...prev, newTag]);
-
-      return newTag;
-    } catch (err) {
-      console.error('[MetadataCollectionStep] Failed to create tag:', err);
-      // Re-throw with the actual error message for better UX
-      throw err;
-    }
-  }, []);
+    },
+    [availableTags],
+  );
 
   /**
    * Handle thumbnail file selection
@@ -174,28 +217,27 @@ export default function MetadataCollectionStep({
 
       // Validate file type
       if (!file.type.startsWith('image/')) {
-        setError('Please select a valid image file');
+        dispatch({ error: 'Please select a valid image file' });
         return;
       }
 
       // Validate file size (max 5 MB)
       if (file.size > 5 * 1024 * 1024) {
-        setError('Image size must be less than 5 MB');
+        dispatch({ error: 'Image size must be less than 5 MB' });
         return;
       }
 
-      setError(null);
+      dispatch({ error: null });
 
       // Read file and create preview
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string;
-        setThumbnail(dataUrl);
-        setThumbnailFile(file);
+        dispatch({ thumbnailOverride: dataUrl, thumbnailFile: file });
       };
       reader.readAsDataURL(file);
     },
-    []
+    [],
   );
 
   /**
@@ -222,7 +264,7 @@ export default function MetadataCollectionStep({
         skipAnalysis,
       });
     },
-    [thumbnail, thumbnailFile, analysisType, skipAnalysis, onNext]
+    [thumbnail, thumbnailFile, analysisType, skipAnalysis, onNext],
   );
 
   return (
@@ -231,7 +273,8 @@ export default function MetadataCollectionStep({
       <div className="space-y-1">
         <h2 className="text-2xl font-semibold tracking-tight">Add Details</h2>
         <p className="text-sm text-muted-foreground">
-          Provide additional information to help organize and find this content later.
+          Provide additional information to help organize and find this content
+          later.
         </p>
       </div>
 
@@ -248,7 +291,7 @@ export default function MetadataCollectionStep({
                 <FormControl>
                   <Input
                     {...field}
-                    placeholder="Enter a title..."
+                    placeholder="Enter a title…"
                     className="w-full"
                   />
                 </FormControl>
@@ -270,7 +313,7 @@ export default function MetadataCollectionStep({
                 <FormControl>
                   <Textarea
                     {...field}
-                    placeholder="Add a description (optional)..."
+                    placeholder="Add a description (optional)…"
                     rows={4}
                     className="w-full resize-none"
                   />
@@ -297,14 +340,15 @@ export default function MetadataCollectionStep({
                     availableTags={availableTags}
                     onLoadTags={loadTags}
                     onCreateTag={handleCreateTag}
-                    placeholder="Add tags..."
+                    placeholder="Add tags…"
                     maxTags={20}
                     allowCreate={true}
                     className="w-full"
                   />
                 </FormControl>
                 <FormDescription>
-                  Select existing tags or create new ones to categorize this content
+                  Select existing tags or create new ones to categorize this
+                  content
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -314,9 +358,13 @@ export default function MetadataCollectionStep({
           {/* Processing Options - AI Analysis Settings */}
           <ProcessingOptions
             analysisType={analysisType}
-            onAnalysisTypeChange={setAnalysisType}
+            onAnalysisTypeChange={(nextAnalysisType) =>
+              dispatch({ analysisType: nextAnalysisType })
+            }
             skipAnalysis={skipAnalysis}
-            onSkipAnalysisChange={setSkipAnalysis}
+            onSkipAnalysisChange={(nextSkipAnalysis) =>
+              dispatch({ skipAnalysis: nextSkipAnalysis })
+            }
           />
 
           {/* Thumbnail Section */}
@@ -325,11 +373,14 @@ export default function MetadataCollectionStep({
             {thumbnail ? (
               <Card className="p-4">
                 <div className="space-y-3">
-                  <div className="relative rounded-lg overflow-hidden bg-black max-w-sm">
-                    <img
+                  <div className="relative rounded-lg overflow-hidden bg-zinc-950 max-w-sm">
+                    <Image
                       src={thumbnail}
                       alt="Thumbnail preview"
+                      width={384}
+                      height={216}
                       className="w-full h-auto"
+                      unoptimized
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -344,7 +395,7 @@ export default function MetadataCollectionStep({
                       size="sm"
                       onClick={() => thumbnailInputRef.current?.click()}
                     >
-                      <Upload className="w-4 h-4 mr-2" />
+                      <Upload className="size-4 mr-2" />
                       Change
                     </Button>
                   </div>
@@ -354,9 +405,17 @@ export default function MetadataCollectionStep({
               <div
                 className="border-2 border-dashed rounded-lg transition-all duration-200 cursor-pointer bg-background hover:border-foreground/40 hover:bg-muted/30"
                 onClick={() => thumbnailInputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    thumbnailInputRef.current?.click();
+                  }
+                }}
+                role="button"
+                tabIndex={0}
               >
                 <div className="flex flex-col items-center justify-center py-12 px-6">
-                  <ImageIcon className="w-12 h-12 text-muted-foreground mb-3" />
+                  <ImageIcon className="size-12 text-muted-foreground mb-3" />
                   <p className="text-sm font-medium text-foreground mb-1">
                     Upload a thumbnail
                   </p>
@@ -392,9 +451,9 @@ export default function MetadataCollectionStep({
               className="min-w-[120px]"
             >
               {form.formState.isSubmitting ? (
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Processing...</span>
+                <div className="flex items-center gap-x-2">
+                  <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Processing…</span>
                 </div>
               ) : (
                 'Next'
@@ -407,8 +466,8 @@ export default function MetadataCollectionStep({
       {/* Error Message */}
       {error && (
         <Card className="p-4 bg-destructive/10 border-destructive/20">
-          <div className="flex items-start space-x-3">
-            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-x-3">
+            <AlertCircle className="size-5 text-destructive flex-shrink-0 mt-0.5" />
             <p className="text-sm text-destructive">{error}</p>
           </div>
         </Card>

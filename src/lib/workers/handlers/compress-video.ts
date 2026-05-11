@@ -13,7 +13,11 @@ import * as fs from 'fs/promises';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { VideoCompressor } from '@/lib/services/video-compressor';
 import { createLogger } from '@/lib/utils/logger';
-import type { CompressVideoJobPayload } from '@/lib/types/database';
+import type {
+  CompressVideoJobPayload,
+  ContentType,
+  Json,
+} from '@/lib/types/database';
 
 const logger = createLogger({ service: 'compress-video' });
 
@@ -87,7 +91,7 @@ export async function handleCompressVideo(
     const compressionResult = await VideoCompressor.compressVideo({
       inputPath: resolvedTempInputPath,
       outputPath: resolvedTempOutputPath,
-      contentType: recording.content_type || contentType,
+      contentType: (recording.content_type || contentType || 'video') as ContentType,
       fileSize: originalFileSize,
       preferences: {
         enabled: true,
@@ -170,7 +174,7 @@ export async function handleCompressVideo(
       .from('content')
       .update({
         storage_path_processed: outputPath,
-        compression_stats: compressionResult.stats,
+        compression_stats: compressionResult.stats as unknown as Json,
       })
       .eq('id', targetContentId);
 

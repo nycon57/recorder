@@ -171,16 +171,18 @@ export default async function ExtensionSessionsDebugPage({
         <CardContent>
           <form method="GET" className="grid gap-4 md:grid-cols-5">
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium">Search</label>
+              <label htmlFor="extension-sessions-search" className="mb-2 block text-sm font-medium">Search</label>
               <Input
+                id="extension-sessions-search"
                 name="q"
                 defaultValue={filters.query ?? ''}
                 placeholder="message, error, host..."
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">App</label>
+              <label htmlFor="extension-sessions-app" className="mb-2 block text-sm font-medium">App</label>
               <select
+                id="extension-sessions-app"
                 name="app"
                 defaultValue={filters.app ?? 'all'}
                 className="bg-background border-primary/40 focus-visible:border-accent/50 focus-visible:ring-accent/20 h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
@@ -194,8 +196,9 @@ export default async function ExtensionSessionsDebugPage({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">Host</label>
+              <label htmlFor="extension-sessions-host" className="mb-2 block text-sm font-medium">Host</label>
               <select
+                id="extension-sessions-host"
                 name="host"
                 defaultValue={filters.host ?? 'all'}
                 className="bg-background border-primary/40 focus-visible:border-accent/50 focus-visible:ring-accent/20 h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
@@ -209,8 +212,9 @@ export default async function ExtensionSessionsDebugPage({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">Status</label>
+              <label htmlFor="extension-sessions-status" className="mb-2 block text-sm font-medium">Status</label>
               <select
+                id="extension-sessions-status"
                 name="status"
                 defaultValue={filters.status ?? 'all'}
                 className="bg-background border-primary/40 focus-visible:border-accent/50 focus-visible:ring-accent/20 h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
@@ -224,8 +228,9 @@ export default async function ExtensionSessionsDebugPage({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">Since</label>
+              <label htmlFor="extension-sessions-since" className="mb-2 block text-sm font-medium">Since</label>
               <select
+                id="extension-sessions-since"
                 name="since"
                 defaultValue={filters.since}
                 className="bg-background border-primary/40 focus-visible:border-accent/50 focus-visible:ring-accent/20 h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
@@ -238,8 +243,9 @@ export default async function ExtensionSessionsDebugPage({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">Limit</label>
+              <label htmlFor="extension-sessions-limit" className="mb-2 block text-sm font-medium">Limit</label>
               <Input
+                id="extension-sessions-limit"
                 type="number"
                 name="limit"
                 min={10}

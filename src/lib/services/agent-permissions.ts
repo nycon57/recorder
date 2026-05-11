@@ -245,7 +245,7 @@ export async function reviewApproval(
  * Transition pending approvals past their expiry to 'expired'.
  * Called automatically before fetching the queue.
  */
-export async function expireStaleApprovals(orgId: string): Promise<number> {
+async function expireStaleApprovals(orgId: string): Promise<number> {
   const now = new Date().toISOString();
 
   const { data, error } = await supabaseAdmin

@@ -49,7 +49,7 @@ function getGenAIClient(): GoogleGenAI {
 
 export async function handleGenerateWeeklyDigest(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as Record<string, unknown>;
   const orgId = (payload.orgId as string) || '';
@@ -78,7 +78,7 @@ export async function handleGenerateWeeklyDigest(
       const now = new Date();
       const periodEnd = now.toISOString();
       const periodStart = new Date(
-        now.getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+        now.getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
       ).toISOString();
 
       // --- Collect data in parallel ---
@@ -110,7 +110,7 @@ export async function handleGenerateWeeklyDigest(
           contentData.count,
           searchData.total,
           searchData.failed,
-          gapsData.openCount
+          gapsData.openCount,
         ),
         searches: searchData.total,
         failedSearches: searchData.failed,
@@ -132,7 +132,10 @@ export async function handleGenerateWeeklyDigest(
         agentData,
         stats,
       }).catch((error) => {
-        console.error('[WeeklyDigest] Gemini summary failed, using fallback:', error);
+        console.error(
+          '[WeeklyDigest] Gemini summary failed, using fallback:',
+          error,
+        );
         return buildFallbackSummary(stats, contentData, conceptData);
       });
 
@@ -158,9 +161,9 @@ export async function handleGenerateWeeklyDigest(
 
       progressCallback?.(100, 'Weekly digest generated');
       console.log(
-        `[WeeklyDigest] Generated digest for org ${orgId}: ${stats.contentAdded} recordings, ${stats.conceptsExtracted} concepts, ${stats.searches} searches`
+        `[WeeklyDigest] Generated digest for org ${orgId}: ${stats.contentAdded} recordings, ${stats.conceptsExtracted} concepts, ${stats.searches} searches`,
       );
-    }
+    },
   );
 }
 
@@ -176,7 +179,7 @@ interface ContentActivityData {
 async function collectContentActivity(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  since: string
+  since: string,
 ): Promise<ContentActivityData> {
   // Use exact count to get accurate total even when more than 100 items exist
   const { data, count, error } = await supabase
@@ -189,14 +192,17 @@ async function collectContentActivity(
     .limit(100);
 
   if (error) {
-    console.warn('[WeeklyDigest] Failed to fetch content activity:', error.message);
+    console.warn(
+      '[WeeklyDigest] Failed to fetch content activity:',
+      error.message,
+    );
     return { count: 0, titles: [] };
   }
 
   const items = data ?? [];
   return {
     count: count ?? items.length,
-    titles: items.map(c => c.title ?? 'Untitled'),
+    titles: items.map((c) => c.title ?? 'Untitled'),
   };
 }
 
@@ -207,7 +213,7 @@ interface ConceptActivityData {
 
 async function collectConceptActivity(
   orgId: string,
-  since: string
+  since: string,
 ): Promise<ConceptActivityData> {
   try {
     const concepts = await getTopConceptsForOrg(orgId, 100);
@@ -215,13 +221,13 @@ async function collectConceptActivity(
     // Filter to concepts first seen in our period
     const sinceDate = new Date(since);
     const newConcepts = concepts.filter(
-      c => c.firstSeenAt && c.firstSeenAt >= sinceDate
+      (c) => c.firstSeenAt && c.firstSeenAt >= sinceDate,
     );
 
     const topConcepts = concepts
       .sort((a, b) => b.mentionCount - a.mentionCount)
       .slice(0, MAX_CONCEPTS_FOR_SUMMARY)
-      .map(c => ({ name: c.name, mentionCount: c.mentionCount }));
+      .map((c) => ({ name: c.name, mentionCount: c.mentionCount }));
 
     return {
       newCount: newConcepts.length,
@@ -244,16 +250,17 @@ function isTableMissingError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error);
   if (msg.includes('does not exist')) return true;
 
-  const code = typeof error === 'object' && error !== null && 'code' in error
-    ? (error as { code: string }).code
-    : undefined;
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? (error as { code: string }).code
+      : undefined;
   return code === '42P01';
 }
 
 async function collectKnowledgeGaps(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  since: string
+  since: string,
 ): Promise<KnowledgeGapsData> {
   try {
     // Query new gaps created in the period
@@ -265,7 +272,9 @@ async function collectKnowledgeGaps(
 
     if (newError) {
       if (isTableMissingError(newError)) {
-        console.log('[WeeklyDigest] knowledge_gaps table not available, omitting gaps');
+        console.log(
+          '[WeeklyDigest] knowledge_gaps table not available, omitting gaps',
+        );
         return EMPTY_GAPS;
       }
       throw newError;
@@ -285,13 +294,16 @@ async function collectKnowledgeGaps(
       openCount,
       newCount: newItems.length,
       topics: newItems
-        .filter(g => g.status === 'open')
-        .map(g => g.topic)
+        .flatMap((__item, __index, __array) =>
+          __item.status === 'open' ? [__item.topic] : [],
+        )
         .slice(0, 10),
     };
   } catch (error) {
     if (isTableMissingError(error)) {
-      console.log('[WeeklyDigest] knowledge_gaps table not available, omitting gaps');
+      console.log(
+        '[WeeklyDigest] knowledge_gaps table not available, omitting gaps',
+      );
       return EMPTY_GAPS;
     }
     console.warn('[WeeklyDigest] Failed to fetch knowledge gaps:', error);
@@ -307,7 +319,7 @@ interface CuratorActivityData {
 async function collectCuratorActions(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  since: string
+  since: string,
 ): Promise<CuratorActivityData> {
   const { data, error } = await supabase
     .from('agent_activity_log')
@@ -318,7 +330,10 @@ async function collectCuratorActions(
     .gte('created_at', since);
 
   if (error) {
-    console.warn('[WeeklyDigest] Failed to fetch curator actions:', error.message);
+    console.warn(
+      '[WeeklyDigest] Failed to fetch curator actions:',
+      error.message,
+    );
     return { duplicates: 0, stale: 0 };
   }
 
@@ -340,7 +355,7 @@ interface SearchActivityData {
 async function collectSearchActivity(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  since: string
+  since: string,
 ): Promise<SearchActivityData> {
   const { data, error } = await supabase
     .from('search_analytics')
@@ -349,12 +364,15 @@ async function collectSearchActivity(
     .gte('created_at', since);
 
   if (error) {
-    console.warn('[WeeklyDigest] Failed to fetch search activity:', error.message);
+    console.warn(
+      '[WeeklyDigest] Failed to fetch search activity:',
+      error.message,
+    );
     return { total: 0, failed: 0, topQueries: [] };
   }
 
   const searches = data ?? [];
-  const failed = searches.filter(s => (s.results_count ?? 0) === 0).length;
+  const failed = searches.filter((s) => (s.results_count ?? 0) === 0).length;
 
   // Top queries by frequency
   const queryCounts = new Map<string, number>();
@@ -363,8 +381,8 @@ async function collectSearchActivity(
     const q = s.query.toLowerCase().trim();
     queryCounts.set(q, (queryCounts.get(q) ?? 0) + 1);
   }
-  const topQueries = [...queryCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
+  const topQueries = Array.from(queryCounts.entries())
+    .toSorted((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([q]) => q);
 
@@ -379,7 +397,7 @@ interface AgentActivityData {
 async function collectAgentActivity(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string,
-  since: string
+  since: string,
 ): Promise<AgentActivityData> {
   const { data, error } = await supabase
     .from('agent_activity_log')
@@ -388,7 +406,10 @@ async function collectAgentActivity(
     .gte('created_at', since);
 
   if (error) {
-    console.warn('[WeeklyDigest] Failed to fetch agent activity:', error.message);
+    console.warn(
+      '[WeeklyDigest] Failed to fetch agent activity:',
+      error.message,
+    );
     return { total: 0, successRate: 0 };
   }
 
@@ -396,7 +417,7 @@ async function collectAgentActivity(
   const total = actions.length;
   if (total === 0) return { total: 0, successRate: 0 };
 
-  const successes = actions.filter(a => a.outcome === 'success').length;
+  const successes = actions.filter((a) => a.outcome === 'success').length;
   return {
     total,
     successRate: Math.round((successes / total) * 100),
@@ -411,7 +432,7 @@ function calculateHealthScore(
   contentAdded: number,
   totalSearches: number,
   failedSearches: number,
-  openGaps: number
+  openGaps: number,
 ): number {
   // Base score of 50, adjusted by activity signals
   let score = 50;
@@ -449,13 +470,13 @@ interface SummaryInput {
 }
 
 async function generateDigestSummary(
-  input: SummaryInput
+  input: SummaryInput,
 ): Promise<{ summary: string; highlights: string[] }> {
   const genai = getGenAIClient();
 
   // Truncate individual titles and limit count for large orgs
-  const truncatedTitles = input.contentData.titles.map(t =>
-    t.length > MAX_TITLE_LENGTH ? t.slice(0, MAX_TITLE_LENGTH) + '...' : t
+  const truncatedTitles = input.contentData.titles.map((t) =>
+    t.length > MAX_TITLE_LENGTH ? t.slice(0, MAX_TITLE_LENGTH) + '...' : t,
   );
   const titleList =
     input.contentData.count > MAX_CONTENT_FOR_SUMMARY
@@ -464,7 +485,7 @@ async function generateDigestSummary(
       : truncatedTitles.join(', ');
 
   const conceptList = input.conceptData.topConcepts
-    .map(c => `${c.name} (${c.mentionCount} mentions)`)
+    .map((c) => `${c.name} (${c.mentionCount} mentions)`)
     .join(', ');
 
   const prompt = `You are a knowledge management assistant. Generate a concise weekly digest summary for a team's knowledge base.
@@ -498,9 +519,10 @@ Return ONLY valid JSON:
   return parseDigestResponse(responseText);
 }
 
-function parseDigestResponse(
-  responseText: string
-): { summary: string; highlights: string[] } {
+function parseDigestResponse(responseText: string): {
+  summary: string;
+  highlights: string[];
+} {
   let cleaned = responseText.trim();
   if (cleaned.startsWith('```')) {
     cleaned = cleaned
@@ -513,7 +535,8 @@ function parseDigestResponse(
     parsed = JSON.parse(cleaned);
   } catch (parseError) {
     console.warn('[WeeklyDigest] Failed to parse Gemini response:', {
-      error: parseError instanceof Error ? parseError.message : String(parseError),
+      error:
+        parseError instanceof Error ? parseError.message : String(parseError),
       responsePreview: responseText.slice(0, 200),
     });
     throw new Error('Failed to parse Gemini digest response');
@@ -524,7 +547,7 @@ function parseDigestResponse(
     return {
       summary: obj.summary,
       highlights: obj.highlights.filter(
-        (h: unknown): h is string => typeof h === 'string'
+        (h: unknown): h is string => typeof h === 'string',
       ),
     };
   }
@@ -543,7 +566,7 @@ function parseDigestResponse(
 function buildFallbackSummary(
   stats: DigestStats,
   contentData: ContentActivityData,
-  conceptData: ConceptActivityData
+  conceptData: ConceptActivityData,
 ): { summary: string; highlights: string[] } {
   if (stats.contentAdded === 0 && stats.searches === 0) {
     return {
@@ -559,26 +582,33 @@ function buildFallbackSummary(
   const parts: string[] = [];
 
   if (stats.contentAdded > 0) {
-    parts.push(`Your team added ${stats.contentAdded} ${pluralize(stats.contentAdded, 'recording')} this week`);
+    parts.push(
+      `Your team added ${stats.contentAdded} ${pluralize(stats.contentAdded, 'recording')} this week`,
+    );
   }
 
   if (stats.conceptsExtracted > 0) {
     const verb = stats.conceptsExtracted === 1 ? 'was' : 'were';
-    parts.push(`${stats.conceptsExtracted} new ${pluralize(stats.conceptsExtracted, 'concept')} ${verb} extracted`);
+    parts.push(
+      `${stats.conceptsExtracted} new ${pluralize(stats.conceptsExtracted, 'concept')} ${verb} extracted`,
+    );
   }
 
   if (stats.searches > 0) {
-    parts.push(`${stats.searches} ${pluralize(stats.searches, 'search', 'es')} were performed`);
+    parts.push(
+      `${stats.searches} ${pluralize(stats.searches, 'search', 'es')} were performed`,
+    );
   }
 
   const summary =
-    parts.join('. ') +
-    `. Knowledge health score: ${stats.healthScore}/100.`;
+    parts.join('. ') + `. Knowledge health score: ${stats.healthScore}/100.`;
 
   const highlights: string[] = [];
 
   if (stats.contentAdded > 0 && contentData.titles.length > 0) {
-    highlights.push(`${stats.contentAdded} new ${pluralize(stats.contentAdded, 'recording')} added`);
+    highlights.push(
+      `${stats.contentAdded} new ${pluralize(stats.contentAdded, 'recording')} added`,
+    );
   }
 
   if (conceptData.topConcepts.length > 0) {
@@ -586,7 +616,9 @@ function buildFallbackSummary(
   }
 
   if (stats.failedSearches > 0) {
-    highlights.push(`${stats.failedSearches} ${pluralize(stats.failedSearches, 'search', 'es')} returned no results`);
+    highlights.push(
+      `${stats.failedSearches} ${pluralize(stats.failedSearches, 'search', 'es')} returned no results`,
+    );
   }
 
   return { summary, highlights };

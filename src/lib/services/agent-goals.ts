@@ -13,7 +13,7 @@ export type AgentGoal = Database['public']['Tables']['agent_goals']['Row'];
  * Get active goals for an org, optionally filtered by agent type.
  * Agent handlers call this to decide what to prioritize.
  */
-export async function getActiveGoals(
+async function getActiveGoals(
   orgId: string,
   agentType?: string
 ): Promise<AgentGoal[]> {
@@ -42,7 +42,7 @@ export async function getActiveGoals(
  * Update a goal's current_value. Called by agent handlers after measuring progress.
  * Scoped by orgId for multi-tenant safety.
  */
-export async function updateGoalProgress(
+async function updateGoalProgress(
   goalId: string,
   orgId: string,
   currentValue: number

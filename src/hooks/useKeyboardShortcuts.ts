@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface KeyboardShortcutHandlers {
   onPlayPause?: () => void;
@@ -16,8 +16,14 @@ interface KeyboardShortcutHandlers {
 }
 
 export function useKeyboardShortcuts(handlers: KeyboardShortcutHandlers) {
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
+  const handlersRef = useRef(handlers);
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  }, [handlers]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       // Don't trigger shortcuts when typing in inputs
       const target = event.target as HTMLElement;
       if (
@@ -34,52 +40,49 @@ export function useKeyboardShortcuts(handlers: KeyboardShortcutHandlers) {
       // Playback controls
       if (event.code === 'Space') {
         event.preventDefault();
-        handlers.onPlayPause?.();
+        handlersRef.current.onPlayPause?.();
       } else if (event.code === 'ArrowLeft' && !modifier) {
         event.preventDefault();
-        handlers.onSeekBackward?.();
+        handlersRef.current.onSeekBackward?.();
       } else if (event.code === 'ArrowRight' && !modifier) {
         event.preventDefault();
-        handlers.onSeekForward?.();
+        handlersRef.current.onSeekForward?.();
       } else if (event.code === 'ArrowUp' && !modifier) {
         event.preventDefault();
-        handlers.onVolumeUp?.();
+        handlersRef.current.onVolumeUp?.();
       } else if (event.code === 'ArrowDown' && !modifier) {
         event.preventDefault();
-        handlers.onVolumeDown?.();
+        handlersRef.current.onVolumeDown?.();
       } else if (event.code === 'KeyM' && !modifier) {
         event.preventDefault();
-        handlers.onMute?.();
+        handlersRef.current.onMute?.();
       } else if (event.code === 'KeyF' && !modifier) {
         event.preventDefault();
-        handlers.onFullscreen?.();
+        handlersRef.current.onFullscreen?.();
       }
       // Actions
       else if (event.code === 'KeyD' && modifier) {
         event.preventDefault();
-        handlers.onDownload?.();
+        handlersRef.current.onDownload?.();
       } else if (event.code === 'KeyE' && modifier) {
         event.preventDefault();
-        handlers.onEdit?.();
+        handlersRef.current.onEdit?.();
       } else if (event.code === 'KeyF' && modifier) {
         event.preventDefault();
-        handlers.onSearch?.();
+        handlersRef.current.onSearch?.();
       } else if (event.code === 'KeyR' && modifier && event.shiftKey) {
         event.preventDefault();
-        handlers.onReprocess?.();
+        handlersRef.current.onReprocess?.();
       }
       // General
       else if (event.code === 'Slash' && event.shiftKey) {
         // ? key (Shift + /)
         event.preventDefault();
-        handlers.onShowShortcuts?.();
+        handlersRef.current.onShowShortcuts?.();
       }
-    },
-    [handlers]
-  );
+    };
 
-  useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+  }, []);
 }

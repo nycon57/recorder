@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ExternalLink, Eye, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
 
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
@@ -17,6 +16,8 @@ import {
   CardTitle,
 } from '@/app/components/ui/card';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
+import { formatStableDateTime } from '@/lib/utils/formatting';
+
 import { PreviewDialog } from './preview-dialog';
 
 interface ParentSource {
@@ -54,8 +55,12 @@ interface PageDetailProps {
  *
  * TRIB-149 | TRIB-152
  */
-export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailProps) {
-  const router = useRouter();
+export function PageDetail({
+  page,
+  parentSource,
+  curatedByEmail,
+}: PageDetailProps) {
+  const { push } = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -73,9 +78,9 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
       }
 
       toast.success(`Page '${page.screen}' deleted`);
-      router.push('/admin/vendor-sources/pages');
+      push('/admin/vendor-sources/pages');
     } catch (err) {
-      toast.error('Network error — please try again.');
+      toast.error('Network error - please try again.');
       console.error('[PageDetail] delete error:', err);
     } finally {
       setIsDeleting(false);
@@ -108,8 +113,10 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" className="gap-1 -ml-2" asChild>
-              <Link href={`/admin/vendor-sources/pages?app=${encodeURIComponent(page.app)}`}>
-                <ArrowLeft className="h-4 w-4" />
+              <Link
+                href={`/admin/vendor-sources/pages?app=${encodeURIComponent(page.app)}`}
+              >
+                <ArrowLeft className="size-4" />
                 Back
               </Link>
             </Button>
@@ -125,7 +132,7 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
                 className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
               >
                 Open source page
-                <ExternalLink className="h-3.5 w-3.5" />
+                <ExternalLink className="size-3.5" />
               </a>
             ) : null}
           </div>
@@ -136,7 +143,7 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
             pageId={page.id}
             trigger={
               <Button variant="outline" size="sm" className="gap-1.5">
-                <Eye className="h-4 w-4" />
+                <Eye className="size-4" />
                 Preview
               </Button>
             }
@@ -148,7 +155,7 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
             className="gap-1.5"
             onClick={() => setDeleteOpen(true)}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="size-4" />
             Delete page
           </Button>
         </div>
@@ -161,21 +168,27 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
             <CardTitle className="text-sm font-medium">Page metadata</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <MetaRow label="ID" value={<code className="font-mono text-xs">{page.id}</code>} />
-            <MetaRow label="App" value={<Badge variant="secondary">{page.app}</Badge>} />
-            <MetaRow label="Screen" value={<code className="font-mono text-xs">{page.screen}</code>} />
+            <MetaRow
+              label="ID"
+              value={<code className="font-mono text-xs">{page.id}</code>}
+            />
+            <MetaRow
+              label="App"
+              value={<Badge variant="secondary">{page.app}</Badge>}
+            />
+            <MetaRow
+              label="Screen"
+              value={<code className="font-mono text-xs">{page.screen}</code>}
+            />
             <MetaRow
               label="Content hash"
               value={
                 page.content_hash ? (
-                  <code
-                    className="font-mono text-xs"
-                    title={page.content_hash}
-                  >
+                  <code className="font-mono text-xs" title={page.content_hash}>
                     {page.content_hash}
                   </code>
                 ) : (
-                  <span className="text-muted-foreground">—</span>
+                  <span className="text-muted-foreground">-</span>
                 )
               }
             />
@@ -189,7 +202,7 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
                     {page.curated_by.slice(0, 8)}…
                   </code>
                 ) : (
-                  <span className="text-muted-foreground">—</span>
+                  <span className="text-muted-foreground">-</span>
                 )
               }
             />
@@ -198,16 +211,18 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Timestamps &amp; provenance</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Timestamps &amp; provenance
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <MetaRow
               label="Created"
-              value={formatDistanceToNow(new Date(page.created_at), { addSuffix: true })}
+              value={formatStableDateTime(page.created_at)}
             />
             <MetaRow
               label="Last updated"
-              value={formatDistanceToNow(new Date(page.updated_at), { addSuffix: true })}
+              value={formatStableDateTime(page.updated_at)}
             />
             <MetaRow
               label="Ingest job"
@@ -218,10 +233,10 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
                     className="inline-flex items-center gap-1 text-primary hover:underline font-mono text-xs"
                   >
                     {page.ingest_job_id.slice(0, 12)}…
-                    <ExternalLink className="h-3 w-3" />
+                    <ExternalLink className="size-3" />
                   </a>
                 ) : (
-                  <span className="text-muted-foreground">—</span>
+                  <span className="text-muted-foreground">-</span>
                 )
               }
             />
@@ -246,11 +261,16 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
       {parentSource ? (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Parent vendor source</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Parent vendor source
+            </CardTitle>
             <CardDescription>{parentSource.publisher_hostname}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <MetaRow label="Status" value={<Badge variant="outline">{parentSource.status}</Badge>} />
+            <MetaRow
+              label="Status"
+              value={<Badge variant="outline">{parentSource.status}</Badge>}
+            />
             <MetaRow
               label="Source URL"
               value={
@@ -261,7 +281,7 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
                   className="inline-flex items-center gap-1 text-primary hover:underline"
                 >
                   {parentSource.source_url}
-                  <ExternalLink className="h-3.5 w-3.5" />
+                  <ExternalLink className="size-3.5" />
                 </a>
               }
             />
@@ -269,7 +289,7 @@ export function PageDetail({ page, parentSource, curatedByEmail }: PageDetailPro
         </Card>
       ) : null}
 
-      {/* Delete confirmation — requires typing the app name */}
+      {/* Delete confirmation - requires typing the app name */}
       <ConfirmationDialog
         open={deleteOpen}
         onOpenChange={(open) => !open && setDeleteOpen(false)}

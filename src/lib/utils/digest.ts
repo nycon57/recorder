@@ -42,11 +42,11 @@ export function extractDigest(metadata: unknown): WeeklyDigest | null {
 export function toDigestEntry(row: {
   id: string;
   metadata: unknown;
-  created_at: string;
+  created_at: string | null;
 }): DigestEntry {
   return {
     id: row.id,
-    createdAt: row.created_at,
+    createdAt: row.created_at ?? new Date(0).toISOString(),
     digest: extractDigest(row.metadata),
   };
 }

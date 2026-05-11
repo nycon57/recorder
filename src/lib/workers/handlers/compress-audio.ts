@@ -13,7 +13,7 @@ import * as fs from 'fs/promises';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { VideoCompressor } from '@/lib/services/video-compressor';
 import { createLogger } from '@/lib/utils/logger';
-import type { CompressAudioJobPayload } from '@/lib/types/database';
+import type { CompressAudioJobPayload, Json } from '@/lib/types/database';
 
 const logger = createLogger({ service: 'compress-audio' });
 
@@ -169,7 +169,7 @@ export async function handleCompressAudio(
       .from('content')
       .update({
         storage_path_processed: outputPath,
-        compression_stats: compressionResult.stats,
+        compression_stats: compressionResult.stats as unknown as Json,
       })
       .eq('id', targetContentId);
 

@@ -63,7 +63,6 @@ interface JobsData {
 export default function AdminJobsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [data, setData] = useState<JobsData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
 
@@ -97,8 +96,6 @@ export default function AdminJobsPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -125,13 +122,13 @@ export default function AdminJobsPage() {
   function getStatusIcon(status: string) {
     switch (status) {
       case 'pending':
-        return <Clock className="h-4 w-4 text-muted-foreground" />;
+        return <Clock className="size-4 text-muted-foreground" />;
       case 'processing':
-        return <Loader className="h-4 w-4 text-blue-500 animate-spin" />;
+        return <Loader className="size-4 text-blue-500 animate-spin" />;
       case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="size-4 text-green-500" />;
       case 'failed':
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="size-4 text-red-500" />;
       default:
         return null;
     }
@@ -156,10 +153,10 @@ export default function AdminJobsPage() {
     return new Date(dateString).toLocaleString();
   }
 
-  if (loading && !data) {
+  if (!data && !error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -168,7 +165,7 @@ export default function AdminJobsPage() {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
@@ -213,9 +210,9 @@ export default function AdminJobsPage() {
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total</CardTitle>
-            <Database className="h-4 w-4 text-muted-foreground" />
+            <Database className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.metrics.totalJobs}</div>
@@ -223,9 +220,9 @@ export default function AdminJobsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <Clock className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.metrics.pending}</div>
@@ -233,9 +230,9 @@ export default function AdminJobsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Processing</CardTitle>
-            <Loader className="h-4 w-4 text-blue-500" />
+            <Loader className="size-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.metrics.processing}</div>
@@ -243,9 +240,9 @@ export default function AdminJobsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
+            <CheckCircle className="size-4 text-green-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.metrics.completed}</div>
@@ -253,9 +250,9 @@ export default function AdminJobsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Failed</CardTitle>
-            <XCircle className="h-4 w-4 text-red-500" />
+            <XCircle className="size-4 text-red-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{data.metrics.failed}</div>
@@ -271,7 +268,7 @@ export default function AdminJobsPage() {
         <CardContent>
           {data.jobs.length === 0 ? (
             <div className="text-center py-12">
-              <Database className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+              <Database className="size-12 text-muted-foreground mx-auto mb-4 opacity-50" />
               <p className="text-sm text-muted-foreground">No jobs found</p>
             </div>
           ) : (
@@ -323,9 +320,9 @@ export default function AdminJobsPage() {
                             disabled={retrying === job.id}
                           >
                             {retrying === job.id ? (
-                              <Loader className="h-3 w-3 animate-spin mr-1" />
+                              <Loader className="size-3 animate-spin mr-1" />
                             ) : (
-                              <RefreshCw className="h-3 w-3 mr-1" />
+                              <RefreshCw className="size-3 mr-1" />
                             )}
                             Retry
                           </Button>

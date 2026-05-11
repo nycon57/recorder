@@ -9,7 +9,11 @@ import {
 } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { updateProfileSchema } from '@/lib/validations/api';
-import { rateLimit, RateLimitTier, extractUserIdFromAuth } from '@/lib/middleware/rate-limit';
+import {
+  rateLimit,
+  RateLimitTier,
+  extractUserIdFromAuth,
+} from '@/lib/middleware/rate-limit';
 
 /**
  * GET /api/profile
@@ -20,17 +24,21 @@ import { rateLimit, RateLimitTier, extractUserIdFromAuth } from '@/lib/middlewar
  *
  * @security Rate limited to 100 requests per minute per user
  */
-export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
+export const GET = rateLimit(
+  RateLimitTier.API,
+  extractUserIdFromAuth,
+)(
   apiHandler(async (request: NextRequest) => {
-  const { userId } = await requireAuth();
+    const { userId } = await requireAuth();
 
-  // Use admin client to bypass RLS - auth already validated
-  const supabase = supabaseAdmin;
+    // Use admin client to bypass RLS - auth already validated
+    const supabase = supabaseAdmin;
 
-  // Fetch user profile by Clerk ID
-  const { data: user, error } = await supabase
-    .from('users')
-    .select(`
+    // Fetch user profile by Clerk ID
+    const { data: user, error } = await supabase
+      .from('users')
+      .select(
+        `
       id,
       email,
       name,
@@ -50,17 +58,19 @@ export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
       created_at,
       updated_at,
       onboarded_at
-    `)
-    .eq('id', userId)
-    .single();
+    `,
+      )
+      .eq('id', userId)
+      .single();
 
-  if (error || !user) {
-    console.error('[GET /api/profile] Error fetching user:', error);
-    return errors.notFound('User profile');
-  }
+    if (error || !user) {
+      console.error('[GET /api/profile] Error fetching user:', error);
+      return errors.notFound('User profile');
+    }
 
-  return successResponse(user);
-}));
+    return successResponse(user);
+  }),
+);
 
 /**
  * PATCH /api/profile
@@ -79,25 +89,29 @@ export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
  *
  * @security Rate limited to 100 requests per minute per user
  */
-export const PATCH = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
+export const PATCH = rateLimit(
+  RateLimitTier.API,
+  extractUserIdFromAuth,
+)(
   apiHandler(async (request: NextRequest) => {
-  const { userId } = await requireAuth();
+    const [{ userId }, body] = await Promise.all([
+      requireAuth(),
+      parseBody(request, updateProfileSchema),
+    ]);
 
-  // Validate request body
-  const body = await parseBody(request, updateProfileSchema);
+    // Use admin client to bypass RLS
+    const supabase = supabaseAdmin;
 
-  // Use admin client to bypass RLS
-  const supabase = supabaseAdmin;
-
-  // Update user profile with timestamp
-  const { data: updatedUser, error } = await supabase
-    .from('users')
-    .update({
-      ...(body as Record<string, any>),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', userId)
-    .select(`
+    // Update user profile with timestamp
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update({
+        ...(body as Record<string, any>),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId)
+      .select(
+        `
       id,
       email,
       name,
@@ -117,17 +131,19 @@ export const PATCH = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
       created_at,
       updated_at,
       onboarded_at
-    `)
-    .single();
+    `,
+      )
+      .single();
 
-  if (error) {
-    console.error('[PATCH /api/profile] Error updating user:', error);
-    return errors.internalError();
-  }
+    if (error) {
+      console.error('[PATCH /api/profile] Error updating user:', error);
+      return errors.internalError();
+    }
 
-  if (!updatedUser) {
-    return errors.notFound('User profile');
-  }
+    if (!updatedUser) {
+      return errors.notFound('User profile');
+    }
 
-  return successResponse(updatedUser);
-}));
+    return successResponse(updatedUser);
+  }),
+);

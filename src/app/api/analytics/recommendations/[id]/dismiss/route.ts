@@ -6,7 +6,13 @@
  */
 
 import { NextRequest } from 'next/server';
-import { apiHandler, requireAuth, successResponse, errors } from '@/lib/utils/api';
+
+import {
+  apiHandler,
+  requireAuth,
+  successResponse,
+  errors,
+} from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { transformRecommendation } from '@/lib/utils/recommendations';
 
@@ -24,35 +30,37 @@ interface RouteContext {
  * @example
  * POST /api/analytics/recommendations/abc-123/dismiss
  */
-export const POST = apiHandler(async (request: NextRequest, context: RouteContext) => {
-  await requireAuth();
+export const POST = apiHandler(
+  async (request: NextRequest, context: RouteContext) => {
+    const { data: recommendation, error } = await Promise.all([
+      requireAuth(),
+      context.params,
+    ]).then(([, { id: recommendationId }]) =>
+      supabaseAdmin
+        .from('recommendations')
+        .update({
+          status: 'dismissed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', recommendationId)
+        .in('status', ['pending', 'in-progress']) // Can only dismiss if not completed
+        .select()
+        .single(),
+    );
 
-  const { id: recommendationId } = await context.params;
+    if (error) {
+      console.error('[Dismiss Recommendation] Error:', error);
 
-  // Update recommendation to dismissed
-  const { data: recommendation, error } = await supabaseAdmin
-    .from('recommendations')
-    .update({
-      status: 'dismissed',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', recommendationId)
-    .in('status', ['pending', 'in-progress']) // Can only dismiss if not completed
-    .select()
-    .single();
+      if (error.code === 'PGRST116') {
+        throw errors.notFound('Recommendation', undefined);
+      }
 
-  if (error) {
-    console.error('[Dismiss Recommendation] Error:', error);
-
-    if (error.code === 'PGRST116') {
-      throw errors.notFound('Recommendation', undefined);
+      throw new Error('Failed to dismiss recommendation');
     }
 
-    throw new Error('Failed to dismiss recommendation');
-  }
-
-  return successResponse({
-    recommendation: transformRecommendation(recommendation),
-    message: 'Recommendation dismissed',
-  });
-});
+    return successResponse({
+      recommendation: transformRecommendation(recommendation),
+      message: 'Recommendation dismissed',
+    });
+  },
+);

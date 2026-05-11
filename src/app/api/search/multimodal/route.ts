@@ -32,9 +32,11 @@ type MultimodalSearchParams = z.infer<typeof multimodalSearchParamsSchema>;
  */
 export const POST = withRateLimit(
   apiHandler(async (request: NextRequest) => {
-    const { orgId, userId } = await requireOrg();
-    const body = await request.json();
-    
+    const [{ orgId, userId }, body] = await Promise.all([
+      requireOrg(),
+      request.json(),
+    ]);
+
     const params = multimodalSearchParamsSchema.parse(body);
     const {
       query,
@@ -65,15 +67,18 @@ export const POST = withRateLimit(
     const queryEmbedding = await generateEmbedding(query);
 
     // Call multimodal_search database function
-    const { data: results, error } = await supabaseAdmin.rpc('multimodal_search', {
-      query_embedding_1536: `[${queryEmbedding.join(',')}]`,
-      query_text: query,
-      match_org_id: orgId,
-      match_count: limit,
-      audio_weight: audioWeight,
-      visual_weight: visualWeight,
-      match_threshold: threshold,
-    });
+    const { data: results, error } = await supabaseAdmin.rpc(
+      'multimodal_search',
+      {
+        query_embedding_1536: `[${queryEmbedding.join(',')}]`,
+        query_text: query,
+        match_org_id: orgId,
+        match_count: limit,
+        audio_weight: audioWeight,
+        visual_weight: visualWeight,
+        match_threshold: threshold,
+      },
+    );
 
     if (error) {
       console.error('[Multimodal Search API] Database error:', error);
@@ -84,7 +89,7 @@ export const POST = withRateLimit(
     let filteredResults = results || [];
     if (recordingIds && recordingIds.length > 0) {
       filteredResults = filteredResults.filter((r: any) =>
-        recordingIds.includes(r.recording_id)
+        recordingIds.includes(r.recording_id),
       );
     }
 
@@ -102,18 +107,25 @@ export const POST = withRateLimit(
               frameUrl: urlData?.signedUrl || null,
             };
           } catch (error) {
-            console.error('[Multimodal Search] Error generating signed URL:', error);
+            console.error(
+              '[Multimodal Search] Error generating signed URL:',
+              error,
+            );
           }
         }
         return result;
-      })
+      }),
     );
 
     const searchTime = Date.now() - searchStartTime;
 
     // Separate results by type for metadata
-    const audioResults = resultsWithUrls.filter((r: any) => r.result_type === 'audio');
-    const visualResults = resultsWithUrls.filter((r: any) => r.result_type === 'visual');
+    const audioResults = resultsWithUrls.filter(
+      (r: any) => r.result_type === 'audio',
+    );
+    const visualResults = resultsWithUrls.filter(
+      (r: any) => r.result_type === 'visual',
+    );
 
     return successResponse({
       query,
@@ -141,5 +153,5 @@ export const POST = withRateLimit(
       const { userId } = await requireOrg();
       return userId;
     },
-  }
+  },
 );

@@ -12,8 +12,6 @@
  * Auth: handled by middleware + API route (requireAdmin).
  */
 
-import { useEffect, useState, useCallback } from 'react';
-import { toast } from 'sonner';
 import {
   Globe,
   Loader2,
@@ -25,6 +23,9 @@ import {
   Code,
   Trash2,
 } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useReducer, useCallback } from 'react';
+import { toast } from 'sonner';
 
 import { Button } from '@/app/components/ui/button';
 import {
@@ -61,14 +62,39 @@ interface DomainStatus {
 // ---------------------------------------------------------------------------
 
 export default function DomainPage() {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [removing, setRemoving] = useState(false);
+  return useDomainPageImplementation();
+}
 
-  const [domain, setDomain] = useState('');
-  const [status, setStatus] = useState<DomainStatus | null>(null);
+function useDomainPageImplementation() {
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        saving: boolean;
+        checking: boolean;
+        confirming: boolean;
+        removing: boolean;
+        domain: string;
+        status: DomainStatus | null;
+      },
+      patch: Partial<{
+        saving: boolean;
+        checking: boolean;
+        confirming: boolean;
+        removing: boolean;
+        domain: string;
+        status: DomainStatus | null;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      saving: false,
+      checking: false,
+      confirming: false,
+      removing: false,
+      domain: '',
+      status: null,
+    },
+  );
+  const { saving, checking, confirming, removing, domain, status } = state;
 
   // ─── Fetch current status ──────────────────────────────────────────
 
@@ -77,15 +103,13 @@ export default function DomainPage() {
       const res = await fetch('/api/vendor/domain');
       if (res.ok) {
         const json = await res.json();
-        setStatus(json.data);
-        if (json.data.domain) {
-          setDomain(json.data.domain);
-        }
+        dispatch({
+          status: json.data,
+          domain: json.data.domain ?? '',
+        });
       }
     } catch {
       toast.error('Failed to load domain status');
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -101,7 +125,7 @@ export default function DomainPage() {
       return;
     }
 
-    setSaving(true);
+    dispatch({ saving: true });
     try {
       const res = await fetch('/api/vendor/domain', {
         method: 'POST',
@@ -116,21 +140,21 @@ export default function DomainPage() {
         );
       }
 
-      setStatus(json.data);
+      dispatch({ status: json.data });
       toast.success('Verification started. Add the TXT record to your DNS.');
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : 'Failed to start verification',
       );
     } finally {
-      setSaving(false);
+      dispatch({ saving: false });
     }
   }
 
   // ─── Check DNS ─────────────────────────────────────────────────────
 
   async function handleCheckDns() {
-    setChecking(true);
+    dispatch({ checking: true });
     try {
       const res = await fetch('/api/vendor/domain');
       const json = await res.json();
@@ -138,7 +162,7 @@ export default function DomainPage() {
         throw new Error(json.message ?? 'Failed to check DNS');
       }
 
-      setStatus(json.data);
+      dispatch({ status: json.data });
       if (json.data.dnsRecordFound) {
         toast.success('DNS record found. You can now confirm verification.');
       } else {
@@ -149,14 +173,14 @@ export default function DomainPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to check DNS');
     } finally {
-      setChecking(false);
+      dispatch({ checking: false });
     }
   }
 
   // ─── Confirm verification ─────────────────────────────────────────
 
   async function handleConfirmVerification() {
-    setConfirming(true);
+    dispatch({ confirming: true });
     try {
       const res = await fetch('/api/vendor/domain', { method: 'PUT' });
       const json = await res.json();
@@ -164,19 +188,19 @@ export default function DomainPage() {
         throw new Error(json.message ?? 'Verification failed');
       }
 
-      setStatus(json.data);
+      dispatch({ status: json.data });
       toast.success('Domain verified successfully!');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Verification failed');
     } finally {
-      setConfirming(false);
+      dispatch({ confirming: false });
     }
   }
 
   // ─── Remove domain ─────────────────────────────────────────────────
 
   async function handleRemoveDomain() {
-    setRemoving(true);
+    dispatch({ removing: true });
     try {
       const res = await fetch('/api/vendor/domain', { method: 'DELETE' });
       if (!res.ok) {
@@ -184,15 +208,17 @@ export default function DomainPage() {
         throw new Error(json.message ?? 'Failed to remove domain');
       }
 
-      setStatus({ domain: null, verified: false, txtRecord: null });
-      setDomain('');
+      dispatch({
+        status: { domain: null, verified: false, txtRecord: null },
+        domain: '',
+      });
       toast.success('Custom domain removed');
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : 'Failed to remove domain',
       );
     } finally {
-      setRemoving(false);
+      dispatch({ removing: false });
     }
   }
 
@@ -207,13 +233,13 @@ export default function DomainPage() {
 
   // ─── Loading state ─────────────────────────────────────────────────
 
-  if (loading) {
+  if (!status) {
     return (
       <div className="flex items-center justify-center py-16" role="status">
         <div className="text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">
-            Loading domain configuration...
+            Loading domain configuration…
           </p>
         </div>
       </div>
@@ -230,7 +256,7 @@ export default function DomainPage() {
     <div className="trbd-page">
       <header>
         <h1 className="flex items-center gap-2 trbd-page-title tracking-tight">
-          <Globe className="h-7 w-7" />
+          <Globe className="size-7" />
           Custom Domain
         </h1>
         <p className="mt-1 text-muted-foreground">
@@ -243,19 +269,19 @@ export default function DomainPage() {
       <div className="flex items-center gap-2">
         {isVerified && (
           <Badge variant="default" className="gap-1">
-            <CheckCircle2 className="h-3 w-3" />
+            <CheckCircle2 className="size-3" />
             Verified
           </Badge>
         )}
         {isPending && (
           <Badge variant="secondary" className="gap-1">
-            <Clock className="h-3 w-3" />
+            <Clock className="size-3" />
             Pending verification
           </Badge>
         )}
         {!hasDomain && (
           <Badge variant="outline" className="gap-1">
-            <XCircle className="h-3 w-3" />
+            <XCircle className="size-3" />
             Not configured
           </Badge>
         )}
@@ -280,13 +306,13 @@ export default function DomainPage() {
                 type="text"
                 placeholder="help.acme.com"
                 value={domain}
-                onChange={(e) => setDomain(e.target.value)}
+                onChange={(e) => dispatch({ domain: e.target.value })}
                 disabled={isVerified}
                 className="max-w-md"
               />
               {!hasDomain && (
                 <Button onClick={handleStartVerification} disabled={saving}>
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
                   Start verification
                 </Button>
               )}
@@ -304,7 +330,7 @@ export default function DomainPage() {
                     disabled={checking}
                   >
                     {checking && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 size-4 animate-spin" />
                     )}
                     Check DNS
                   </Button>
@@ -313,7 +339,7 @@ export default function DomainPage() {
                     disabled={confirming || !dnsFound}
                   >
                     {confirming && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 size-4 animate-spin" />
                     )}
                     Confirm verification
                   </Button>
@@ -325,9 +351,9 @@ export default function DomainPage() {
                 disabled={removing}
               >
                 {removing ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 size-4 animate-spin" />
                 ) : (
-                  <Trash2 className="mr-2 h-4 w-4" />
+                  <Trash2 className="mr-2 size-4" />
                 )}
                 Remove domain
               </Button>
@@ -341,7 +367,7 @@ export default function DomainPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <AlertCircle className="h-5 w-5 text-amber-500" />
+              <AlertCircle className="size-5 text-amber-500" />
               DNS Verification Required
             </CardTitle>
             <CardDescription>
@@ -363,7 +389,7 @@ export default function DomainPage() {
                       className="text-muted-foreground hover:text-foreground"
                       title="Copy host"
                     >
-                      <Copy className="h-3.5 w-3.5" />
+                      <Copy className="size-3.5" />
                     </button>
                   </div>
                 </div>
@@ -384,7 +410,7 @@ export default function DomainPage() {
                       className="text-muted-foreground hover:text-foreground"
                       title="Copy value"
                     >
-                      <Copy className="h-3.5 w-3.5" />
+                      <Copy className="size-3.5" />
                     </button>
                   </div>
                 </div>
@@ -393,14 +419,14 @@ export default function DomainPage() {
 
             {dnsFound ? (
               <div className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="size-4" />
                 DNS record detected. Click &quot;Confirm verification&quot; to
                 complete setup.
               </div>
             ) : (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                Waiting for DNS propagation...
+                <Clock className="size-4" />
+                Waiting for DNS propagation…
               </div>
             )}
           </CardContent>
@@ -412,7 +438,7 @@ export default function DomainPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Code className="h-5 w-5" />
+              <Code className="size-5" />
               Integration Instructions
             </CardTitle>
             <CardDescription>
@@ -445,19 +471,19 @@ export default function DomainPage() {
                   className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                   title="Copy snippet"
                 >
-                  <Copy className="h-4 w-4" />
+                  <Copy className="size-4" />
                 </button>
               </div>
               <p className="text-xs text-muted-foreground">
                 Replace <code>YOUR_API_KEY</code> with your vendor API key and{' '}
                 <code>CUSTOMER_ORG_ID</code> with the linked customer
                 organization ID from the{' '}
-                <a
+                <Link
                   href="/vendor-admin/api-keys"
                   className="underline hover:text-foreground"
                 >
                   API Keys
-                </a>{' '}
+                </Link>{' '}
                 page.
               </p>
             </div>
@@ -476,7 +502,7 @@ export default function DomainPage() {
                       className="text-muted-foreground hover:text-foreground"
                       title="Copy CNAME target"
                     >
-                      <Copy className="h-3.5 w-3.5" />
+                      <Copy className="size-3.5" />
                     </button>
                   </div>
                 </div>

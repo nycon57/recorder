@@ -1,10 +1,3 @@
-/**
- * Admin components
- * Components for admin dashboard and management
- */
-
-// Admin navigation
-export { default as AdminNavigation } from './AdminNavigation';
 
 // Storage analytics
 export { default as StorageDistribution } from './storage/StorageDistribution';

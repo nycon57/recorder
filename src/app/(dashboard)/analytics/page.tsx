@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BarChart3,
   TrendingUp,
@@ -87,6 +87,10 @@ interface TopRecording {
 type TimeRange = '7d' | '30d' | '90d' | 'all';
 
 export default function AnalyticsPage() {
+  return useAnalyticsPageImplementation();
+}
+
+function useAnalyticsPageImplementation() {
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [topQueries, setTopQueries] = useState<TopQuery[]>([]);
@@ -97,11 +101,7 @@ export default function AnalyticsPage() {
     document.title = 'My Analytics - Tribora';
   }, []);
 
-  // ✅ Use memoized URL to trigger refetch when timeRange changes
-  const analyticsUrl = useMemo(
-    () => `/api/analytics/user?timeRange=${timeRange}`,
-    [timeRange],
-  );
+  const analyticsUrl = `/api/analytics/user?timeRange=${timeRange}`;
 
   interface AnalyticsResponse {
     data: {
@@ -161,7 +161,7 @@ export default function AnalyticsPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="trbd-icon-chip">
-            <Sparkles className="h-6 w-6 text-primary" />
+            <Sparkles className="size-6 text-primary" />
           </div>
           <div>
             <h1 className="trbd-page-title tracking-tight">My Analytics</h1>
@@ -177,7 +177,7 @@ export default function AnalyticsPage() {
             onValueChange={(value) => setTimeRange(value as TimeRange)}
           >
             <SelectTrigger className="w-[180px]">
-              <Calendar className="h-4 w-4" />
+              <Calendar className="size-4" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -189,12 +189,12 @@ export default function AnalyticsPage() {
           </Select>
 
           <Button variant="outline" size="sm">
-            <Filter className="h-4 w-4" />
+            <Filter className="size-4" />
             Filter
           </Button>
 
           <Button variant="outline" size="sm">
-            <Download className="h-4 w-4" />
+            <Download className="size-4" />
             Export
           </Button>
         </div>
@@ -209,7 +209,7 @@ export default function AnalyticsPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Total Searches
               </CardTitle>
-              <Search className="h-4 w-4 text-muted-foreground" />
+              <Search className="size-4 text-muted-foreground" />
             </div>
           </CardHeader>
           <CardContent>
@@ -226,14 +226,14 @@ export default function AnalyticsPage() {
                 <div className="flex items-center gap-1 mt-1">
                   {summary && summary.searchesTrend > 0 ? (
                     <>
-                      <ArrowUp className="h-3 w-3 text-green-500" />
+                      <ArrowUp className="size-3 text-green-500" />
                       <span className="text-xs text-green-500 font-medium">
                         +{summary.searchesTrend}%
                       </span>
                     </>
                   ) : summary && summary.searchesTrend < 0 ? (
                     <>
-                      <ArrowDown className="h-3 w-3 text-red-500" />
+                      <ArrowDown className="size-3 text-red-500" />
                       <span className="text-xs text-red-500 font-medium">
                         {summary.searchesTrend}%
                       </span>
@@ -255,7 +255,7 @@ export default function AnalyticsPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Most Active Day
               </CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <Calendar className="size-4 text-muted-foreground" />
             </div>
           </CardHeader>
           <CardContent>
@@ -284,7 +284,7 @@ export default function AnalyticsPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Avg Search Time
               </CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <Clock className="size-4 text-muted-foreground" />
             </div>
           </CardHeader>
           <CardContent>
@@ -316,7 +316,7 @@ export default function AnalyticsPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Top Query Type
               </CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <BarChart3 className="size-4 text-muted-foreground" />
             </div>
           </CardHeader>
           <CardContent>
@@ -343,15 +343,15 @@ export default function AnalyticsPage() {
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>
           <TabsTrigger value="overview">
-            <Activity className="h-4 w-4" />
+            <Activity className="size-4" />
             Overview
           </TabsTrigger>
           <TabsTrigger value="queries">
-            <Search className="h-4 w-4" />
+            <Search className="size-4" />
             Top Queries
           </TabsTrigger>
           <TabsTrigger value="recordings">
-            <Eye className="h-4 w-4" />
+            <Eye className="size-4" />
             Top Recordings
           </TabsTrigger>
         </TabsList>
@@ -422,16 +422,22 @@ export default function AnalyticsPage() {
             <CardContent>
               {loading ? (
                 <div className="space-y-2">
-                  {[...Array(5)].map((_, i) => (
+                  {[
+                    'top-query-1',
+                    'top-query-2',
+                    'top-query-3',
+                    'top-query-4',
+                    'top-query-5',
+                  ].map((skeletonId) => (
                     <div
-                      key={i}
+                      key={skeletonId}
                       className="h-12 bg-muted animate-pulse rounded"
                     />
                   ))}
                 </div>
               ) : topQueries.length === 0 ? (
                 <div className="text-center py-12">
-                  <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                  <Search className="size-12 text-muted-foreground mx-auto mb-4 opacity-50" />
                   <p className="text-sm text-muted-foreground">
                     No search queries yet. Start searching to see insights!
                   </p>
@@ -452,7 +458,7 @@ export default function AnalyticsPage() {
                   </TableHeader>
                   <TableBody>
                     {topQueries.map((query, index) => (
-                      <TableRow key={index}>
+                      <TableRow key={JSON.stringify(query)}>
                         <TableCell className="font-medium max-w-md truncate">
                           {query.query}
                         </TableCell>
@@ -473,12 +479,12 @@ export default function AnalyticsPage() {
                             >
                               {query.avgFeedback > 0 ? (
                                 <>
-                                  <TrendingUp className="h-3 w-3" />
+                                  <TrendingUp className="size-3" />
                                   Good
                                 </>
                               ) : (
                                 <>
-                                  <TrendingUp className="h-3 w-3 rotate-180" />
+                                  <TrendingUp className="size-3 rotate-180" />
                                   Poor
                                 </>
                               )}
@@ -508,16 +514,22 @@ export default function AnalyticsPage() {
             <CardContent>
               {loading ? (
                 <div className="space-y-2">
-                  {[...Array(5)].map((_, i) => (
+                  {[
+                    'recording-row-1',
+                    'recording-row-2',
+                    'recording-row-3',
+                    'recording-row-4',
+                    'recording-row-5',
+                  ].map((skeletonId) => (
                     <div
-                      key={i}
+                      key={skeletonId}
                       className="h-12 bg-muted animate-pulse rounded"
                     />
                   ))}
                 </div>
               ) : topRecordings.length === 0 ? (
                 <div className="text-center py-12">
-                  <Eye className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                  <Eye className="size-12 text-muted-foreground mx-auto mb-4 opacity-50" />
                   <p className="text-sm text-muted-foreground">
                     No recordings viewed yet. View recordings to see insights!
                   </p>
@@ -541,7 +553,7 @@ export default function AnalyticsPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant="secondary">
-                            <Eye className="h-3 w-3" />
+                            <Eye className="size-3" />
                             {recording.viewCount}
                           </Badge>
                         </TableCell>

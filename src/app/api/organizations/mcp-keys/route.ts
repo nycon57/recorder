@@ -2,20 +2,34 @@ import { randomBytes, createHash } from 'crypto';
 
 import { NextRequest } from 'next/server';
 
-import { apiHandler, requireAdmin, successResponse, errors } from '@/lib/utils/api';
+import {
+  apiHandler,
+  requireAdmin,
+  successResponse,
+  errors,
+} from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { rateLimit, RateLimitTier, extractUserIdFromAuth } from '@/lib/middleware/rate-limit';
+import {
+  rateLimit,
+  RateLimitTier,
+  extractUserIdFromAuth,
+} from '@/lib/middleware/rate-limit';
 
 /**
  * GET /api/organizations/mcp-keys — List MCP API keys (prefix only)
  */
-export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
+export const GET = rateLimit(
+  RateLimitTier.API,
+  extractUserIdFromAuth,
+)(
   apiHandler(async () => {
     const { orgId } = await requireAdmin();
 
     const { data: keys, error } = await supabaseAdmin
       .from('mcp_api_keys')
-      .select('id, name, key_prefix, permissions, last_used_at, request_count, is_active, created_at, expires_at')
+      .select(
+        'id, name, key_prefix, permissions, last_used_at, request_count, is_active, created_at, expires_at',
+      )
       .eq('org_id', orgId)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
@@ -23,7 +37,7 @@ export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
     if (error) throw error;
 
     return successResponse(keys ?? []);
-  })
+  }),
 );
 
 /**
@@ -31,11 +45,15 @@ export const GET = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
  *
  * Returns the full key exactly once. Stores only the SHA-256 hash.
  */
-export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
+export const POST = rateLimit(
+  RateLimitTier.API,
+  extractUserIdFromAuth,
+)(
   apiHandler(async (request: NextRequest) => {
-    const { orgId } = await requireAdmin();
-
-    const body = await request.json();
+    const [{ orgId }, body] = await Promise.all([
+      requireAdmin(),
+      request.json(),
+    ]);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
 
     if (!name || name.length > 255) {
@@ -62,5 +80,5 @@ export const POST = rateLimit(RateLimitTier.API, extractUserIdFromAuth)(
     if (error) throw error;
 
     return successResponse({ ...newKey, key: fullKey }, undefined, 201);
-  })
+  }),
 );

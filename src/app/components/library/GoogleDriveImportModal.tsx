@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   Check,
   ChevronRight,
@@ -76,6 +77,12 @@ interface BreadcrumbItem {
   name: string;
 }
 
+interface DriveFilesPage {
+  files: DriveFile[];
+  nextPageToken?: string;
+  hasMore: boolean;
+}
+
 interface GoogleDriveImportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -86,7 +93,15 @@ interface GoogleDriveImportModalProps {
 // FILE TYPE DEFINITIONS
 // =====================================================
 
-type FileTypeFilter = 'all' | 'documents' | 'spreadsheets' | 'videos' | 'audio' | 'images' | 'archives' | 'other';
+type FileTypeFilter =
+  | 'all'
+  | 'documents'
+  | 'spreadsheets'
+  | 'videos'
+  | 'audio'
+  | 'images'
+  | 'archives'
+  | 'other';
 
 const FILE_TYPE_FILTERS: { value: FileTypeFilter; label: string }[] = [
   { value: 'all', label: 'All Files' },
@@ -102,7 +117,9 @@ const FILE_TYPE_FILTERS: { value: FileTypeFilter; label: string }[] = [
 // Map file types to filter categories
 function getFileFilterCategory(type: string, mimeType: string): FileTypeFilter {
   // Documents
-  if (['google_doc', 'pdf', 'word', 'text', 'markdown', 'html'].includes(type)) {
+  if (
+    ['google_doc', 'pdf', 'word', 'text', 'markdown', 'html'].includes(type)
+  ) {
     return 'documents';
   }
   // Spreadsheets
@@ -138,8 +155,8 @@ function getFileFilterCategory(type: string, mimeType: string): FileTypeFilter {
 
 function getFileIcon(file: DriveFile) {
   const iconClass = cn(
-    'h-5 w-5 shrink-0',
-    !file.isSupported && !file.isFolder && 'opacity-50'
+    'size-5 shrink-0',
+    !file.isSupported && !file.isFolder && 'opacity-50',
   );
 
   // Folders
@@ -221,7 +238,8 @@ function formatFileSize(bytes?: number): string {
   if (!bytes) return '';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
@@ -238,133 +256,179 @@ function formatDate(dateString?: string): string {
   }
 }
 
+async function fetchDriveFilesPage({
+  folderId,
+  search,
+  pageToken,
+  signal,
+}: {
+  folderId?: string;
+  search?: string;
+  pageToken?: string;
+  signal?: AbortSignal;
+}): Promise<DriveFilesPage> {
+  const params = new URLSearchParams();
+  if (folderId && folderId !== 'root') {
+    params.set('folderId', folderId);
+  }
+  if (search) {
+    params.set('search', search);
+  }
+  if (pageToken) {
+    params.set('pageToken', pageToken);
+  }
+
+  const response = await fetch(
+    `/api/integrations/google-drive/files?${params}`,
+    {
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    let errorMessage = 'Failed to load files';
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorMessage;
+    } catch {
+      errorMessage = response.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
+
+  try {
+    const data = await response.json();
+    return {
+      files: data.files || [],
+      nextPageToken: data.nextPageToken,
+      hasMore: data.hasMore || !!data.nextPageToken,
+    };
+  } catch {
+    throw new Error('Invalid response from server');
+  }
+}
+
 // =====================================================
 // COMPONENT
 // =====================================================
 
-export default function GoogleDriveImportModal({
+export default function GoogleDriveImportModal(
+  props: Parameters<typeof useGoogleDriveImportModalImplementation>[0],
+) {
+  return useGoogleDriveImportModalImplementation(props);
+}
+
+function useGoogleDriveImportModalImplementation({
   isOpen,
   onClose,
   onImportComplete,
 }: GoogleDriveImportModalProps) {
   // State
-  const [files, setFiles] = React.useState<DriveFile[]>([]);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
-  const [isImporting, setIsImporting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [selectedFiles, setSelectedFiles] = React.useState<Set<string>>(new Set());
-  const [breadcrumbs, setBreadcrumbs] = React.useState<BreadcrumbItem[]>([
-    { id: 'root', name: 'My Drive' },
-  ]);
-  const [fileTypeFilter, setFileTypeFilter] = React.useState<FileTypeFilter>('all');
-  const [nextPageToken, setNextPageToken] = React.useState<string | undefined>();
-  const [hasMore, setHasMore] = React.useState(false);
+  const [state, dispatch] = React.useReducer(
+    (
+      current: {
+        isImporting: boolean;
+        searchQuery: string;
+        searchTerm: string;
+        selectedFiles: Set<string>;
+        breadcrumbs: BreadcrumbItem[];
+        fileTypeFilter: FileTypeFilter;
+      },
+      patch: Partial<{
+        isImporting: boolean;
+        searchQuery: string;
+        searchTerm: string;
+        selectedFiles: Set<string>;
+        breadcrumbs: BreadcrumbItem[];
+        fileTypeFilter: FileTypeFilter;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      isImporting: false,
+      searchQuery: '',
+      searchTerm: '',
+      selectedFiles: new Set<string>(),
+      breadcrumbs: [{ id: 'root', name: 'My Drive' }],
+      fileTypeFilter: 'all' as FileTypeFilter,
+    },
+  );
+  const {
+    isImporting,
+    searchQuery,
+    searchTerm,
+    selectedFiles,
+    breadcrumbs,
+    fileTypeFilter,
+  } = state;
 
   const currentFolderId = breadcrumbs[breadcrumbs.length - 1]?.id;
+  const {
+    data: filePages,
+    isFetching: isFetchingFiles,
+    isFetchingNextPage: isLoadingMore,
+    fetchNextPage,
+    hasNextPage,
+    refetch: refetchFiles,
+    error,
+  } = useInfiniteQuery<DriveFilesPage, Error>({
+    queryKey: ['google-drive-files', currentFolderId, searchTerm],
+    enabled: isOpen,
+    initialPageParam: undefined,
+    queryFn: ({ pageParam, signal }) =>
+      fetchDriveFilesPage({
+        folderId: currentFolderId,
+        search: searchTerm || undefined,
+        pageToken: typeof pageParam === 'string' ? pageParam : undefined,
+        signal,
+      }),
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.nextPageToken : undefined,
+  });
+  const files = React.useMemo(
+    () => filePages?.pages.flatMap((page) => page.files) ?? [],
+    [filePages],
+  );
 
-  const fetchFiles = React.useCallback(async (search?: string, append = false, pageToken?: string) => {
-    if (append) {
-      setIsLoadingMore(true);
-    } else {
-      setIsLoading(true);
-      setNextPageToken(undefined);
-      setHasMore(false);
+  const resetModalState = () => {
+    dispatch({
+      selectedFiles: new Set(),
+      searchQuery: '',
+      searchTerm: '',
+      breadcrumbs: [{ id: 'root', name: 'My Drive' }],
+      fileTypeFilter: 'all',
+    });
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetModalState();
+      onClose();
     }
-    setError(null);
-
-    try {
-      const params = new URLSearchParams();
-      if (currentFolderId && currentFolderId !== 'root') {
-        params.set('folderId', currentFolderId);
-      }
-      if (search) {
-        params.set('search', search);
-      }
-      if (pageToken) {
-        params.set('pageToken', pageToken);
-      }
-
-      const response = await fetch(`/api/integrations/google-drive/files?${params}`);
-
-      if (!response.ok) {
-        // Try to parse JSON error, fall back to status text
-        let errorMessage = 'Failed to load files';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          errorMessage = response.statusText || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
-
-      let data;
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error('Invalid response from server');
-      }
-
-      if (append) {
-        setFiles(prev => [...prev, ...(data.files || [])]);
-      } else {
-        setFiles(data.files || []);
-      }
-
-      setNextPageToken(data.nextPageToken);
-      setHasMore(data.hasMore || !!data.nextPageToken);
-    } catch (err) {
-      console.error('Failed to fetch files:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load files');
-      toast.error('Failed to load Google Drive files');
-    } finally {
-      setIsLoading(false);
-      setIsLoadingMore(false);
-    }
-  }, [currentFolderId]);
-
-  // Fetch files when folder changes
-  React.useEffect(() => {
-    if (isOpen) {
-      fetchFiles();
-    }
-  }, [isOpen, fetchFiles]);
-
-  // Reset state when modal closes
-  React.useEffect(() => {
-    if (!isOpen) {
-      setFiles([]);
-      setSelectedFiles(new Set());
-      setSearchQuery('');
-      setBreadcrumbs([{ id: 'root', name: 'My Drive' }]);
-      setError(null);
-      setFileTypeFilter('all');
-      setNextPageToken(undefined);
-      setHasMore(false);
-    }
-  }, [isOpen]);
+  };
 
   const loadMoreFiles = () => {
-    if (nextPageToken && !isLoadingMore) {
-      fetchFiles(searchQuery || undefined, true, nextPageToken);
+    if (hasNextPage && !isLoadingMore) {
+      void fetchNextPage();
     }
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchFiles(searchQuery);
+    dispatch({ searchTerm: searchQuery });
   };
 
   const handleFolderClick = (folder: DriveFile) => {
-    setBreadcrumbs([...breadcrumbs, { id: folder.id, name: folder.name }]);
-    setSelectedFiles(new Set());
+    dispatch({
+      breadcrumbs: [...breadcrumbs, { id: folder.id, name: folder.name }],
+      selectedFiles: new Set(),
+    });
   };
 
   const handleBreadcrumbClick = (index: number) => {
-    setBreadcrumbs(breadcrumbs.slice(0, index + 1));
-    setSelectedFiles(new Set());
+    dispatch({
+      breadcrumbs: breadcrumbs.slice(0, index + 1),
+      selectedFiles: new Set(),
+    });
   };
 
   const handleFileSelect = (fileId: string) => {
@@ -374,22 +438,27 @@ export default function GoogleDriveImportModal({
     } else {
       newSelected.add(fileId);
     }
-    setSelectedFiles(newSelected);
+    dispatch({ selectedFiles: newSelected });
   };
 
   const handleSelectAll = () => {
-    const selectableFiles = filteredFiles.filter(f => !f.isFolder && !f.isImported && f.isSupported);
-    if (selectedFiles.size === selectableFiles.length && selectableFiles.length > 0) {
-      setSelectedFiles(new Set());
+    const selectableFiles = filteredFiles.filter(
+      (f) => !f.isFolder && !f.isImported && f.isSupported,
+    );
+    if (
+      selectedFiles.size === selectableFiles.length &&
+      selectableFiles.length > 0
+    ) {
+      dispatch({ selectedFiles: new Set() });
     } else {
-      setSelectedFiles(new Set(selectableFiles.map(f => f.id)));
+      dispatch({ selectedFiles: new Set(selectableFiles.map((f) => f.id)) });
     }
   };
 
   const handleImport = async () => {
     if (selectedFiles.size === 0) return;
 
-    setIsImporting(true);
+    dispatch({ isImporting: true });
 
     try {
       const response = await fetch('/api/integrations/google-drive/import', {
@@ -412,8 +481,8 @@ export default function GoogleDriveImportModal({
       }
 
       // Refresh file list to update imported status
-      await fetchFiles();
-      setSelectedFiles(new Set());
+      await refetchFiles();
+      dispatch({ selectedFiles: new Set() });
 
       // Notify parent
       if (onImportComplete) {
@@ -421,28 +490,33 @@ export default function GoogleDriveImportModal({
       }
     } catch (err) {
       console.error('Import failed:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to import files');
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to import files',
+      );
     } finally {
-      setIsImporting(false);
+      dispatch({ isImporting: false });
     }
   };
 
   // Filter files by type
   const filteredFiles = React.useMemo(() => {
     if (fileTypeFilter === 'all') return files;
-    return files.filter(file => {
+    return files.filter((file) => {
       if (file.isFolder) return true; // Always show folders
       return getFileFilterCategory(file.type, file.mimeType) === fileTypeFilter;
     });
   }, [files, fileTypeFilter]);
 
-  const selectableFiles = filteredFiles.filter(f => !f.isFolder && !f.isImported && f.isSupported);
-  const allSelected = selectableFiles.length > 0 && selectedFiles.size === selectableFiles.length;
+  const selectableFiles = filteredFiles.filter(
+    (f) => !f.isFolder && !f.isImported && f.isSupported,
+  );
+  const allSelected =
+    selectableFiles.length > 0 && selectedFiles.size === selectableFiles.length;
 
   // Count files by category for filter badges
   const fileCounts = React.useMemo(() => {
     const counts: Record<FileTypeFilter, number> = {
-      all: files.filter(f => !f.isFolder).length,
+      all: files.filter((f) => !f.isFolder).length,
       documents: 0,
       spreadsheets: 0,
       videos: 0,
@@ -452,7 +526,7 @@ export default function GoogleDriveImportModal({
       other: 0,
     };
 
-    files.forEach(file => {
+    files.forEach((file) => {
       if (!file.isFolder) {
         const category = getFileFilterCategory(file.type, file.mimeType);
         counts[category]++;
@@ -463,15 +537,16 @@ export default function GoogleDriveImportModal({
   }, [files]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <HardDrive className="h-5 w-5" />
+            <HardDrive className="size-5" />
             Import from Google Drive
           </DialogTitle>
           <DialogDescription>
-            Select files to import into your Tribora library. Files will be processed for AI search and chat.
+            Select files to import into your Tribora library. Files will be
+            processed for AI search and chat.
           </DialogDescription>
         </DialogHeader>
 
@@ -479,17 +554,19 @@ export default function GoogleDriveImportModal({
         <div className="flex items-center gap-1 text-sm overflow-x-auto py-2">
           {breadcrumbs.map((crumb, index) => (
             <React.Fragment key={crumb.id}>
-              {index > 0 && <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+              {index > 0 && (
+                <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+              )}
               <button
                 onClick={() => handleBreadcrumbClick(index)}
                 className={cn(
                   'px-2 py-1 rounded hover:bg-muted transition-colors shrink-0',
-                  index === breadcrumbs.length - 1 && 'font-medium'
+                  index === breadcrumbs.length - 1 && 'font-medium',
                 )}
               >
                 {index === 0 ? (
                   <span className="flex items-center gap-1">
-                    <FolderOpen className="h-4 w-4" />
+                    <FolderOpen className="size-4" />
                     {crumb.name}
                   </span>
                 ) : (
@@ -504,32 +581,40 @@ export default function GoogleDriveImportModal({
         <div className="flex gap-2">
           <form onSubmit={handleSearch} className="flex gap-2 flex-1">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Search files..."
+                placeholder="Search files…"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => dispatch({ searchQuery: e.target.value })}
                 className="pl-9"
               />
             </div>
             <Button type="submit" variant="outline" size="icon">
-              <Search className="h-4 w-4" />
+              <Search className="size-4" />
             </Button>
           </form>
 
           {/* File Type Filter */}
-          <Select value={fileTypeFilter} onValueChange={(v) => setFileTypeFilter(v as FileTypeFilter)}>
+          <Select
+            value={fileTypeFilter}
+            onValueChange={(v) =>
+              dispatch({ fileTypeFilter: v as FileTypeFilter })
+            }
+          >
             <SelectTrigger className="w-[160px]">
-              <Filter className="h-4 w-4 mr-2" />
+              <Filter className="size-4 mr-2" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {FILE_TYPE_FILTERS.map(filter => (
+              {FILE_TYPE_FILTERS.map((filter) => (
                 <SelectItem key={filter.value} value={filter.value}>
                   <span className="flex items-center gap-2">
                     {filter.label}
                     {fileCounts[filter.value] > 0 && (
-                      <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                      <Badge
+                        variant="secondary"
+                        className="text-xs px-1.5 py-0"
+                      >
                         {fileCounts[filter.value]}
                       </Badge>
                     )}
@@ -543,39 +628,48 @@ export default function GoogleDriveImportModal({
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => fetchFiles()}
-            disabled={isLoading}
+            onClick={() => void refetchFiles()}
+            disabled={isFetchingFiles}
           >
-            <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+            <RefreshCw
+              className={cn('size-4', isFetchingFiles && 'animate-spin')}
+            />
           </Button>
         </div>
 
         {/* File List */}
         <div className="flex-1 min-h-0 border rounded-md">
-          {isLoading ? (
+          {isFetchingFiles ? (
             <div className="flex items-center justify-center h-80">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <Loader2 className="size-8 animate-spin text-muted-foreground" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center h-80 text-center p-4">
-              <X className="h-8 w-8 text-destructive mb-2" />
-              <p className="text-sm text-destructive">{error}</p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={() => fetchFiles()}>
+              <X className="size-8 text-destructive mb-2" />
+              <p className="text-sm text-destructive">{error.message}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => void refetchFiles()}
+              >
                 Retry
               </Button>
             </div>
           ) : filteredFiles.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-80 text-center p-4">
-              <Folder className="h-12 w-12 text-muted-foreground mb-2" />
+              <Folder className="size-12 text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">
-                {fileTypeFilter !== 'all' ? 'No files match the selected filter' : 'No files found'}
+                {fileTypeFilter !== 'all'
+                  ? 'No files match the selected filter'
+                  : 'No files found'}
               </p>
               {fileTypeFilter !== 'all' && (
                 <Button
                   variant="link"
                   size="sm"
                   className="mt-2"
-                  onClick={() => setFileTypeFilter('all')}
+                  onClick={() => dispatch({ fileTypeFilter: 'all' })}
                 >
                   Show all files
                 </Button>
@@ -591,7 +685,10 @@ export default function GoogleDriveImportModal({
                     checked={allSelected}
                     onCheckedChange={handleSelectAll}
                   />
-                  <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                  <label
+                    htmlFor="select-all"
+                    className="text-sm font-medium cursor-pointer"
+                  >
                     Select all supported ({selectableFiles.length})
                   </label>
                 </div>
@@ -600,8 +697,10 @@ export default function GoogleDriveImportModal({
               {/* File List */}
               <div className="divide-y">
                 {filteredFiles.map((file) => {
-                  const isSelectable = !file.isFolder && !file.isImported && file.isSupported;
-                  const isDisabled = !file.isFolder && (!file.isSupported || file.isImported);
+                  const isSelectable =
+                    !file.isFolder && !file.isImported && file.isSupported;
+                  const isDisabled =
+                    !file.isFolder && (!file.isSupported || file.isImported);
 
                   return (
                     <div
@@ -610,9 +709,19 @@ export default function GoogleDriveImportModal({
                         'flex items-center gap-3 px-4 py-3 transition-colors',
                         file.isFolder && 'cursor-pointer hover:bg-muted/50',
                         isSelectable && 'hover:bg-muted/30',
-                        isDisabled && 'opacity-60'
+                        isDisabled && 'opacity-60',
                       )}
                       onClick={() => file.isFolder && handleFolderClick(file)}
+                      onKeyDown={(event) => {
+                        if (!file.isFolder) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleFolderClick(file);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={file.isFolder ? 0 : -1}
+                      aria-disabled={!file.isFolder}
                     >
                       {/* Checkbox for selectable files only */}
                       {!file.isFolder && (
@@ -622,7 +731,9 @@ export default function GoogleDriveImportModal({
                               <div>
                                 <Checkbox
                                   checked={selectedFiles.has(file.id)}
-                                  onCheckedChange={() => handleFileSelect(file.id)}
+                                  onCheckedChange={() =>
+                                    handleFileSelect(file.id)
+                                  }
                                   disabled={isDisabled}
                                   onClick={(e) => e.stopPropagation()}
                                 />
@@ -630,7 +741,9 @@ export default function GoogleDriveImportModal({
                             </TooltipTrigger>
                             {!file.isSupported && (
                               <TooltipContent>
-                                <p>This file type is not supported for import</p>
+                                <p>
+                                  This file type is not supported for import
+                                </p>
                               </TooltipContent>
                             )}
                           </Tooltip>
@@ -644,39 +757,51 @@ export default function GoogleDriveImportModal({
                       {/* Name and metadata */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={cn(
-                            'font-medium truncate',
-                            isDisabled && 'text-muted-foreground'
-                          )}>
+                          <span
+                            className={cn(
+                              'font-medium truncate',
+                              isDisabled && 'text-muted-foreground',
+                            )}
+                          >
                             {file.name}
                           </span>
                           {file.isImported && (
                             <Badge variant="secondary" className="shrink-0">
-                              <Check className="h-3 w-3 mr-1" />
+                              <Check className="size-3 mr-1" />
                               Imported
                             </Badge>
                           )}
                           {!file.isFolder && !file.isSupported && (
-                            <Badge variant="outline" className="shrink-0 text-amber-600 border-amber-600">
-                              <AlertCircle className="h-3 w-3 mr-1" />
+                            <Badge
+                              variant="outline"
+                              className="shrink-0 text-amber-600 border-amber-600"
+                            >
+                              <AlertCircle className="size-3 mr-1" />
                               Not Supported
                             </Badge>
                           )}
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           {!file.isFolder && (
-                            <Badge variant="outline" className="text-xs font-normal">
+                            <Badge
+                              variant="outline"
+                              className="text-xs font-normal"
+                            >
                               {getFileTypeBadge(file)}
                             </Badge>
                           )}
-                          {file.size && <span>{formatFileSize(file.size)}</span>}
-                          {file.modifiedAt && <span>{formatDate(file.modifiedAt)}</span>}
+                          {file.size && (
+                            <span>{formatFileSize(file.size)}</span>
+                          )}
+                          {file.modifiedAt && (
+                            <span>{formatDate(file.modifiedAt)}</span>
+                          )}
                         </div>
                       </div>
 
                       {/* Folder arrow */}
                       {file.isFolder && (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <ChevronRight className="size-4 text-muted-foreground" />
                       )}
                     </div>
                   );
@@ -684,7 +809,7 @@ export default function GoogleDriveImportModal({
               </div>
 
               {/* Load More Button */}
-              {hasMore && (
+              {hasNextPage && (
                 <div className="flex justify-center py-4 border-t">
                   <Button
                     variant="outline"
@@ -694,8 +819,8 @@ export default function GoogleDriveImportModal({
                   >
                     {isLoadingMore ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Loading...
+                        <Loader2 className="size-4 mr-2 animate-spin" />
+                        Loading…
                       </>
                     ) : (
                       'Load More Files'
@@ -724,8 +849,8 @@ export default function GoogleDriveImportModal({
             >
               {isImporting ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Importing...
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                  Importing…
                 </>
               ) : (
                 <>

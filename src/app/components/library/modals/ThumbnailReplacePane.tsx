@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import * as React from 'react';
 import { Upload, X, Loader2, ImageIcon } from 'lucide-react';
 
@@ -129,7 +130,7 @@ export function ThumbnailReplacePane({
     // Convert file to base64
     const reader = new FileReader();
     reader.onloadend = () => {
-      const base64 = (reader.result as string).split(',')[1]; // Remove data:image/...;base64, prefix
+      const base64 = (reader.result as string).split(',')[1]; // Remove data:image/…;base64, prefix
       updateThumbnail.mutate({
         thumbnailData: base64,
         mimeType: selectedFile.type as ValidMimeType,
@@ -163,10 +164,18 @@ export function ThumbnailReplacePane({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
+          role="button"
+          tabIndex={0}
         >
           <div className="flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-              <Upload className="w-8 h-8 text-muted-foreground" />
+            <div className="size-16 rounded-full bg-muted flex items-center justify-center">
+              <Upload className="size-8 text-muted-foreground" />
             </div>
             <div>
               <p className="text-sm font-medium">
@@ -185,10 +194,13 @@ export function ThumbnailReplacePane({
         // Preview section
         <div className="space-y-4">
           <div className="relative aspect-[2.35/1] rounded-xl overflow-hidden bg-muted">
-            <img
+            <Image
               src={previewUrl}
               alt="Thumbnail preview"
-              className="w-full h-full object-cover"
+              fill
+              sizes="min(100vw, 640px)"
+              className="object-cover"
+              unoptimized
             />
             {/* Remove preview button */}
             <button
@@ -196,11 +208,11 @@ export function ThumbnailReplacePane({
               className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
               disabled={isUpdating}
             >
-              <X className="w-4 h-4 text-white" />
+              <X className="size-4 text-white" />
             </button>
           </div>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <ImageIcon className="w-4 h-4" />
+            <ImageIcon className="size-4" />
             <span className="truncate">{selectedFile?.name}</span>
             <span className="flex-shrink-0">
               ({((selectedFile?.size ?? 0) / 1024).toFixed(1)} KB)
@@ -230,12 +242,12 @@ export function ThumbnailReplacePane({
           >
             {isUpdating ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Uploading...
+                <Loader2 className="mr-2 size-4 animate-spin" />
+                Uploading…
               </>
             ) : (
               <>
-                <Upload className="mr-2 h-4 w-4" />
+                <Upload className="mr-2 size-4" />
                 Upload
               </>
             )}
@@ -245,5 +257,3 @@ export function ThumbnailReplacePane({
     </div>
   );
 }
-
-export default ThumbnailReplacePane;

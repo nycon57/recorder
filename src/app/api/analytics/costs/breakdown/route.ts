@@ -7,14 +7,26 @@
 
 import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { TIER_PRICING, calculateTrend } from '@/lib/analytics/cost-calculations';
+import {
+  TIER_PRICING,
+  calculateTrend,
+} from '@/lib/analytics/cost-calculations';
 import type { Database } from '@/lib/types/database';
 
 type StorageTier = Database['public']['Enums']['storage_tier'];
 type StorageProvider = Database['public']['Enums']['storage_provider'];
 
-const STORAGE_TIERS = ['hot', 'warm', 'cold', 'glacier'] as const satisfies readonly StorageTier[];
-const STORAGE_PROVIDERS = ['supabase', 'r2', 'cloudflare'] as const satisfies readonly StorageProvider[];
+const STORAGE_TIERS = [
+  'hot',
+  'warm',
+  'cold',
+  'glacier',
+] as const satisfies readonly StorageTier[];
+const STORAGE_PROVIDERS = [
+  'supabase',
+  'r2',
+  'cloudflare',
+] as const satisfies readonly StorageProvider[];
 
 const isStorageTier = (value: string | null): value is StorageTier =>
   value !== null && STORAGE_TIERS.includes(value as StorageTier);
@@ -45,7 +57,10 @@ export const GET = apiHandler(async () => {
     .is('deleted_at', null);
 
   if (recordingsError) {
-    console.error('[GET /api/analytics/costs/breakdown] Error fetching recordings:', recordingsError);
+    console.error(
+      '[GET /api/analytics/costs/breakdown] Error fetching recordings:',
+      recordingsError,
+    );
     throw new Error(`Failed to fetch recordings: ${recordingsError.message}`);
   }
 
@@ -58,44 +73,56 @@ export const GET = apiHandler(async () => {
   }
 
   // Calculate costs by organization
-  const orgCosts = recordings.reduce((acc, r) => {
-    const recordingOrgId = r.org_id;
-    const tier = normalizeStorageTier(r.storage_tier);
-    const sizeGB = (r.file_size || 0) / 1e9;
-    const cost = sizeGB * TIER_PRICING[tier];
+  const orgCosts = recordings.reduce(
+    (acc, r) => {
+      const recordingOrgId = r.org_id;
+      const tier = normalizeStorageTier(r.storage_tier);
+      const sizeGB = (r.file_size || 0) / 1e9;
+      const cost = sizeGB * TIER_PRICING[tier];
 
-    if (!acc[recordingOrgId]) {
-      acc[recordingOrgId] = {
-        name: recordingOrgId === orgId ? 'Current organization' : 'Unknown',
-        cost: 0,
-      };
-    }
-    acc[recordingOrgId].cost += cost;
-    return acc;
-  }, {} as Record<string, { name: string; cost: number }>);
+      if (!acc[recordingOrgId]) {
+        acc[recordingOrgId] = {
+          name: recordingOrgId === orgId ? 'Current organization' : 'Unknown',
+          cost: 0,
+        };
+      }
+      acc[recordingOrgId].cost += cost;
+      return acc;
+    },
+    {} as Record<string, { name: string; cost: number }>,
+  );
 
-  const totalCostAllOrgs = Object.values(orgCosts).reduce((sum, org) => sum + org.cost, 0);
+  const totalCostAllOrgs = Object.values(orgCosts).reduce(
+    (sum, org) => sum + org.cost,
+    0,
+  );
 
   // Calculate costs by tier
-  const tierCosts = recordings.reduce((acc, r) => {
-    const tier = normalizeStorageTier(r.storage_tier);
-    const sizeGB = (r.file_size || 0) / 1e9;
-    const cost = sizeGB * TIER_PRICING[tier];
+  const tierCosts = recordings.reduce(
+    (acc, r) => {
+      const tier = normalizeStorageTier(r.storage_tier);
+      const sizeGB = (r.file_size || 0) / 1e9;
+      const cost = sizeGB * TIER_PRICING[tier];
 
-    acc[tier] = (acc[tier] || 0) + cost;
-    return acc;
-  }, {} as Record<string, number>);
+      acc[tier] = (acc[tier] || 0) + cost;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   // Calculate costs by provider
-  const providerCosts = recordings.reduce((acc, r) => {
-    const provider = normalizeStorageProvider(r.storage_provider);
-    const tier = normalizeStorageTier(r.storage_tier);
-    const sizeGB = (r.file_size || 0) / 1e9;
-    const cost = sizeGB * TIER_PRICING[tier];
+  const providerCosts = recordings.reduce(
+    (acc, r) => {
+      const provider = normalizeStorageProvider(r.storage_provider);
+      const tier = normalizeStorageTier(r.storage_tier);
+      const sizeGB = (r.file_size || 0) / 1e9;
+      const cost = sizeGB * TIER_PRICING[tier];
 
-    acc[provider] = (acc[provider] || 0) + cost;
-    return acc;
-  }, {} as Record<string, number>);
+      acc[provider] = (acc[provider] || 0) + cost;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   // Get trends for each organization (30-day comparison)
   const orgBreakdown = await Promise.all(
@@ -104,10 +131,13 @@ export const GET = apiHandler(async () => {
       return {
         name: data.name,
         cost: parseFloat(data.cost.toFixed(2)),
-        percentage: totalCostAllOrgs > 0 ? parseFloat(((data.cost / totalCostAllOrgs) * 100).toFixed(2)) : 0,
+        percentage:
+          totalCostAllOrgs > 0
+            ? parseFloat(((data.cost / totalCostAllOrgs) * 100).toFixed(2))
+            : 0,
         trend: parseFloat(trend.toFixed(2)),
       };
-    })
+    }),
   );
 
   // Format tier breakdown
@@ -118,7 +148,10 @@ export const GET = apiHandler(async () => {
     glacier: 'Glacier Storage',
   };
 
-  const totalTierCost = Object.values(tierCosts).reduce((sum, cost) => sum + cost, 0);
+  const totalTierCost = Object.values(tierCosts).reduce(
+    (sum, cost) => sum + cost,
+    0,
+  );
 
   const tierBreakdown = await Promise.all(
     Object.entries(tierCosts).map(async ([tier, cost]) => {
@@ -127,10 +160,13 @@ export const GET = apiHandler(async () => {
       return {
         name: tierNames[tier] || tier,
         cost: parseFloat(cost.toFixed(2)),
-        percentage: totalTierCost > 0 ? parseFloat(((cost / totalTierCost) * 100).toFixed(2)) : 0,
+        percentage:
+          totalTierCost > 0
+            ? parseFloat(((cost / totalTierCost) * 100).toFixed(2))
+            : 0,
         trend: parseFloat(trend.toFixed(2)),
       };
-    })
+    }),
   );
 
   // Format provider breakdown
@@ -140,7 +176,10 @@ export const GET = apiHandler(async () => {
     cloudflare: 'Cloudflare R2',
   };
 
-  const totalProviderCost = Object.values(providerCosts).reduce((sum, cost) => sum + cost, 0);
+  const totalProviderCost = Object.values(providerCosts).reduce(
+    (sum, cost) => sum + cost,
+    0,
+  );
 
   const providerBreakdown = await Promise.all(
     Object.entries(providerCosts).map(async ([provider, cost]) => {
@@ -149,10 +188,13 @@ export const GET = apiHandler(async () => {
       return {
         name: providerNames[normalizedProvider] || normalizedProvider,
         cost: parseFloat(cost.toFixed(2)),
-        percentage: totalProviderCost > 0 ? parseFloat(((cost / totalProviderCost) * 100).toFixed(2)) : 0,
+        percentage:
+          totalProviderCost > 0
+            ? parseFloat(((cost / totalProviderCost) * 100).toFixed(2))
+            : 0,
         trend: parseFloat(trend.toFixed(2)),
       };
-    })
+    }),
   );
 
   // Sort by cost (descending)
@@ -177,21 +219,21 @@ async function calculateTierTrend(tier: StorageTier): Promise<number> {
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
   // Get recordings in current period
-  const { data: currentData } = await supabase
-    .from('content')
-    .select('file_size, storage_tier')
-    .eq('storage_tier', tier)
-    .gte('created_at', thirtyDaysAgo.toISOString())
-    .is('deleted_at', null);
-
-  // Get recordings in previous period
-  const { data: previousData } = await supabase
-    .from('content')
-    .select('file_size, storage_tier')
-    .eq('storage_tier', tier)
-    .gte('created_at', sixtyDaysAgo.toISOString())
-    .lt('created_at', thirtyDaysAgo.toISOString())
-    .is('deleted_at', null);
+  const [{ data: currentData }, { data: previousData }] = await Promise.all([
+    supabase
+      .from('content')
+      .select('file_size, storage_tier')
+      .eq('storage_tier', tier)
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .is('deleted_at', null),
+    supabase
+      .from('content')
+      .select('file_size, storage_tier')
+      .eq('storage_tier', tier)
+      .gte('created_at', sixtyDaysAgo.toISOString())
+      .lt('created_at', thirtyDaysAgo.toISOString())
+      .is('deleted_at', null),
+  ]);
 
   const currentCost = (currentData || []).reduce((sum, r) => {
     const sizeGB = (r.file_size || 0) / 1e9;
@@ -211,28 +253,30 @@ async function calculateTierTrend(tier: StorageTier): Promise<number> {
 /**
  * Calculate trend for specific provider
  */
-async function calculateProviderTrend(provider: StorageProvider): Promise<number> {
+async function calculateProviderTrend(
+  provider: StorageProvider,
+): Promise<number> {
   const supabase = supabaseAdmin;
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
   // Get recordings in current period
-  const { data: currentData } = await supabase
-    .from('content')
-    .select('file_size, storage_tier, storage_provider')
-    .eq('storage_provider', provider)
-    .gte('created_at', thirtyDaysAgo.toISOString())
-    .is('deleted_at', null);
-
-  // Get recordings in previous period
-  const { data: previousData } = await supabase
-    .from('content')
-    .select('file_size, storage_tier, storage_provider')
-    .eq('storage_provider', provider)
-    .gte('created_at', sixtyDaysAgo.toISOString())
-    .lt('created_at', thirtyDaysAgo.toISOString())
-    .is('deleted_at', null);
+  const [{ data: currentData }, { data: previousData }] = await Promise.all([
+    supabase
+      .from('content')
+      .select('file_size, storage_tier, storage_provider')
+      .eq('storage_provider', provider)
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .is('deleted_at', null),
+    supabase
+      .from('content')
+      .select('file_size, storage_tier, storage_provider')
+      .eq('storage_provider', provider)
+      .gte('created_at', sixtyDaysAgo.toISOString())
+      .lt('created_at', thirtyDaysAgo.toISOString())
+      .is('deleted_at', null),
+  ]);
 
   const currentCost = (currentData || []).reduce((sum, r) => {
     const tier = normalizeStorageTier(r.storage_tier);

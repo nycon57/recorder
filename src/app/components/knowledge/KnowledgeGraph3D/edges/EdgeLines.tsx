@@ -98,8 +98,8 @@ export function EdgeLines({
     }
 
     // Sort by strength and take top N
-    return [...edges]
-      .sort((a, b) => b.strength - a.strength)
+    return edges
+      .toSorted((a, b) => b.strength - a.strength)
       .slice(0, lodConfig.maxVisibleEdges);
   }, [edges, lodConfig.maxVisibleEdges]);
 
@@ -133,5 +133,3 @@ export function EdgeLines({
 
   return <group name="edges">{renderedEdges}</group>;
 }
-
-export default EdgeLines;

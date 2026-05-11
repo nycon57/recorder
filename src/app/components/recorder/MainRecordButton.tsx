@@ -24,7 +24,7 @@ export function MainRecordButton() {
   const screenMissing = requiresScreen && !screenshareStream;
   const isReviewing = !!recordingBlob;
 
-  const handleClick = async () => {
+  const handleRecordButtonPress = async () => {
     console.log('[MainRecordButton] Button clicked, isRecording:', isRecording);
     if (isRecording) {
       console.log('[MainRecordButton] Calling stopRecording()');
@@ -54,7 +54,7 @@ export function MainRecordButton() {
     <div className="relative">
       <Button
         size="lg"
-        onClick={handleClick}
+        onClick={handleRecordButtonPress}
         disabled={countdown !== null || isReviewing}
         className={cn(
           'relative h-20 w-20 rounded-full p-0 transition-all duration-200 flex items-center justify-center',

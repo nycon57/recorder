@@ -1,19 +1,21 @@
-"use client";
+'use client';
 
-import type { Element } from "hast";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import type { Element } from 'hast';
+import parse from 'html-react-parser';
+import { CheckIcon, CopyIcon } from 'lucide-react';
 import {
   type ComponentProps,
   createContext,
   type HTMLAttributes,
-  useContext,
+  use,
   useEffect,
+  useReducer,
   useState,
-} from "react";
-import { type BundledLanguage, codeToHtml, type ShikiTransformer } from "shiki";
+} from 'react';
+import { type BundledLanguage, codeToHtml, type ShikiTransformer } from 'shiki';
 
-import { cn } from "@/lib/utils";
-import { Button } from "@/app/components/ui/button";
+import { cn } from '@/lib/utils';
+import { Button } from '@/app/components/ui/button';
 
 type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   code: string;
@@ -26,34 +28,34 @@ type CodeBlockContextType = {
 };
 
 const CodeBlockContext = createContext<CodeBlockContextType>({
-  code: "",
+  code: '',
 });
 
 const lineNumberTransformer: ShikiTransformer = {
-  name: "line-numbers",
+  name: 'line-numbers',
   line(node: Element, line: number) {
     node.children.unshift({
-      type: "element",
-      tagName: "span",
+      type: 'element',
+      tagName: 'span',
       properties: {
         className: [
-          "inline-block",
-          "min-w-10",
-          "mr-4",
-          "text-right",
-          "select-none",
-          "text-muted-foreground",
+          'inline-block',
+          'min-w-10',
+          'mr-4',
+          'text-right',
+          'select-none',
+          'text-muted-foreground',
         ],
       },
-      children: [{ type: "text", value: String(line) }],
+      children: [{ type: 'text', value: String(line) }],
     });
   },
 };
 
-export async function highlightCode(
+async function highlightCode(
   code: string,
   language: BundledLanguage,
-  showLineNumbers = false
+  showLineNumbers = false,
 ) {
   const transformers: ShikiTransformer[] = showLineNumbers
     ? [lineNumberTransformer]
@@ -62,12 +64,12 @@ export async function highlightCode(
   return await Promise.all([
     codeToHtml(code, {
       lang: language,
-      theme: "one-light",
+      theme: 'one-light',
       transformers,
     }),
     codeToHtml(code, {
       lang: language,
-      theme: "one-dark-pro",
+      theme: 'one-dark-pro',
       transformers,
     }),
   ]);
@@ -81,8 +83,8 @@ export const CodeBlock = ({
   children,
   ...props
 }: CodeBlockProps) => {
-  const [html, setHtml] = useState<string>("");
-  const [darkHtml, setDarkHtml] = useState<string>("");
+  const [html, setHtml] = useState<string>('');
+  const [darkHtml, setDarkHtml] = useState<string>('');
 
   useEffect(() => {
     let cancelled = false;
@@ -103,22 +105,18 @@ export const CodeBlock = ({
     <CodeBlockContext.Provider value={{ code }}>
       <div
         className={cn(
-          "group relative w-full overflow-hidden rounded-md border bg-background text-foreground",
-          className
+          'group relative w-full overflow-hidden rounded-md border bg-background text-foreground',
+          className,
         )}
         {...props}
       >
         <div className="relative">
-          <div
-            className="overflow-hidden dark:hidden [&>pre]:m-0 [&>pre]:bg-background! [&>pre]:p-4 [&>pre]:text-foreground! [&>pre]:text-sm [&_code]:font-mono [&_code]:text-sm"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
-          <div
-            className="hidden overflow-hidden dark:block [&>pre]:m-0 [&>pre]:bg-background! [&>pre]:p-4 [&>pre]:text-foreground! [&>pre]:text-sm [&_code]:font-mono [&_code]:text-sm"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
-            dangerouslySetInnerHTML={{ __html: darkHtml }}
-          />
+          <div className="overflow-hidden dark:hidden [&>pre]:m-0 [&>pre]:bg-background! [&>pre]:p-4 [&>pre]:text-foreground! [&>pre]:text-sm [&_code]:font-mono [&_code]:text-sm">
+            {parse(html)}
+          </div>
+          <div className="hidden overflow-hidden dark:block [&>pre]:m-0 [&>pre]:bg-background! [&>pre]:p-4 [&>pre]:text-foreground! [&>pre]:text-sm [&_code]:font-mono [&_code]:text-sm">
+            {parse(darkHtml)}
+          </div>
           {children && (
             <div className="absolute top-2 right-2 flex items-center gap-2">
               {children}
@@ -130,13 +128,13 @@ export const CodeBlock = ({
   );
 };
 
-export type CodeBlockCopyButtonProps = ComponentProps<typeof Button> & {
+type CodeBlockCopyButtonProps = ComponentProps<typeof Button> & {
   onCopy?: () => void;
   onError?: (error: Error) => void;
   timeout?: number;
 };
 
-export const CodeBlockCopyButton = ({
+const CodeBlockCopyButton = ({
   onCopy,
   onError,
   timeout = 2000,
@@ -144,12 +142,15 @@ export const CodeBlockCopyButton = ({
   className,
   ...props
 }: CodeBlockCopyButtonProps) => {
-  const [isCopied, setIsCopied] = useState(false);
-  const { code } = useContext(CodeBlockContext);
+  const [isCopied, setIsCopied] = useReducer(
+    (_state: boolean, nextState: boolean) => nextState,
+    false,
+  );
+  const { code } = use(CodeBlockContext);
 
   const copyToClipboard = async () => {
-    if (typeof window === "undefined" || !navigator?.clipboard?.writeText) {
-      onError?.(new Error("Clipboard API not available"));
+    if (typeof window === 'undefined' || !navigator?.clipboard?.writeText) {
+      onError?.(new Error('Clipboard API not available'));
       return;
     }
 
@@ -167,7 +168,7 @@ export const CodeBlockCopyButton = ({
 
   return (
     <Button
-      className={cn("shrink-0", className)}
+      className={cn('shrink-0', className)}
       onClick={copyToClipboard}
       size="icon"
       variant="ghost"

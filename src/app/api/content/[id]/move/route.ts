@@ -26,11 +26,13 @@ type MoveContentInput = z.infer<typeof moveContentSchema>;
 export const POST = apiHandler(
   async (
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
   ) => {
-    const { orgId, userId } = await requireOrg();
-    const { id: contentId } = await params;
-    const body = await parseBody<MoveContentInput>(request, moveContentSchema);
+    const [{ orgId, userId }, { id: contentId }, body] = await Promise.all([
+      requireOrg(),
+      params,
+      parseBody<MoveContentInput>(request, moveContentSchema),
+    ]);
     const supabase = supabaseAdmin;
 
     // 1. Verify content exists and belongs to this org
@@ -105,7 +107,10 @@ export const POST = apiHandler(
         },
       });
     } catch (activityError) {
-      console.error('[POST /api/content/[id]/move] Failed to log activity:', activityError);
+      console.error(
+        '[POST /api/content/[id]/move] Failed to log activity:',
+        activityError,
+      );
     }
 
     return successResponse({
@@ -114,7 +119,7 @@ export const POST = apiHandler(
       from_collection_id: content.collection_id,
       to_collection_id: body.collection_id,
     });
-  }
+  },
 );
 
 /**

@@ -42,20 +42,29 @@ interface TagWithUsageCount {
  */
 export const GET = apiHandler(async (request: NextRequest) => {
   const { orgId } = await requireOrg();
-  const query = parseSearchParams<ListTagsQueryInput>(request, listTagsQuerySchema);
+  const query = parseSearchParams<ListTagsQueryInput>(
+    request,
+    listTagsQuerySchema,
+  );
   const supabase = await createClient();
 
   // PERFORMANCE OPTIMIZATION: Check cache for simple tag list requests
   // Only cache when no search/sort filters and includeUsageCount is true
-  const isCacheable = !query.search && query.sort === 'name_asc' && query.includeUsageCount;
+  const isCacheable =
+    !query.search && query.sort === 'name_asc' && query.includeUsageCount;
 
   if (isCacheable) {
-    const { TagsCache, CacheControlHeaders, generateETag } = await import('@/lib/services/cache');
+    const { TagsCache, CacheControlHeaders, generateETag } = await import(
+      '@/lib/services/cache'
+    );
     const cachedTags = await TagsCache.get(orgId);
 
     if (cachedTags) {
       // Apply pagination to cached results
-      const paginatedTags = cachedTags.slice(query.offset, query.offset + query.limit);
+      const paginatedTags = cachedTags.slice(
+        query.offset,
+        query.offset + query.limit,
+      );
 
       const response = successResponse({
         tags: paginatedTags,
@@ -120,7 +129,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // If includeUsageCount is requested, fetch counts
   let tagsWithCounts: TagWithUsageCount[] = tags || [];
   if (query.includeUsageCount && tags && tags.length > 0) {
-    const tagIds = tags.map(t => t.id);
+    const tagIds = tags.map((t) => t.id);
 
     // Get usage counts for all tags
     const { data: counts, error: countError } = await supabase
@@ -130,20 +139,25 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     if (!countError && counts) {
       // Count occurrences of each tag
-      const usageMap = counts.reduce((acc, item) => {
-        acc[item.tag_id] = (acc[item.tag_id] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      const usageMap = counts.reduce(
+        (acc, item) => {
+          acc[item.tag_id] = (acc[item.tag_id] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
 
       // Add usage count to each tag
-      tagsWithCounts = tags.map(tag => ({
+      tagsWithCounts = tags.map((tag) => ({
         ...tag,
         usage_count: usageMap[tag.id] || 0,
       }));
 
       // Sort by usage if requested
       if (query.sort === 'usage_desc') {
-        tagsWithCounts.sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0));
+        tagsWithCounts.sort(
+          (a, b) => (b.usage_count || 0) - (a.usage_count || 0),
+        );
       }
     }
   }
@@ -162,7 +176,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
     );
   }
 
-  const { CacheControlHeaders, generateETag } = await import('@/lib/services/cache');
+  const { CacheControlHeaders, generateETag } = await import(
+    '@/lib/services/cache'
+  );
   const response = successResponse({
     tags: tagsWithCounts,
     pagination: {
@@ -187,9 +203,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * - color: Hex color code (optional)
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId } = await requireOrg();
-  const body = await parseBody<CreateTagInput>(request, createTagSchema);
-  const supabase = await createClient();
+  const [{ orgId }, body, supabase] = await Promise.all([
+    requireOrg(),
+    parseBody<CreateTagInput>(request, createTagSchema),
+    createClient(),
+  ]);
 
   // Normalize tag name for uniqueness check
   const normalizedName = normalizeTagName(body.name);

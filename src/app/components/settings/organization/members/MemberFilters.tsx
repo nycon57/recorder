@@ -73,7 +73,7 @@ export function MemberFilters({ filters, onFiltersChange, onClose }: MemberFilte
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+      <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-4">
         <div>
           <CardTitle className="text-base">Filters</CardTitle>
           <CardDescription className="text-sm">
@@ -87,7 +87,7 @@ export function MemberFilters({ filters, onFiltersChange, onClose }: MemberFilte
             </Button>
           )}
           <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </Button>
         </div>
       </CardHeader>
@@ -96,12 +96,12 @@ export function MemberFilters({ filters, onFiltersChange, onClose }: MemberFilte
           {/* Role Filters */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <Shield className="h-4 w-4" />
+              <Shield className="size-4" />
               Roles
             </div>
             <div className="space-y-2">
               {roleOptions.map((role) => (
-                <div key={role.value} className="flex items-center space-x-2">
+                <div key={role.value} className="flex items-center gap-x-2">
                   <Checkbox
                     id={`role-${role.value}`}
                     checked={filters.roles.includes(role.value)}
@@ -123,12 +123,12 @@ export function MemberFilters({ filters, onFiltersChange, onClose }: MemberFilte
           {/* Status Filters */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <Activity className="h-4 w-4" />
+              <Activity className="size-4" />
               Status
             </div>
             <div className="space-y-2">
               {statusOptions.map((status) => (
-                <div key={status.value} className="flex items-center space-x-2">
+                <div key={status.value} className="flex items-center gap-x-2">
                   <Checkbox
                     id={`status-${status.value}`}
                     checked={filters.statuses.includes(status.value)}
@@ -150,7 +150,7 @@ export function MemberFilters({ filters, onFiltersChange, onClose }: MemberFilte
           {/* Department Filters - Placeholder */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <Users className="h-4 w-4" />
+              <Users className="size-4" />
               Departments
             </div>
             <p className="text-sm text-muted-foreground">
@@ -176,7 +176,7 @@ export function MemberFilters({ filters, onFiltersChange, onClose }: MemberFilte
                       onClick={() => handleRoleChange(role, false)}
                     >
                       Role: {roleOption?.label || role}
-                      <X className="ml-2 h-3 w-3" />
+                      <X className="ml-2 size-3" />
                     </Button>
                   );
                 })}
@@ -190,7 +190,7 @@ export function MemberFilters({ filters, onFiltersChange, onClose }: MemberFilte
                       onClick={() => handleStatusChange(status, false)}
                     >
                       Status: {statusOption?.label || status}
-                      <X className="ml-2 h-3 w-3" />
+                      <X className="ml-2 size-3" />
                     </Button>
                   );
                 })}

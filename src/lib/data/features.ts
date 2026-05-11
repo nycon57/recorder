@@ -65,7 +65,7 @@ export interface FeatureProblemData {
   };
 }
 
-export interface FeatureSolutionTab {
+interface FeatureSolutionTab {
   id: string;
   title: string;
   description: string;
@@ -85,7 +85,7 @@ export interface FeatureStatData {
   description: string;
 }
 
-export interface FeatureDeepDiveItem {
+interface FeatureDeepDiveItem {
   title: string;
   description: string;
   icon: IconName;
@@ -98,7 +98,7 @@ export interface FeatureDeepDiveData {
   items: FeatureDeepDiveItem[];
 }
 
-export interface ComparisonRow {
+interface ComparisonRow {
   feature: string;
   tribora: boolean | string;
   competitor1: boolean | string;
@@ -384,9 +384,9 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
         },
         {
           icon: 'Search',
-          title: 'Ctrl+F doesn\'t work on video',
+          title: "Ctrl+F doesn't work on video",
           description:
-            'The answer is in a recording somewhere, but you\'d have to watch hours to find it.',
+            "The answer is in a recording somewhere, but you'd have to watch hours to find it.",
         },
         {
           icon: 'Globe',
@@ -565,12 +565,12 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
       headline: 'Find by meaning,',
       highlightedText: 'not keywords',
       subtitle:
-        'Semantic search that understands what you\'re looking for. Ask questions in natural language and get answers from your entire knowledge base.',
+        "Semantic search that understands what you're looking for. Ask questions in natural language and get answers from your entire knowledge base.",
       primaryCta: { text: 'Try Smart Search', href: '/sign-up' },
       secondaryCta: { text: 'See Search in Action', href: '#solution' },
     },
     problem: {
-      headline: 'The answer exists. You just can\'t find it.',
+      headline: "The answer exists. You just can't find it.",
       painPoints: [
         {
           icon: 'Search',
@@ -728,12 +728,12 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
       {
         question: 'How quickly are new recordings searchable?',
         answer:
-          'New content becomes searchable within minutes of processing completion. You\'ll be notified when indexing is complete.',
+          "New content becomes searchable within minutes of processing completion. You'll be notified when indexing is complete.",
       },
       {
         question: 'Can I filter search results?',
         answer:
-          'Yes! Filter by content type, date range, tags, creators, or any custom metadata you\'ve added.',
+          "Yes! Filter by content type, date range, tags, creators, or any custom metadata you've added.",
       },
     ],
     relatedFeatures: ['assistant', 'transcription', 'documentation'],
@@ -779,7 +779,7 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
           icon: 'Bot',
           title: 'AI without sources',
           description:
-            'ChatGPT gives answers but you can\'t verify them. Where did that information come from?',
+            "ChatGPT gives answers but you can't verify them. Where did that information come from?",
         },
         {
           icon: 'Clock',
@@ -814,8 +814,7 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
         {
           id: 'citations',
           title: 'Full Citations',
-          description:
-            'Every answer includes links to exact source moments.',
+          description: 'Every answer includes links to exact source moments.',
           features: [
             'Timestamp citations',
             'Source attribution',
@@ -931,7 +930,7 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
           competitor2: true,
         },
         {
-          feature: 'Admits when it doesn\'t know',
+          feature: "Admits when it doesn't know",
           tribora: true,
           competitor1: false,
           competitor2: 'N/A',
@@ -958,12 +957,12 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
       {
         question: 'How does the AI know about our company?',
         answer:
-          'The assistant only uses content from your Tribora library - recordings, transcripts, and documents. It doesn\'t access the internet or external data.',
+          "The assistant only uses content from your Tribora library - recordings, transcripts, and documents. It doesn't access the internet or external data.",
       },
       {
         question: 'Can the AI make things up?',
         answer:
-          'Our RAG (Retrieval-Augmented Generation) architecture only generates answers from your actual content. If the answer isn\'t in your library, the AI will say so.',
+          "Our RAG (Retrieval-Augmented Generation) architecture only generates answers from your actual content. If the answer isn't in your library, the AI will say so.",
       },
       {
         question: 'Are citations always accurate?',
@@ -973,7 +972,7 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
       {
         question: 'Is our data used to train the AI?',
         answer:
-          'No. Your data is never used to train external AI models. It stays within your organization and is only used to answer your team\'s questions.',
+          "No. Your data is never used to train external AI models. It stays within your organization and is only used to answer your team's questions.",
       },
     ],
     relatedFeatures: ['search', 'documentation', 'collaboration'],
@@ -1012,7 +1011,7 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
           icon: 'Clock',
           title: 'Hours to write, minutes to forget',
           description:
-            'Writing good docs takes 4+ hours. By the time you\'re done, the process has already changed.',
+            "Writing good docs takes 4+ hours. By the time you're done, the process has already changed.",
         },
         {
           icon: 'FileText',
@@ -1024,11 +1023,11 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
           icon: 'Users',
           title: 'Expertise trapped in experts',
           description:
-            'Your best people know things. They just don\'t have time to write them down.',
+            "Your best people know things. They just don't have time to write them down.",
         },
       ],
       quote: {
-        text: 'I spend 4 hours writing docs that people can\'t find anyway.',
+        text: "I spend 4 hours writing docs that people can't find anyway.",
         author: 'Technical Writer',
         role: 'Enterprise Software',
       },
@@ -1066,8 +1065,7 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
         {
           id: 'edit',
           title: 'Edit & Refine',
-          description:
-            'AI drafts, you polish. Human-in-the-loop for quality.',
+          description: 'AI drafts, you polish. Human-in-the-loop for quality.',
           features: [
             'Rich text editor',
             'Suggest edits with AI',
@@ -1252,19 +1250,19 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
           icon: 'Users',
           title: 'Knowledge silos',
           description:
-            'Sales knows things Engineering doesn\'t. Support learns things Product never hears. Information trapped in teams.',
+            "Sales knows things Engineering doesn't. Support learns things Product never hears. Information trapped in teams.",
         },
         {
           icon: 'Network',
           title: 'No connections',
           description:
-            'Related knowledge exists but isn\'t linked. The same problems get solved independently.',
+            "Related knowledge exists but isn't linked. The same problems get solved independently.",
         },
         {
           icon: 'Clock',
-          title: 'Expertise doesn\'t scale',
+          title: "Expertise doesn't scale",
           description:
-            'Your best people become bottlenecks. Their knowledge can\'t be in two places at once.',
+            "Your best people become bottlenecks. Their knowledge can't be in two places at once.",
         },
       ],
       quote: {
@@ -1306,8 +1304,7 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
         {
           id: 'insights',
           title: 'Team Insights',
-          description:
-            'See what your team knows and where the gaps are.',
+          description: 'See what your team knows and where the gaps are.',
           features: [
             'Coverage reports',
             'Expert identification',
@@ -1376,7 +1373,7 @@ export const FEATURES: Record<FeatureId, FeaturePageData> = {
     ],
     comparison: {
       headline: 'Beyond shared folders',
-      subtitle: 'Knowledge that\'s connected, not just stored',
+      subtitle: "Knowledge that's connected, not just stored",
       competitors: ['Google Drive/SharePoint', 'Notion/Confluence'],
       rows: [
         {
@@ -1471,14 +1468,15 @@ export function getAllFeatureIds(): FeatureId[] {
   return Object.keys(FEATURES) as FeatureId[];
 }
 
-export function getRelatedFeatures(id: FeatureId): FeaturePageData[] {
+function getRelatedFeatures(id: FeatureId): FeaturePageData[] {
   const feature = FEATURES[id];
   if (!feature) return [];
-  return feature.relatedFeatures
-    .map((relId) => FEATURES[relId])
-    .filter(Boolean);
+  return feature.relatedFeatures.flatMap((__item, __index, __array) => {
+    const __mapped = FEATURES[__item];
+    return __mapped ? [__mapped] : [];
+  });
 }
 
-export function getMoatFeatures(): FeaturePageData[] {
+function getMoatFeatures(): FeaturePageData[] {
   return Object.values(FEATURES).filter((f) => f.isMoat);
 }

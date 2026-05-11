@@ -5,10 +5,10 @@
  *
  * Per-source freshness and health overview. Polls the existing
  * /api/admin/vendor-sources snapshot (same endpoint as the dashboard) and
- * computes drift client-side — no new endpoint needed.
+ * computes drift client-side - no new endpoint needed.
  *
  * Drift uses DriftIndicator: absolute days + % of freshness budget + color.
- * Color is supplementary — text always present.
+ * Color is supplementary - text always present.
  *
  * TRIB-152
  */
@@ -32,6 +32,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/app/components/ui/table';
+import { formatStableDate } from '@/lib/utils/formatting';
+
 import { SourceStatusBadge } from './source-status-badge';
 import { DriftIndicator } from './drift-indicator';
 import { ReSyncButton } from './re-sync-button';
@@ -51,7 +53,7 @@ const STATUS_RANK: Record<string, number> = {
 };
 
 function sortSources(sources: VendorSourceOpsItem[]): VendorSourceOpsItem[] {
-  return [...sources].sort((a, b) => {
+  return sources.toSorted((a, b) => {
     const ra = STATUS_RANK[a.status] ?? 99;
     const rb = STATUS_RANK[b.status] ?? 99;
     return ra - rb;
@@ -68,7 +70,7 @@ export function SourceHealthTable() {
   if (loading && !snapshot) {
     return (
       <div className="flex min-h-[12rem] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -76,7 +78,7 @@ export function SourceHealthTable() {
   if (error && !snapshot) {
     return (
       <div className="flex items-center gap-2 text-sm text-destructive py-4">
-        <AlertTriangle className="h-4 w-4 shrink-0" />
+        <AlertTriangle className="size-4 shrink-0" />
         {error.message.includes('403')
           ? 'Access denied. System admin privileges required.'
           : 'Failed to load source health.'}
@@ -90,7 +92,8 @@ export function SourceHealthTable() {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {sources.length} source{sources.length === 1 ? '' : 's'} — auto-refreshes every 30 s
+          {sources.length} source{sources.length === 1 ? '' : 's'} -
+          auto-refreshes every 30 s
         </p>
         <Button
           variant="ghost"
@@ -98,14 +101,14 @@ export function SourceHealthTable() {
           onClick={refetch}
           className="gap-1.5 h-7 text-xs"
         >
-          <RefreshCw className="h-3 w-3" />
+          <RefreshCw className="size-3" />
           Refresh
         </Button>
       </div>
 
       {sources.length === 0 ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="size-4" />
           No vendor sources configured.
         </div>
       ) : (
@@ -159,7 +162,7 @@ export function SourceHealthTable() {
 
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                       {source.lastSuccessfulSyncAt
-                        ? new Date(source.lastSuccessfulSyncAt).toLocaleDateString()
+                        ? formatStableDate(source.lastSuccessfulSyncAt)
                         : 'Never'}
                     </TableCell>
 
@@ -174,7 +177,7 @@ export function SourceHealthTable() {
                       {source.lastError ? (
                         <span title={source.lastError}>{source.lastError}</span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
 

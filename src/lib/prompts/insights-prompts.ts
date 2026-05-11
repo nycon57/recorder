@@ -49,7 +49,7 @@ Your output MUST follow this structure:
 /**
  * Content-type-specific prompts
  */
-export const INSIGHTS_PROMPTS: Record<ContentType, string> = {
+const INSIGHTS_PROMPTS: Record<ContentType, string> = {
   strategic_planning: `You are a strategic planning analyst. Your job is to analyze strategic documents (like OKRs, quarterly rocks, roadmaps, project plans) and extract insights that help teams execute better.
 
 DO NOT just reformat the content. Instead, provide deep analysis.
@@ -341,7 +341,7 @@ Click the gear icon in the top right corner to open the Settings panel. Then sel
 /**
  * Content type detection prompt - used to classify content before generating insights
  */
-export const CONTENT_TYPE_DETECTION_PROMPT = `Analyze the following content and classify it into ONE of these categories:
+const CONTENT_TYPE_DETECTION_PROMPT = `Analyze the following content and classify it into ONE of these categories:
 
 1. **strategic_planning** - OKRs, quarterly rocks, roadmaps, project plans, strategic objectives
 2. **meeting** - Meeting notes, discussion transcripts, team syncs, decision-making sessions

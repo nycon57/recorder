@@ -35,14 +35,14 @@ export type {
   ExtensionVoiceAnswerResponse,
   ExtensionMessageType,
   ExtensionMessage,
-} from './types.js';
+} from './types';
 export type {
   ExtensionDebugSessionEventType,
   ExtensionDebugSessionKnowledgeMode,
   ExtensionDebugSessionMatchBasis,
   ExtensionDebugSessionEventInput,
   ExtensionDebugSessionStoredEvent,
-} from './extension-debug.js';
+} from './extension-debug';
 export type {
   ExtensionProductTelemetryEventType,
   ExtensionTelemetryKnowledgeMode,
@@ -52,34 +52,33 @@ export type {
   ExtensionTelemetryJson,
   ExtensionProductTelemetryEventInput,
   ExtensionProductTelemetryStoredEvent,
-} from './extension-telemetry.js';
+} from './extension-telemetry';
 export {
   EXTENSION_PRODUCT_TELEMETRY_EVENT_TYPES,
   findUnsafeTelemetryField,
   isExtensionProductTelemetryEventType,
   isUnsafeTelemetryFieldName,
   sanitizeExtensionProductTelemetryEvent,
-} from './extension-telemetry.js';
+} from './extension-telemetry';
 export {
   buildContextSemanticFingerprint,
   buildKnowledgeResolvedFor,
   knowledgeResolvedForContextMatches,
   knowledgeResolvedForEquals,
   sanitizePageContextLocation,
-} from './context-telemetry.js';
-export type { SanitizedPageContextLocation } from './context-telemetry.js';
+} from './context-telemetry';
+export type { SanitizedPageContextLocation } from './context-telemetry';
 export {
   PAGE_CONTEXT_SANITIZER_LIMITS,
   redactSensitiveText,
-  sanitizePageContextLocator,
   sanitizePageContextForModel,
   sanitizePageContextForNetwork,
   sanitizePageContextSelector,
   sanitizePageContextText,
   sanitizePageContextUrl,
-} from './page-context-sanitizer.js';
+} from './page-context-sanitizer';
 
-export type { SessionState, AuthMessage } from './auth.js';
+export type { SessionState, AuthMessage } from './auth';
 
 export type {
   OverlayAction,
@@ -89,11 +88,11 @@ export type {
   OverlayHighlightMessage,
   OverlayPulseMessage,
   OverlayClearMessage,
-} from './overlay.js';
+} from './overlay';
 
 // TRIB-25 — STT types and hotkey defaults
-export type { SttStatus, SttState, SttMessage, HotkeyConfig } from './stt.js';
-export { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_WIN } from './stt.js';
+export type { SttStatus, SttState, SttMessage, HotkeyConfig } from './stt';
+export { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_WIN } from './stt';
 
 // TRIB-26 — TTS types and ElevenLabs voice config
 export type {
@@ -101,8 +100,35 @@ export type {
   TtsState,
   TtsMessage,
   ElevenLabsVoiceConfig,
-} from './tts.js';
-export { DEFAULT_VOICE_CONFIG } from './tts.js';
+} from './tts';
+export { DEFAULT_VOICE_CONFIG } from './tts';
+
+export type {
+  ExtensionVoiceRuntime,
+  OpenAIRealtimeReasoningEffort,
+  OpenAIRealtimeToolName,
+  OpenAIRealtimeToolCall,
+  OpenAIRealtimeFunctionTool,
+  ElevenLabsVoiceSessionPayload,
+  OpenAIRealtimeVoiceSessionPayload,
+  ExtensionVoiceSessionPayload,
+} from './voice-runtime';
+export {
+  EXTENSION_VOICE_RUNTIMES,
+  DEFAULT_EXTENSION_VOICE_RUNTIME,
+  DEFAULT_OPENAI_REALTIME_MODEL,
+  DEFAULT_OPENAI_REALTIME_VOICE,
+  DEFAULT_OPENAI_REALTIME_REASONING_EFFORT,
+  parseExtensionVoiceRuntime,
+  normalizeExtensionVoiceRuntime,
+  normalizeOpenAIRealtimeReasoningEffort,
+  buildTriboraVoiceAgentInstructions,
+  buildOpenAIRealtimeToolDefinitions,
+  buildOpenAIRealtimeSessionConfig,
+  extractOpenAIRealtimeToolCalls,
+  buildOpenAIRealtimeFunctionOutputEvent,
+  buildOpenAIRealtimeContextUpdateEvent,
+} from './voice-runtime';
 
 // TRIB-48 — Recording types
 export type {
@@ -110,4 +136,4 @@ export type {
   RecordingState,
   RecordingMessage,
   RecordingUploadInit,
-} from './recording.js';
+} from './recording';

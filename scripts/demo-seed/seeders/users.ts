@@ -25,7 +25,11 @@
 
 import type { PoolClient } from 'pg';
 
-import { DEMO_DEPARTMENT_IDS, DEMO_USERS, SEED_CREATED_AT } from '../fixtures.js';
+import {
+  DEMO_DEPARTMENT_IDS,
+  DEMO_USERS,
+  SEED_CREATED_AT,
+} from '../fixtures.js';
 
 import type { DepartmentMap } from './departments.js';
 
@@ -38,24 +42,29 @@ const SLUG_TO_DEPT_ID: Record<string, string> = {
 
 export async function seedUsers(
   client: PoolClient,
-  opts: { dryRun: boolean; forceReseed: boolean; departmentMap: DepartmentMap }
+  opts: { dryRun: boolean; forceReseed: boolean; departmentMap: DepartmentMap },
 ): Promise<void> {
   const now = new Date().toISOString();
 
-  for (const user of DEMO_USERS) {
-    const deptSlug = user.departmentSlug === 'supportOps' ? 'support-ops' : user.departmentSlug;
-    const departmentId = SLUG_TO_DEPT_ID[deptSlug] ?? opts.departmentMap[deptSlug];
+  await Promise.all(
+    DEMO_USERS.map(async (user) => {
+      const deptSlug =
+        user.departmentSlug === 'supportOps'
+          ? 'support-ops'
+          : user.departmentSlug;
+      const departmentId =
+        SLUG_TO_DEPT_ID[deptSlug] ?? opts.departmentMap[deptSlug];
 
-    if (opts.dryRun) {
-      console.log(
-        `[dry-run] Would upsert user: ${user.name} <${user.email}> role=${user.role} dept=${deptSlug}`
-      );
-      continue;
-    }
+      if (opts.dryRun) {
+        console.log(
+          `[dry-run] Would upsert user: ${user.name} <${user.email}> role=${user.role} dept=${deptSlug}`,
+        );
+        return;
+      }
 
-    // 1. Better Auth "user" table.
-    await client.query(
-      `INSERT INTO "user" (id, name, email, "emailVerified", image, phone, "createdAt", "updatedAt")
+      // 1. Better Auth "user" table.
+      await client.query(
+        `INSERT INTO "user" (id, name, email, "emailVerified", image, phone, "createdAt", "updatedAt")
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (id) DO UPDATE SET
          name           = EXCLUDED.name,
@@ -64,22 +73,31 @@ export async function seedUsers(
          image          = EXCLUDED.image,
          phone          = EXCLUDED.phone,
          "updatedAt"    = EXCLUDED."updatedAt"`,
-      [user.id, user.name, user.email, true, null, null, SEED_CREATED_AT, now]
-    );
+        [
+          user.id,
+          user.name,
+          user.email,
+          true,
+          null,
+          null,
+          SEED_CREATED_AT,
+          now,
+        ],
+      );
 
-    // 2. Better Auth "account" table (credential, no password → magic-link).
-    await client.query(
-      `INSERT INTO "account" (id, "userId", "accountId", "providerId", "createdAt", "updatedAt")
+      // 2. Better Auth "account" table (credential, no password → magic-link).
+      await client.query(
+        `INSERT INTO "account" (id, "userId", "accountId", "providerId", "createdAt", "updatedAt")
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (id) DO UPDATE SET
          "updatedAt" = EXCLUDED."updatedAt"`,
-      [user.accountId, user.id, user.id, 'credential', SEED_CREATED_AT, now]
-    );
+        [user.accountId, user.id, user.id, 'credential', SEED_CREATED_AT, now],
+      );
 
-    // 3. Supabase app users table.
-    if (opts.forceReseed) {
-      await client.query(
-        `INSERT INTO users (
+      // 3. Supabase app users table.
+      if (opts.forceReseed) {
+        await client.query(
+          `INSERT INTO users (
            id, email, name, org_id, role, title, department_id, timezone, status,
            email_verified, onboarded_at, created_at, updated_at,
            last_login_at, last_active_at, login_count
@@ -98,33 +116,33 @@ export async function seedUsers(
            last_active_at = NULL,
            login_count    = 0,
            updated_at     = EXCLUDED.updated_at`,
-        [
-          user.id,
-          user.email,
-          user.name,
-          DEMO_USERS[0].id, // placeholder; org_id set by fixtures
-          user.role,
-          user.title,
-          departmentId,
-          'America/New_York',
-          'active',
-          true,
-          SEED_CREATED_AT,
-          SEED_CREATED_AT,
-          now,
-        ]
-      );
+          [
+            user.id,
+            user.email,
+            user.name,
+            DEMO_USERS[0].id, // placeholder; org_id set by fixtures
+            user.role,
+            user.title,
+            departmentId,
+            'America/New_York',
+            'active',
+            true,
+            SEED_CREATED_AT,
+            SEED_CREATED_AT,
+            now,
+          ],
+        );
 
-      // Set org_id correctly (the insert above used a placeholder).
-      await client.query(
-        `UPDATE users SET org_id = (
+        // Set org_id correctly (the insert above used a placeholder).
+        await client.query(
+          `UPDATE users SET org_id = (
            SELECT id FROM organizations WHERE slug = 'acme-support-demo' LIMIT 1
          ) WHERE id = $1`,
-        [user.id]
-      );
-    } else {
-      await client.query(
-        `INSERT INTO users (
+          [user.id],
+        );
+      } else {
+        await client.query(
+          `INSERT INTO users (
            id, email, name, org_id, role, title, department_id, timezone, status,
            email_verified, onboarded_at, created_at, updated_at
          )
@@ -141,23 +159,26 @@ export async function seedUsers(
            email_verified = EXCLUDED.email_verified,
            onboarded_at   = EXCLUDED.onboarded_at,
            updated_at     = EXCLUDED.updated_at`,
-        [
-          user.id,
-          user.email,
-          user.name,
-          user.role,
-          user.title,
-          departmentId,
-          'America/New_York',
-          'active',
-          true,
-          SEED_CREATED_AT,
-          SEED_CREATED_AT,
-          now,
-        ]
-      );
-    }
+          [
+            user.id,
+            user.email,
+            user.name,
+            user.role,
+            user.title,
+            departmentId,
+            'America/New_York',
+            'active',
+            true,
+            SEED_CREATED_AT,
+            SEED_CREATED_AT,
+            now,
+          ],
+        );
+      }
 
-    console.log(`[seed] user upserted: ${user.name} <${user.email}> (${user.id})`);
-  }
+      console.log(
+        `[seed] user upserted: ${user.name} <${user.email}> (${user.id})`,
+      );
+    }),
+  );
 }

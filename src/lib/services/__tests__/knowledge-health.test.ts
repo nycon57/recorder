@@ -1,5 +1,9 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { expect, test } from '@jest/globals';
+
+const assert = {
+  deepEqual: (actual: unknown, expected: unknown) => expect(actual).toEqual(expected),
+  equal: (actual: unknown, expected: unknown) => expect(actual).toBe(expected),
+};
 
 import {
   deriveKnowledgeOperationalMetrics,

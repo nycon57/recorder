@@ -7,7 +7,13 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { apiHandler, requireOrg, successResponse, parseBody, errors } from '@/lib/utils/api';
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  parseBody,
+  errors,
+} from '@/lib/utils/api';
 import { searchRecording } from '@/lib/services/vector-search-google';
 import { createClient } from '@/lib/supabase/server';
 
@@ -25,12 +31,15 @@ type SearchBody = z.infer<typeof searchSchema>;
  * Search within a specific recording
  */
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const { id: recordingId } = await params;
-
-    // Verify recording exists and belongs to org
-    const supabase = await createClient();
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId }, { id: recordingId }, supabase] = await Promise.all([
+      requireOrg(),
+      params,
+      createClient(),
+    ]);
     const { data: recording, error: recordingError } = await supabase
       .from('content')
       .select('id, title, status')
@@ -44,7 +53,8 @@ export const POST = apiHandler(
 
     if (recording.status !== 'completed') {
       return errors.badRequest(
-        'Recording must be completed before searching. Current status: ' + recording.status
+        'Recording must be completed before searching. Current status: ' +
+          recording.status,
       );
     }
 
@@ -65,5 +75,5 @@ export const POST = apiHandler(
       results,
       count: results.length,
     });
-  }
+  },
 );

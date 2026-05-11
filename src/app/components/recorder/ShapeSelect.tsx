@@ -15,7 +15,7 @@ export function ShapeSelect() {
       onClick={() => setCameraShape(cameraShape === 'circle' ? 'square' : 'circle')}
       aria-label={`Camera shape: ${cameraShape}`}
       title={`Camera shape: ${cameraShape}`}
-      className="h-9 w-9"
+      className="size-9"
     >
       {cameraShape === 'circle' ? (
         <Circle className="size-4" />

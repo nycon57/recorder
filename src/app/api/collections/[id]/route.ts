@@ -37,9 +37,14 @@ interface CollectionRow {
  * GET /api/collections/[id] - Get a single collection
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const { id: collectionId } = await params;
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId }, { id: collectionId }] = await Promise.all([
+      requireOrg(),
+      params,
+    ]);
 
     const { data: collection, error } = await supabaseAdmin
       .from('collections')
@@ -53,17 +58,16 @@ export const GET = apiHandler(
       return errors.notFound('Collection', undefined);
     }
 
-    // Get item count
     const { count: itemCount } = await supabaseAdmin
       .from('collection_items')
       .select('*', { count: 'exact', head: true })
-      .eq('collection_id', collectionId);
+      .eq('collection_id', collection.id);
 
     return successResponse({
       ...collection,
       item_count: itemCount || 0,
     });
-  }
+  },
 );
 
 /**
@@ -78,12 +82,23 @@ export const GET = apiHandler(
  * - visibility: Visibility level (optional)
  */
 export const PATCH = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId, userId } = await requireOrg();
-    const body = await parseBody<UpdateCollectionInput>(request, updateCollectionSchema);
-    const { id: collectionId } = await params;
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId, userId }, body, { id: collectionId }] = await Promise.all([
+      requireOrg(),
+      parseBody<UpdateCollectionInput>(request, updateCollectionSchema),
+      params,
+    ]);
 
-    // Verify collection exists and belongs to this org
+    if (body.parent_id !== undefined && body.parent_id !== null) {
+      // Prevent making a collection its own parent
+      if (body.parent_id === collectionId) {
+        return errors.badRequest('Collection cannot be its own parent');
+      }
+    }
+
     const { data: existing, error: fetchError } = await supabaseAdmin
       .from('collections')
       .select('id, name')
@@ -98,17 +113,12 @@ export const PATCH = apiHandler(
 
     // If parent_id is being updated, verify it exists and prevent circular references
     if (body.parent_id !== undefined && body.parent_id !== null) {
-      // Prevent making a collection its own parent
-      if (body.parent_id === collectionId) {
-        return errors.badRequest('Collection cannot be its own parent');
-      }
-
-      // Verify parent exists
       const { data: parent, error: parentError } = await supabaseAdmin
         .from('collections')
         .select('id')
         .eq('id', body.parent_id)
         .eq('org_id', orgId)
+        .neq('id', existing.id)
         .is('deleted_at', null)
         .single();
 
@@ -117,42 +127,42 @@ export const PATCH = apiHandler(
       }
 
       // Check for circular references by traversing up the parent chain
-      const checkCircularReference = async (parentId: string): Promise<boolean> => {
-        const visited = new Set<string>();
-        let currentId: string | null = parentId;
-
-        while (currentId) {
-          // If we encounter the collection we're editing, it's a circular reference
-          if (currentId === collectionId) {
-            return true;
-          }
-          // Prevent infinite loops in case of existing bad data
-          if (visited.has(currentId)) {
-            break;
-          }
-          visited.add(currentId);
-
-          const parentResult = await supabaseAdmin
-            .from('collections')
-            .select('parent_id')
-            .eq('id', currentId)
-            .eq('org_id', orgId)
-            .is('deleted_at', null)
-            .single();
-
-          const parentCollection =
-            parentResult.data as CollectionParentRow | null;
-
-          currentId = parentCollection?.parent_id || null;
+      const checkCircularReference = async (
+        parentId: string,
+        visited = new Set<string>(),
+      ): Promise<boolean> => {
+        // If we encounter the collection we're editing, it's a circular reference
+        if (parentId === collectionId) {
+          return true;
         }
+        // Prevent infinite loops in case of existing bad data
+        if (visited.has(parentId)) {
+          return false;
+        }
+        visited.add(parentId);
 
-        return false;
+        const parentResult = await supabaseAdmin
+          .from('collections')
+          .select('parent_id')
+          .eq('id', parentId)
+          .eq('org_id', orgId)
+          .is('deleted_at', null)
+          .single();
+
+        const parentCollection =
+          parentResult.data as CollectionParentRow | null;
+
+        const nextParentId = parentCollection?.parent_id || null;
+
+        return nextParentId
+          ? checkCircularReference(nextParentId, visited)
+          : false;
       };
 
       const hasCircularRef = await checkCircularReference(body.parent_id);
       if (hasCircularRef) {
         return errors.badRequest(
-          'Cannot set this parent: it would create a circular reference'
+          'Cannot set this parent: it would create a circular reference',
         );
       }
     }
@@ -163,7 +173,8 @@ export const PATCH = apiHandler(
     };
 
     if (body.name !== undefined) updateData.name = body.name.trim();
-    if (body.description !== undefined) updateData.description = body.description;
+    if (body.description !== undefined)
+      updateData.description = body.description;
     if (body.parent_id !== undefined) updateData.parent_id = body.parent_id;
     if (body.color !== undefined) updateData.color = body.color;
     if (body.icon !== undefined) updateData.icon = body.icon;
@@ -177,7 +188,10 @@ export const PATCH = apiHandler(
       .single();
 
     if (updateError) {
-      console.error('[PATCH /api/collections/[id]] Error updating collection:', updateError);
+      console.error(
+        '[PATCH /api/collections/[id]] Error updating collection:',
+        updateError,
+      );
       throw new Error('Failed to update collection');
     }
 
@@ -194,7 +208,7 @@ export const PATCH = apiHandler(
     });
 
     return successResponse(updated);
-  }
+  },
 );
 
 /**
@@ -204,11 +218,15 @@ export const PATCH = apiHandler(
  * Child collections can be optionally handled (future enhancement).
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId, userId } = await requireOrg();
-    const { id: collectionId } = await params;
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId, userId }, { id: collectionId }] = await Promise.all([
+      requireOrg(),
+      params,
+    ]);
 
-    // Verify collection exists and belongs to this org
     const { data: existing, error: fetchError } = await supabaseAdmin
       .from('collections')
       .select('id, name')
@@ -221,16 +239,15 @@ export const DELETE = apiHandler(
       return errors.notFound('Collection', undefined);
     }
 
-    // Check if collection has children
     const { count: childCount } = await supabaseAdmin
       .from('collections')
       .select('*', { count: 'exact', head: true })
-      .eq('parent_id', collectionId)
+      .eq('parent_id', existing.id)
       .is('deleted_at', null);
 
     if (childCount && childCount > 0) {
       return errors.badRequest(
-        'Cannot delete collection with child collections. Please delete or move child collections first.'
+        'Cannot delete collection with child collections. Please delete or move child collections first.',
       );
     }
 
@@ -244,7 +261,10 @@ export const DELETE = apiHandler(
       .eq('id', collectionId);
 
     if (deleteError) {
-      console.error('[DELETE /api/collections/[id]] Error deleting collection:', deleteError);
+      console.error(
+        '[DELETE /api/collections/[id]] Error deleting collection:',
+        deleteError,
+      );
       throw new Error('Failed to delete collection');
     }
 
@@ -265,5 +285,5 @@ export const DELETE = apiHandler(
     });
 
     return successResponse({ deleted: true });
-  }
+  },
 );

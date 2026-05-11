@@ -38,7 +38,8 @@ export const CURATOR_SCHEDULE_INTERVAL_MS =
  * Defaults to weekly; override with GAP_ANALYSIS_SCHEDULE_INTERVAL_MS (ms).
  */
 export const GAP_ANALYSIS_SCHEDULE_INTERVAL_MS =
-  parseInt(process.env.GAP_ANALYSIS_SCHEDULE_INTERVAL_MS ?? '', 10) || MS_PER_WEEK;
+  parseInt(process.env.GAP_ANALYSIS_SCHEDULE_INTERVAL_MS ?? '', 10) ||
+  MS_PER_WEEK;
 
 /** UTC calendar date string (YYYY-MM-DD) used in per-day dedupe keys. */
 function todayUTC(): string {
@@ -51,13 +52,17 @@ function todayUTC(): string {
  */
 function isoWeekString(date: Date): string {
   // Work in UTC to avoid timezone drift.
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const d = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
   // ISO weeks start on Monday; adjust so Sunday = 7.
   const day = d.getUTCDay() || 7;
   // Move to Thursday of this week (ISO week number is defined by its Thursday).
   d.setUTCDate(d.getUTCDate() + 4 - day);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((d.getTime() - yearStart.getTime()) / MS_PER_DAY + 1) / 7);
+  const weekNum = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / MS_PER_DAY + 1) / 7,
+  );
   return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
 }
 
@@ -79,7 +84,10 @@ export async function scheduleCurateKnowledgeJobs(): Promise<void> {
     .eq('global_agent_enabled', true);
 
   if (error) {
-    console.error('[CuratorScheduler] Failed to fetch enabled orgs:', error.message);
+    console.error(
+      '[CuratorScheduler] Failed to fetch enabled orgs:',
+      error.message,
+    );
     return;
   }
 
@@ -89,33 +97,28 @@ export async function scheduleCurateKnowledgeJobs(): Promise<void> {
   }
 
   console.log(
-    `[CuratorScheduler] Scheduling curate_knowledge for ${enabledOrgs.length} org(s) on ${dateString}...`
+    `[CuratorScheduler] Scheduling curate_knowledge for ${enabledOrgs.length} org(s) on ${dateString}...`,
   );
 
-  let created = 0;
-  let skipped = 0;
+  const results = await Promise.all(
+    enabledOrgs.map(async ({ org_id: orgId }) => {
+      const dedupeKey = `curate_knowledge:${orgId}:${dateString}`;
 
-  for (const { org_id: orgId } of enabledOrgs) {
-    const dedupeKey = `curate_knowledge:${orgId}:${dateString}`;
+      // Skip if a job already exists for this org today (pending, processing, or completed).
+      // This prevents double-scheduling when the check fires more than once per day.
+      const { data: existing } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('dedupe_key', dedupeKey)
+        .in('status', ['pending', 'processing', 'completed'])
+        .limit(1)
+        .maybeSingle();
 
-    // Skip if a job already exists for this org today (pending, processing, or completed).
-    // This prevents double-scheduling when the check fires more than once per day.
-    const { data: existing } = await supabase
-      .from('jobs')
-      .select('id')
-      .eq('dedupe_key', dedupeKey)
-      .in('status', ['pending', 'processing', 'completed'])
-      .limit(1)
-      .maybeSingle();
+      if (existing) {
+        return { created: 0, skipped: 1 };
+      }
 
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
-    const { error: insertError } = await supabase
-      .from('jobs')
-      .insert({
+      const { error: insertError } = await supabase.from('jobs').insert({
         type: 'curate_knowledge',
         payload: { orgId },
         dedupe_key: dedupeKey,
@@ -123,18 +126,26 @@ export async function scheduleCurateKnowledgeJobs(): Promise<void> {
         priority: 3, // Low priority — maintenance job
       });
 
-    if (insertError) {
-      console.error(
-        `[CuratorScheduler] Failed to create job for org ${orgId}:`,
-        insertError.message
-      );
-    } else {
-      created++;
-      console.log(`[CuratorScheduler] Created curate_knowledge job for org ${orgId}`);
-    }
-  }
+      if (insertError) {
+        console.error(
+          `[CuratorScheduler] Failed to create job for org ${orgId}:`,
+          insertError.message,
+        );
+        return { created: 0, skipped: 0 };
+      } else {
+        console.log(
+          `[CuratorScheduler] Created curate_knowledge job for org ${orgId}`,
+        );
+        return { created: 1, skipped: 0 };
+      }
+    }),
+  );
+  const created = results.reduce((total, result) => total + result.created, 0);
+  const skipped = results.reduce((total, result) => total + result.skipped, 0);
 
-  console.log(`[CuratorScheduler] Done — created: ${created}, skipped: ${skipped}`);
+  console.log(
+    `[CuratorScheduler] Done — created: ${created}, skipped: ${skipped}`,
+  );
 }
 
 /**
@@ -154,7 +165,10 @@ export async function scheduleAnalyzeKnowledgeGapsJobs(): Promise<void> {
     .eq('global_agent_enabled', true);
 
   if (error) {
-    console.error('[GapScheduler] Failed to fetch enabled orgs:', error.message);
+    console.error(
+      '[GapScheduler] Failed to fetch enabled orgs:',
+      error.message,
+    );
     return;
   }
 
@@ -164,32 +178,27 @@ export async function scheduleAnalyzeKnowledgeGapsJobs(): Promise<void> {
   }
 
   console.log(
-    `[GapScheduler] Scheduling analyze_knowledge_gaps for ${enabledOrgs.length} org(s) on ${weekString}...`
+    `[GapScheduler] Scheduling analyze_knowledge_gaps for ${enabledOrgs.length} org(s) on ${weekString}...`,
   );
 
-  let created = 0;
-  let skipped = 0;
+  const results = await Promise.all(
+    enabledOrgs.map(async ({ org_id: orgId }) => {
+      const dedupeKey = `analyze_knowledge_gaps:${orgId}:${weekString}`;
 
-  for (const { org_id: orgId } of enabledOrgs) {
-    const dedupeKey = `analyze_knowledge_gaps:${orgId}:${weekString}`;
+      // Skip if a job already exists for this org this week (pending, processing, or completed).
+      const { data: existing } = await supabase
+        .from('jobs')
+        .select('id')
+        .eq('dedupe_key', dedupeKey)
+        .in('status', ['pending', 'processing', 'completed'])
+        .limit(1)
+        .maybeSingle();
 
-    // Skip if a job already exists for this org this week (pending, processing, or completed).
-    const { data: existing } = await supabase
-      .from('jobs')
-      .select('id')
-      .eq('dedupe_key', dedupeKey)
-      .in('status', ['pending', 'processing', 'completed'])
-      .limit(1)
-      .maybeSingle();
+      if (existing) {
+        return { created: 0, skipped: 1 };
+      }
 
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
-    const { error: insertError } = await supabase
-      .from('jobs')
-      .insert({
+      const { error: insertError } = await supabase.from('jobs').insert({
         type: 'analyze_knowledge_gaps',
         payload: { orgId },
         dedupe_key: dedupeKey,
@@ -197,16 +206,22 @@ export async function scheduleAnalyzeKnowledgeGapsJobs(): Promise<void> {
         priority: 3, // Low priority — maintenance job
       });
 
-    if (insertError) {
-      console.error(
-        `[GapScheduler] Failed to create job for org ${orgId}:`,
-        insertError.message
-      );
-    } else {
-      created++;
-      console.log(`[GapScheduler] Created analyze_knowledge_gaps job for org ${orgId}`);
-    }
-  }
+      if (insertError) {
+        console.error(
+          `[GapScheduler] Failed to create job for org ${orgId}:`,
+          insertError.message,
+        );
+        return { created: 0, skipped: 0 };
+      } else {
+        console.log(
+          `[GapScheduler] Created analyze_knowledge_gaps job for org ${orgId}`,
+        );
+        return { created: 1, skipped: 0 };
+      }
+    }),
+  );
+  const created = results.reduce((total, result) => total + result.created, 0);
+  const skipped = results.reduce((total, result) => total + result.skipped, 0);
 
   console.log(`[GapScheduler] Done — created: ${created}, skipped: ${skipped}`);
 }

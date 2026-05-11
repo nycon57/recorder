@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 
 import { cn } from '@/lib/utils/cn';
 
@@ -36,23 +36,35 @@ interface ContentTabsContextValue {
   registerTab: (value: string, rect: DOMRect) => void;
 }
 
-const ContentTabsContext = React.createContext<ContentTabsContextValue | null>(null);
+const ContentTabsContext = React.createContext<ContentTabsContextValue | null>(
+  null,
+);
 
 function useContentTabsContext() {
-  const context = React.useContext(ContentTabsContext);
+  const context = React.use(ContentTabsContext);
   if (!context) {
     throw new Error('ContentTabs components must be used within ContentTabs');
   }
   return context;
 }
 
-interface ContentTabsProps extends React.ComponentProps<typeof TabsPrimitive.Root> {
+interface ContentTabsProps
+  extends React.ComponentProps<typeof TabsPrimitive.Root> {
   children: React.ReactNode;
 }
 
-function ContentTabs({ className, defaultValue, value, onValueChange, children, ...props }: ContentTabsProps) {
+function ContentTabs({
+  className,
+  defaultValue,
+  value,
+  onValueChange,
+  children,
+  ...props
+}: ContentTabsProps) {
   const [activeTab, setActiveTab] = React.useState(value || defaultValue || '');
-  const [tabRects, setTabRects] = React.useState<Map<string, DOMRect>>(new Map());
+  const [tabRects, setTabRects] = React.useState<Map<string, DOMRect>>(
+    new Map(),
+  );
 
   const handleValueChange = (newValue: string) => {
     setActiveTab(newValue);
@@ -90,14 +102,22 @@ function ContentTabs({ className, defaultValue, value, onValueChange, children, 
   );
 }
 
-interface ContentTabsListProps extends React.ComponentProps<typeof TabsPrimitive.List> {
+interface ContentTabsListProps
+  extends React.ComponentProps<typeof TabsPrimitive.List> {
   children: React.ReactNode;
 }
 
-function ContentTabsList({ className, children, ...props }: ContentTabsListProps) {
+function ContentTabsList({
+  className,
+  children,
+  ...props
+}: ContentTabsListProps) {
   const { activeTab, tabRects } = useContentTabsContext();
   const listRef = React.useRef<HTMLDivElement>(null);
-  const [indicatorStyle, setIndicatorStyle] = React.useState({ left: 0, width: 0 });
+  const [indicatorStyle, setIndicatorStyle] = React.useState({
+    left: 0,
+    width: 0,
+  });
 
   // Calculate indicator position based on active tab
   React.useEffect(() => {
@@ -118,14 +138,14 @@ function ContentTabsList({ className, children, ...props }: ContentTabsListProps
       data-slot="content-tabs-list"
       className={cn(
         'relative inline-flex w-full items-center border-b border-border/50',
-        className
+        className,
       )}
       {...props}
     >
       {children}
 
       {/* Animated underline indicator */}
-      <motion.div
+      <m.div
         className="absolute bottom-0 h-[2px] bg-accent"
         initial={false}
         animate={{
@@ -142,12 +162,19 @@ function ContentTabsList({ className, children, ...props }: ContentTabsListProps
   );
 }
 
-interface ContentTabsTriggerProps extends React.ComponentProps<typeof TabsPrimitive.Trigger> {
+interface ContentTabsTriggerProps
+  extends React.ComponentProps<typeof TabsPrimitive.Trigger> {
   icon?: React.ReactNode;
   children: React.ReactNode;
 }
 
-function ContentTabsTrigger({ className, icon, children, value, ...props }: ContentTabsTriggerProps) {
+function ContentTabsTrigger({
+  className,
+  icon,
+  children,
+  value,
+  ...props
+}: ContentTabsTriggerProps) {
   const { activeTab, registerTab } = useContentTabsContext();
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const isActive = activeTab === value;
@@ -184,7 +211,7 @@ function ContentTabsTrigger({ className, icon, children, value, ...props }: Cont
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-t-md',
         // Disabled
         'disabled:pointer-events-none disabled:opacity-40',
-        className
+        className,
       )}
       {...props}
     >
@@ -193,7 +220,7 @@ function ContentTabsTrigger({ className, icon, children, value, ...props }: Cont
         <span
           className={cn(
             'transition-colors duration-200',
-            isActive && 'text-accent'
+            isActive && 'text-accent',
           )}
         >
           {icon}
@@ -206,11 +233,16 @@ function ContentTabsTrigger({ className, icon, children, value, ...props }: Cont
   );
 }
 
-interface ContentTabsContentProps extends React.ComponentProps<typeof TabsPrimitive.Content> {
+interface ContentTabsContentProps
+  extends React.ComponentProps<typeof TabsPrimitive.Content> {
   children: React.ReactNode;
 }
 
-function ContentTabsContent({ className, children, ...props }: ContentTabsContentProps) {
+function ContentTabsContent({
+  className,
+  children,
+  ...props
+}: ContentTabsContentProps) {
   return (
     <TabsPrimitive.Content
       data-slot="content-tabs-content"
@@ -220,7 +252,7 @@ function ContentTabsContent({ className, children, ...props }: ContentTabsConten
         'data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:slide-in-from-bottom-2',
         'data-[state=inactive]:animate-out data-[state=inactive]:fade-out-0',
         'duration-200',
-        className
+        className,
       )}
       {...props}
     >

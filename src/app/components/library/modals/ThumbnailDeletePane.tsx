@@ -41,7 +41,7 @@ export function ThumbnailDeletePane({
   return (
     <div className="p-6 space-y-6">
       <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
-        <AlertCircle className="h-4 w-4" />
+        <AlertCircle className="size-4" />
         <AlertTitle className="font-semibold">Delete Thumbnail?</AlertTitle>
         <AlertDescription className="mt-2 text-sm">
           This will permanently remove the thumbnail from this content.
@@ -64,12 +64,12 @@ export function ThumbnailDeletePane({
         >
           {isDeleting ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Deleting...
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Deleting…
             </>
           ) : (
             <>
-              <Trash2 className="mr-2 h-4 w-4" />
+              <Trash2 className="mr-2 size-4" />
               Delete Thumbnail
             </>
           )}
@@ -78,5 +78,3 @@ export function ThumbnailDeletePane({
     </div>
   );
 }
-
-export default ThumbnailDeletePane;

@@ -13,6 +13,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
+
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import { createLogger } from '@/lib/utils/logger';
 import { GOOGLE_CONFIG } from '@/lib/google/client';
@@ -59,7 +60,7 @@ export interface StoredConcept {
 }
 
 // Concept mention with content link
-export interface ConceptMention {
+interface ConceptMention {
   conceptId: string;
   contentId: string;
   chunkId?: string;
@@ -103,7 +104,7 @@ function getGenAIClient(): GoogleGenAI {
  * - Remove extra whitespace
  * - Basic stemming/normalization
  */
-export function normalizeConcept(name: string): string {
+function normalizeConcept(name: string): string {
   return name
     .toLowerCase()
     .trim()
@@ -116,9 +117,9 @@ export function normalizeConcept(name: string): string {
 /**
  * Extract concepts from text using Gemini AI
  */
-export async function extractConceptsFromText(
+async function extractConceptsFromText(
   text: string,
-  options: ExtractionOptions = {}
+  options: ExtractionOptions = {},
 ): Promise<ExtractedConcept[]> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const genai = getGenAIClient();
@@ -201,7 +202,10 @@ ${text.substring(0, 15000)}
       logger.warn('Failed to parse concept extraction response', {
         context: {
           responsePreview: responseText.substring(0, 500),
-          error: parseError instanceof Error ? parseError.message : String(parseError),
+          error:
+            parseError instanceof Error
+              ? parseError.message
+              : String(parseError),
         },
       });
       return [];
@@ -209,32 +213,40 @@ ${text.substring(0, 15000)}
 
     // Validate and transform concepts
     const validConcepts: ExtractedConcept[] = concepts
-      .filter((c: any) => {
-        return (
-          c.name &&
-          typeof c.name === 'string' &&
-          c.confidence >= (opts.minConfidence || 0) &&
-          c.type
-        );
+      .flatMap((c: any) => {
+        if (
+          !c.name ||
+          typeof c.name !== 'string' ||
+          c.confidence < (opts.minConfidence || 0) ||
+          !c.type
+        ) {
+          return [];
+        }
+
+        return [
+          {
+            name: c.name.trim(),
+            normalizedName: normalizeConcept(c.name),
+            type: validateConceptType(c.type),
+            description: c.description?.trim(),
+            confidence: Math.min(1, Math.max(0, c.confidence)),
+            context: c.context?.trim() || '',
+            timestampSec: c.timestamp_sec,
+          },
+        ];
       })
-      .map((c: any) => ({
-        name: c.name.trim(),
-        normalizedName: normalizeConcept(c.name),
-        type: validateConceptType(c.type),
-        description: c.description?.trim(),
-        confidence: Math.min(1, Math.max(0, c.confidence)),
-        context: c.context?.trim() || '',
-        timestampSec: c.timestamp_sec,
-      }))
       .slice(0, opts.maxConcepts);
 
     logger.info('Extracted concepts from text', {
       context: {
         conceptCount: validConcepts.length,
-        types: validConcepts.reduce((acc, c) => {
-          acc[c.type] = (acc[c.type] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>),
+        types: validConcepts.reduce(
+          (acc, c) => {
+            acc[c.type] = (acc[c.type] || 0) + 1;
+            return acc;
+          },
+          {} as Record<string, number>,
+        ),
       },
     });
 
@@ -275,7 +287,7 @@ function validateConceptType(type: string): ConceptType {
  */
 async function generateConceptEmbedding(
   name: string,
-  description?: string
+  description?: string,
 ): Promise<number[]> {
   const genai = getGenAIClient();
   const text = description ? `${name}: ${description}` : name;
@@ -314,7 +326,7 @@ async function generateConceptEmbedding(
   // Verify dimension matches expected (defense in depth)
   if (embedding.length !== GOOGLE_CONFIG.EMBEDDING_DIMENSIONS) {
     throw new Error(
-      `Embedding dimension mismatch: expected ${GOOGLE_CONFIG.EMBEDDING_DIMENSIONS}, got ${embedding.length}`
+      `Embedding dimension mismatch: expected ${GOOGLE_CONFIG.EMBEDDING_DIMENSIONS}, got ${embedding.length}`,
     );
   }
 
@@ -325,12 +337,16 @@ async function generateConceptEmbedding(
  * Store extracted concepts in the database
  * Uses upsert to handle duplicates gracefully
  */
-export async function storeConceptsForContent(
+async function storeConceptsForContent(
   contentId: string,
   orgId: string,
   concepts: ExtractedConcept[],
-  options: ExtractionOptions = {}
-): Promise<{ conceptIds: string[]; newConcepts: number; updatedConcepts: number }> {
+  options: ExtractionOptions = {},
+): Promise<{
+  conceptIds: string[];
+  newConcepts: number;
+  updatedConcepts: number;
+}> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const supabase = createAdminClient();
 
@@ -343,104 +359,123 @@ export async function storeConceptsForContent(
     },
   });
 
-  const conceptIds: string[] = [];
-  let newConcepts = 0;
-  let updatedConcepts = 0;
+  const storedConcepts = await Promise.all(
+    concepts.map(async (concept) => {
+      try {
+        // Generate embedding if requested
+        let embedding: number[] | null = null;
+        if (opts.generateEmbeddings) {
+          try {
+            embedding = await generateConceptEmbedding(
+              concept.name,
+              concept.description,
+            );
+          } catch (embError) {
+            logger.warn(
+              'Failed to generate concept embedding, continuing without',
+              {
+                context: {
+                  conceptName: concept.name,
+                  error:
+                    embError instanceof Error
+                      ? embError.message
+                      : String(embError),
+                },
+              },
+            );
+          }
+        }
 
-  for (const concept of concepts) {
-    try {
-      // Generate embedding if requested
-      let embedding: number[] | null = null;
-      if (opts.generateEmbeddings) {
-        try {
-          embedding = await generateConceptEmbedding(concept.name, concept.description);
-        } catch (embError) {
-          logger.warn('Failed to generate concept embedding, continuing without', {
+        // Upsert concept using the database function
+        const { data: conceptId, error: upsertError } = await supabase.rpc(
+          'upsert_concept',
+          {
+            p_org_id: orgId,
+            p_name: concept.name,
+            p_normalized_name: concept.normalizedName,
+            p_concept_type: concept.type,
+            p_description: concept.description || null,
+            p_embedding: embedding ? JSON.stringify(embedding) : null,
+          },
+        );
+
+        if (upsertError) {
+          logger.error('Failed to upsert concept', {
             context: {
               conceptName: concept.name,
-              error: embError instanceof Error ? embError.message : String(embError),
+              error: upsertError.message,
             },
           });
+          return null;
         }
-      }
 
-      // Upsert concept using the database function
-      const { data: conceptId, error: upsertError } = await supabase.rpc(
-        'upsert_concept',
-        {
-          p_org_id: orgId,
-          p_name: concept.name,
-          p_normalized_name: concept.normalizedName,
-          p_concept_type: concept.type,
-          p_description: concept.description || null,
-          p_embedding: embedding ? JSON.stringify(embedding) : null,
+        if (conceptId) {
+          // Check if this was a new concept or update
+          const { data: existingMention } = await supabase
+            .from('concept_mentions')
+            .select('id')
+            .eq('concept_id', conceptId)
+            .eq('content_id', contentId)
+            .maybeSingle();
+
+          // Create concept mention
+          const { error: mentionError } = await supabase
+            .from('concept_mentions')
+            .upsert(
+              {
+                concept_id: conceptId,
+                content_id: contentId,
+                org_id: orgId,
+                context: concept.context.substring(0, 500),
+                timestamp_sec: concept.timestampSec || null,
+                confidence: concept.confidence,
+              },
+              {
+                onConflict: 'concept_id,content_id',
+                ignoreDuplicates: false,
+              },
+            );
+
+          if (mentionError) {
+            logger.warn('Failed to create concept mention', {
+              context: {
+                conceptId,
+                contentId,
+                error: mentionError.message,
+              },
+            });
+          }
+
+          return {
+            conceptId,
+            newConcepts: existingMention ? 0 : 1,
+            updatedConcepts: existingMention ? 1 : 0,
+          };
         }
-      );
-
-      if (upsertError) {
-        logger.error('Failed to upsert concept', {
+      } catch (error) {
+        logger.error('Error processing concept', {
           context: {
             conceptName: concept.name,
-            error: upsertError.message,
+            error: error instanceof Error ? error.message : String(error),
           },
         });
-        continue;
       }
 
-      if (conceptId) {
-        conceptIds.push(conceptId);
+      return null;
+    }),
+  );
 
-        // Check if this was a new concept or update
-        const { data: existingMention } = await supabase
-          .from('concept_mentions')
-          .select('id')
-          .eq('concept_id', conceptId)
-          .eq('content_id', contentId)
-          .maybeSingle();
-
-        if (existingMention) {
-          updatedConcepts++;
-        } else {
-          newConcepts++;
-        }
-
-        // Create concept mention
-        const { error: mentionError } = await supabase
-          .from('concept_mentions')
-          .upsert(
-            {
-              concept_id: conceptId,
-              content_id: contentId,
-              org_id: orgId,
-              context: concept.context.substring(0, 500),
-              timestamp_sec: concept.timestampSec || null,
-              confidence: concept.confidence,
-            },
-            {
-              onConflict: 'concept_id,content_id',
-              ignoreDuplicates: false,
-            }
-          );
-
-        if (mentionError) {
-          logger.warn('Failed to create concept mention', {
-            context: {
-              conceptId,
-              contentId,
-              error: mentionError.message,
-            },
-          });
-        }
-      }
-    } catch (error) {
-      logger.error('Error processing concept', {
-        context: {
-          conceptName: concept.name,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    }
-  }
+  const conceptIds = storedConcepts.flatMap((result) =>
+    result ? [result.conceptId] : [],
+  );
+  const newConcepts = storedConcepts.reduce(
+    (total, result) => total + (result?.newConcepts ?? 0),
+    0,
+  );
+  const updatedConcepts = storedConcepts.reduce(
+    (total, result) => total + (result?.updatedConcepts ?? 0),
+    0,
+  );
 
   logger.info('Stored concepts for content', {
     context: {
@@ -462,7 +497,7 @@ export async function extractAndStoreConcepts(
   contentId: string,
   orgId: string,
   text: string,
-  options: ExtractionOptions = {}
+  options: ExtractionOptions = {},
 ): Promise<{
   success: boolean;
   conceptCount: number;
@@ -496,12 +531,8 @@ export async function extractAndStoreConcepts(
     }
 
     // Store concepts in database
-    const { conceptIds, newConcepts, updatedConcepts } = await storeConceptsForContent(
-      contentId,
-      orgId,
-      concepts,
-      options
-    );
+    const { conceptIds, newConcepts, updatedConcepts } =
+      await storeConceptsForContent(contentId, orgId, concepts, options);
 
     logger.info('Completed concept extraction pipeline', {
       context: {
@@ -542,7 +573,7 @@ export async function extractAndStoreConcepts(
  * Get concepts for a specific content item
  */
 export async function getConceptsForContent(
-  contentId: string
+  contentId: string,
 ): Promise<StoredConcept[]> {
   const supabase = createAdminClient();
 
@@ -584,7 +615,7 @@ export async function getConceptsForContent(
 export async function getTopConceptsForOrg(
   orgId: string,
   limit: number = 50,
-  conceptType?: ConceptType
+  conceptType?: ConceptType,
 ): Promise<StoredConcept[]> {
   const supabase = createAdminClient();
 
@@ -624,11 +655,11 @@ export async function getTopConceptsForOrg(
 /**
  * Find similar concepts by embedding
  */
-export async function findSimilarConcepts(
+async function findSimilarConcepts(
   orgId: string,
   text: string,
   limit: number = 10,
-  threshold: number = 0.7
+  threshold: number = 0.7,
 ): Promise<Array<StoredConcept & { similarity: number }>> {
   const supabase = createAdminClient();
 
@@ -641,7 +672,10 @@ export async function findSimilarConcepts(
       context: {
         orgId,
         textLength: text.length,
-        error: embeddingError instanceof Error ? embeddingError.message : String(embeddingError),
+        error:
+          embeddingError instanceof Error
+            ? embeddingError.message
+            : String(embeddingError),
       },
     });
     return [];
@@ -683,16 +717,18 @@ export async function findSimilarConcepts(
 /**
  * Get related concepts for a given concept
  */
-export async function getRelatedConcepts(
+async function getRelatedConcepts(
   conceptId: string,
-  limit: number = 20
-): Promise<Array<{
-  conceptId: string;
-  name: string;
-  type: ConceptType;
-  relationshipType: string;
-  strength: number;
-}>> {
+  limit: number = 20,
+): Promise<
+  Array<{
+    conceptId: string;
+    name: string;
+    type: ConceptType;
+    relationshipType: string;
+    strength: number;
+  }>
+> {
   const supabase = createAdminClient();
 
   const { data, error } = await supabase.rpc('get_related_concepts', {

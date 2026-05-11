@@ -32,7 +32,7 @@ export const runtime = 'nodejs';
 const createKeySchema = z.object({
   name: z.string().min(1).max(100),
   scopes: z
-    .array(z.enum(['query', 'context', 'tts']))
+    .array(z.enum(['query', 'record', 'admin']))
     .min(1)
     .optional()
     .default(['query']),

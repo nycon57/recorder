@@ -39,7 +39,7 @@ type PageRelevanceVectorContext = {
   questionEmbedding: number[];
 };
 
-export interface KnowledgeMatchCandidate {
+interface KnowledgeMatchCandidate {
   pageIds: string[];
   basis: Exclude<KnowledgeMatchBasis, 'none'>;
   confidence: number;
@@ -65,6 +65,7 @@ export interface ResolveExtensionContextMatchesResult {
 
 const BASIS_WEIGHT: Record<Exclude<KnowledgeMatchBasis, 'none'>, number> = {
   exact: 4,
+  app_signature: 3.5,
   screen_alias: 3,
   app_only: 2,
   domain_alias: 1,
@@ -85,7 +86,12 @@ const KNOWN_DOMAIN_ALIASES: Array<{ app: string; hostPattern: RegExp }> = [
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return Array.from(
-    new Set(values.map((value) => value?.trim().toLowerCase()).filter(Boolean)),
+    new Set(
+      values.flatMap((__item, __index, __array) => {
+        const __mapped = __item?.trim().toLowerCase();
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   ) as string[];
 }
 
@@ -431,6 +437,12 @@ export function buildKnowledgeMatchExplainability(args: {
         basisLabel: 'Alias match',
         basisExplanation: `Matched ${subject} by screen alias because the detected screen "${requestedScreenLabel}" was routed to "${matchedScreen ?? label}" inside "${matchedApp ?? requestedAppLabel}".`,
       };
+    case 'app_signature':
+      return {
+        basisCategory: 'app',
+        basisLabel: 'App signature match',
+        basisExplanation: `Matched ${subject} because page signals matched the saved app signature for "${matchedApp ?? requestedAppLabel}".`,
+      };
     case 'app_only':
       return {
         basisCategory: 'app',
@@ -448,23 +460,25 @@ export function buildKnowledgeMatchExplainability(args: {
   }
 }
 
-export function chooseKnowledgeMatch(
+function chooseKnowledgeMatch(
   candidates: KnowledgeMatchCandidate[],
 ): KnowledgeMatchCandidate | null {
   if (candidates.length === 0) return null;
 
-  return [...candidates].sort((left, right) => {
-    const basisDelta = BASIS_WEIGHT[right.basis] - BASIS_WEIGHT[left.basis];
-    if (basisDelta !== 0) return basisDelta;
+  return candidates.reduce((best, candidate) => {
+    const basisDelta = BASIS_WEIGHT[candidate.basis] - BASIS_WEIGHT[best.basis];
+    if (basisDelta > 0) return candidate;
+    if (basisDelta < 0) return best;
 
-    const confidenceDelta = right.confidence - left.confidence;
-    if (confidenceDelta !== 0) return confidenceDelta;
+    const confidenceDelta = candidate.confidence - best.confidence;
+    if (confidenceDelta > 0) return candidate;
+    if (confidenceDelta < 0) return best;
 
-    return right.pageIds.length - left.pageIds.length;
-  })[0];
+    return candidate.pageIds.length > best.pageIds.length ? candidate : best;
+  });
 }
 
-export function summarizeKnowledgeAvailability(
+function summarizeKnowledgeAvailability(
   vendorMatch: KnowledgeMatchCandidate | null,
   orgMatch: KnowledgeMatchCandidate | null,
 ): KnowledgeAvailability {
@@ -565,7 +579,10 @@ async function fetchVendorMatchCandidates(
     return [];
   }
 
-  const queryableRows = await filterQueryableVendorSourceRows(data ?? [], supabase);
+  const queryableRows = await filterQueryableVendorSourceRows(
+    data ?? [],
+    supabase,
+  );
 
   const vectorScores = await resolveVendorPageVectorScores({
     app: exactApp,
@@ -760,7 +777,9 @@ export async function resolveExtensionContextMatches(
   const normalizedScreen = args.screen.toLowerCase();
   const domainAlias = extractDomainAppAlias(args.url);
   const effectiveApp =
-    normalizedApp !== 'unknown' ? normalizedApp : (domainAlias ?? normalizedApp);
+    normalizedApp !== 'unknown'
+      ? normalizedApp
+      : (domainAlias ?? normalizedApp);
   const vectorContext =
     effectiveApp === 'unknown'
       ? null

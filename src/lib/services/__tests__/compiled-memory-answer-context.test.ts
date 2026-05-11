@@ -482,6 +482,7 @@ test('resolveCompiledMemoryAnswerContext passes the default chat scope into the 
     app: DEFAULT_CHAT_COMPILED_MEMORY_SCOPE.app,
     screen: DEFAULT_CHAT_COMPILED_MEMORY_SCOPE.screen,
     asOf: undefined,
+    contextMatches: undefined,
     question: 'How do we route enterprise deals?',
     questionEmbedding: [0.1, 0.2, 0.3],
     limit: 4,

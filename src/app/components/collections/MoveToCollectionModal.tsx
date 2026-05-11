@@ -10,7 +10,7 @@ import {
   Home,
   Loader2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import {
@@ -129,14 +129,17 @@ export function MoveToCollectionModal({
       const findPath = (
         items: Collection[],
         targetId: string,
-        path: string[] = []
+        path: string[] = [],
       ): string[] | null => {
         for (const item of items) {
           if (item.id === targetId) {
             return path;
           }
           if (item.children && item.children.length > 0) {
-            const result = findPath(item.children, targetId, [...path, item.id]);
+            const result = findPath(item.children, targetId, [
+              ...path,
+              item.id,
+            ]);
             if (result) return result;
           }
         }
@@ -150,12 +153,12 @@ export function MoveToCollectionModal({
     }
   }, [open, currentCollectionId, tree]);
 
-  // Reset selection when modal opens
-  React.useEffect(() => {
-    if (open) {
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
       setSelectedId(null);
     }
-  }, [open]);
+    onOpenChange(nextOpen);
+  };
 
   const toggleExpanded = (id: string) => {
     setExpandedIds((prev) => {
@@ -190,11 +193,11 @@ export function MoveToCollectionModal({
     (selectedId !== currentCollectionId || !sameCollection);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[90vh] sm:max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FolderInput className="h-5 w-5" />
+            <FolderInput className="size-5" />
             Move {itemCount} {itemLabel}
           </DialogTitle>
           <DialogDescription>
@@ -214,11 +217,11 @@ export function MoveToCollectionModal({
                 selectedId === null && 'bg-accent ring-2 ring-primary',
                 currentCollectionId === null &&
                   sameCollection &&
-                  'text-muted-foreground'
+                  'text-muted-foreground',
               )}
               aria-selected={selectedId === null}
             >
-              <Home className="h-4 w-4 text-muted-foreground" />
+              <Home className="size-4 text-muted-foreground" />
               <span className="flex-1 text-left">Uncategorized</span>
               {currentCollectionId === null && sameCollection && (
                 <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
@@ -246,7 +249,7 @@ export function MoveToCollectionModal({
             {/* Empty state */}
             {tree.length === 0 && (
               <div className="py-8 text-center text-muted-foreground">
-                <Folder className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <Folder className="size-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No collections yet</p>
                 <p className="text-xs mt-1">
                   Create a collection to organize your content
@@ -270,8 +273,8 @@ export function MoveToCollectionModal({
           >
             {isMoving ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Moving...
+                <Loader2 className="size-4 mr-2 animate-spin" />
+                Moving…
               </>
             ) : (
               `Move ${itemCount} ${itemLabel}`
@@ -324,7 +327,7 @@ function CollectionTreeNode({
           'flex items-center gap-1 rounded-md transition-colors',
           !isDisabled && 'hover:bg-accent',
           isSelected && !isDisabled && 'bg-accent ring-2 ring-primary',
-          isDisabled && 'opacity-50 cursor-not-allowed'
+          isDisabled && 'opacity-50 cursor-not-allowed',
         )}
         style={{ paddingLeft }}
       >
@@ -339,9 +342,9 @@ function CollectionTreeNode({
             aria-label={isExpanded ? 'Collapse' : 'Expand'}
           >
             {isExpanded ? (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="size-4" />
             ) : (
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="size-4" />
             )}
           </button>
         ) : (
@@ -355,7 +358,7 @@ function CollectionTreeNode({
           className={cn(
             'flex-1 flex items-center gap-2 px-2 py-1.5 text-sm rounded-md text-left',
             !isDisabled && 'hover:bg-accent/50',
-            isDisabled && 'cursor-not-allowed'
+            isDisabled && 'cursor-not-allowed',
           )}
           title={
             isDisabled
@@ -364,9 +367,9 @@ function CollectionTreeNode({
           }
         >
           {isExpanded ? (
-            <FolderOpen className="h-4 w-4 text-blue-500 shrink-0" />
+            <FolderOpen className="size-4 text-blue-500 shrink-0" />
           ) : (
-            <Folder className="h-4 w-4 text-blue-500 shrink-0" />
+            <Folder className="size-4 text-blue-500 shrink-0" />
           )}
           <span className="flex-1 truncate">{collection.name}</span>
           {isCurrent && (
@@ -385,7 +388,7 @@ function CollectionTreeNode({
       {/* Children */}
       <AnimatePresence>
         {hasChildren && isExpanded && (
-          <motion.div
+          <m.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -409,7 +412,7 @@ function CollectionTreeNode({
                 ))}
               </CollapsibleContent>
             </Collapsible>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

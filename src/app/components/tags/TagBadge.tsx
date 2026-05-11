@@ -81,7 +81,7 @@ export function TagBadge({
 /**
  * TagList - Display a list of tags
  */
-export interface TagListProps {
+interface TagListProps {
   tags: Array<{
     id: string;
     name: string;
@@ -96,7 +96,7 @@ export interface TagListProps {
   maxVisible?: number;
 }
 
-export function TagList({
+function TagList({
   tags,
   size = 'md',
   showIcon = false,

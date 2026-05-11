@@ -62,9 +62,11 @@ import { runRelationshipExtraction } from './compile-wiki-relationships';
 import { runCrossPageContradictionDetection } from './compile-wiki-cross-page';
 
 type Job = Database['public']['Tables']['jobs']['Row'];
-type OrgWikiPageInsert = Database['public']['Tables']['org_wiki_pages']['Insert'];
+type OrgWikiPageInsert =
+  Database['public']['Tables']['org_wiki_pages']['Insert'];
 type OrgWikiPageRow = Database['public']['Tables']['org_wiki_pages']['Row'];
-type WikiPageSourceInsert = Database['public']['Tables']['wiki_page_sources']['Insert'];
+type WikiPageSourceInsert =
+  Database['public']['Tables']['wiki_page_sources']['Insert'];
 
 type SupersedeOrgWikiPageRpc = {
   rpc(
@@ -94,7 +96,13 @@ type ContentRowForCompile = Pick<
 
 type WorkflowRowForCompile = Pick<
   Database['public']['Tables']['workflows']['Row'],
-  'id' | 'title' | 'description' | 'steps' | 'step_count' | 'confidence' | 'status'
+  | 'id'
+  | 'title'
+  | 'description'
+  | 'steps'
+  | 'step_count'
+  | 'confidence'
+  | 'status'
 >;
 
 type DocumentRowForCompile = Pick<
@@ -156,7 +164,7 @@ function getGenAIClient(): GoogleGenAI {
 
 async function callGemini(
   prompt: string,
-  opts: { temperature?: number; maxOutputTokens?: number } = {}
+  opts: { temperature?: number; maxOutputTokens?: number } = {},
 ): Promise<string> {
   const genai = getGenAIClient();
   const result = await genai.models.generateContent({
@@ -170,7 +178,11 @@ async function callGemini(
   return result.text ?? '';
 }
 
-function checkAndLogPII(text: string, source: string, recordingId?: string): void {
+function checkAndLogPII(
+  text: string,
+  source: string,
+  recordingId?: string,
+): void {
   const piiCheck = detectPII(text);
   if (piiCheck.hasPII) {
     logPIIDetection(source, piiCheck.types, recordingId);
@@ -178,7 +190,7 @@ function checkAndLogPII(text: string, source: string, recordingId?: string): voi
 }
 
 function normalizeWikiPageSourceType(
-  value: string | null | undefined
+  value: string | null | undefined,
 ): WikiPageSourceType {
   return WIKI_PAGE_SOURCE_TYPES.has(value as WikiPageSourceType)
     ? (value as WikiPageSourceType)
@@ -210,7 +222,7 @@ async function isWikiCompilerEnabled(orgId: string): Promise<boolean> {
   } catch (error) {
     console.warn(
       `[compile-wiki] Failed to load agent settings for org ${orgId}, defaulting to enabled:`,
-      error instanceof Error ? error.message : error
+      error instanceof Error ? error.message : error,
     );
     return true;
   }
@@ -222,7 +234,7 @@ async function isWikiCompilerEnabled(orgId: string): Promise<boolean> {
 
 export async function handleCompileWiki(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as unknown as CompileWikiPayload;
   const { orgId } = payload ?? {};
@@ -232,14 +244,14 @@ export async function handleCompileWiki(
   if (!contentId || !orgId) {
     console.warn(
       '[compile-wiki] Missing contentId or orgId in payload, skipping',
-      { payload }
+      { payload },
     );
     return;
   }
 
   if (!(await isWikiCompilerEnabled(orgId))) {
     console.log(
-      `[compile-wiki] Agent disabled for org ${orgId}, skipping content ${contentId}`
+      `[compile-wiki] Agent disabled for org ${orgId}, skipping content ${contentId}`,
     );
     return;
   }
@@ -252,7 +264,13 @@ export async function handleCompileWiki(
       contentId,
       inputSummary: `Compile wiki page from content ${contentId}`,
     },
-    () => runCompilationPipeline(contentId, orgId, payloadSourceType, progressCallback)
+    () =>
+      runCompilationPipeline(
+        contentId,
+        orgId,
+        payloadSourceType,
+        progressCallback,
+      ),
   );
 }
 
@@ -264,7 +282,7 @@ async function runCompilationPipeline(
   recordingId: string,
   orgId: string,
   payloadSourceType?: string | null,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const supabase = createAdminClient();
 
@@ -283,13 +301,13 @@ async function runCompilationPipeline(
 
   if (recordingError || !recording) {
     console.warn(
-      `[compile-wiki] Recording ${recordingId} not found in org ${orgId}: ${recordingError?.message ?? 'missing'} — skipping`
+      `[compile-wiki] Recording ${recordingId} not found in org ${orgId}: ${recordingError?.message ?? 'missing'} — skipping`,
     );
     return;
   }
 
   const sourceType = normalizeWikiPageSourceType(
-    recording.content_type ?? payloadSourceType
+    recording.content_type ?? payloadSourceType,
   );
   const sourceLabel = wikiSourceLabel(sourceType);
 
@@ -324,17 +342,17 @@ async function runCompilationPipeline(
 
   if (workflowResult.error) {
     throw new Error(
-      `Failed to load workflow for ${recordingId}: ${workflowResult.error.message}`
+      `Failed to load workflow for ${recordingId}: ${workflowResult.error.message}`,
     );
   }
   if (documentResult.error) {
     throw new Error(
-      `Failed to load document for ${recordingId}: ${documentResult.error.message}`
+      `Failed to load document for ${recordingId}: ${documentResult.error.message}`,
     );
   }
   if (transcriptResult.error) {
     throw new Error(
-      `Failed to load transcript for ${recordingId}: ${transcriptResult.error.message}`
+      `Failed to load transcript for ${recordingId}: ${transcriptResult.error.message}`,
     );
   }
 
@@ -348,17 +366,20 @@ async function runCompilationPipeline(
     ? (workflow!.steps as unknown as WorkflowStep[])
     : [];
   const hasWorkflowSteps = workflowSteps.length > 0;
-  const hasDocument = !!document?.markdown && document.markdown.trim().length > 0;
+  const hasDocument =
+    !!document?.markdown && document.markdown.trim().length > 0;
   const hasTranscript = !!transcript?.text && transcript.text.trim().length > 0;
 
   if (!hasWorkflowSteps && !hasDocument && !hasTranscript) {
     console.warn(
-      `[compile-wiki] No workflow, document, or transcript available for ${recordingId}, skipping`
+      `[compile-wiki] No workflow, document, or transcript available for ${recordingId}, skipping`,
     );
     return;
   }
 
-  const approvedRoutingOverride = getApprovedRoutingOverride(recording.metadata);
+  const approvedRoutingOverride = getApprovedRoutingOverride(
+    recording.metadata,
+  );
   let classification: WikiClassification;
 
   if (approvedRoutingOverride) {
@@ -388,7 +409,7 @@ async function runCompilationPipeline(
   }
 
   console.log(
-    `[compile-wiki] Classified recording ${recordingId} as app=${classification.app ?? '(none)'} screen=${classification.screen ?? '(none)'} topic="${classification.topic}" confidence=${classification.routeConfidence ?? 'n/a'}`
+    `[compile-wiki] Classified recording ${recordingId} as app=${classification.app ?? '(none)'} screen=${classification.screen ?? '(none)'} topic="${classification.topic}" confidence=${classification.routeConfidence ?? 'n/a'}`,
   );
 
   if (!approvedRoutingOverride && requiresRoutingReview(classification)) {
@@ -453,7 +474,7 @@ async function runCompilationPipeline(
 
   if (!generatedContent || generatedContent.trim().length === 0) {
     console.warn(
-      `[compile-wiki] Gemini returned empty content for ${recordingId}, skipping insert`
+      `[compile-wiki] Gemini returned empty content for ${recordingId}, skipping insert`,
     );
     return;
   }
@@ -495,7 +516,7 @@ async function runCompilationPipeline(
 
   if (insertError || !newPage) {
     throw new Error(
-      `Failed to insert org_wiki_pages row: ${insertError?.message ?? 'unknown error'}`
+      `Failed to insert org_wiki_pages row: ${insertError?.message ?? 'unknown error'}`,
     );
   }
 
@@ -521,7 +542,7 @@ async function runCompilationPipeline(
     // Best-effort cleanup: log the issue but don't rip out the page we just
     // created — the next run of the wiki linter can backfill the source row.
     console.error(
-      `[compile-wiki] Failed to insert wiki_page_sources row for page ${newPage.id}: ${sourceError.message}`
+      `[compile-wiki] Failed to insert wiki_page_sources row for page ${newPage.id}: ${sourceError.message}`,
     );
   }
 
@@ -538,7 +559,10 @@ async function runCompilationPipeline(
   });
 
   // ---- Step 8 — Cross-page contradiction detection (TRIB-41) ---------------
-  progressCallback?.(99, 'Detecting cross-page contradictions (best-effort)...');
+  progressCallback?.(
+    99,
+    'Detecting cross-page contradictions (best-effort)...',
+  );
 
   await runCrossPageContradictionDetection({
     supabase,
@@ -563,7 +587,7 @@ async function runCompilationPipeline(
 
   console.log(
     `[compile-wiki] Created org_wiki_pages row ${newPage.id} for recording ${recordingId} ` +
-      `(org=${orgId}, topic="${classification.topic}", confidence=${confidence.toFixed(2)})`
+      `(org=${orgId}, topic="${classification.topic}", confidence=${confidence.toFixed(2)})`,
   );
 }
 
@@ -589,25 +613,31 @@ async function classifyRecording(params: {
 
   const transcriptExcerpt = sanitizeVisualDescription(
     params.transcript ?? '',
-    4000
+    4000,
   );
   const documentExcerpt = sanitizeVisualDescription(
     params.documentSummary ?? params.documentMarkdown ?? '',
-    2000
+    2000,
   );
   const titleInput = sanitizeVisualDescription(
     params.recordingTitle ?? params.workflowTitle ?? '',
-    300
+    300,
   );
   const descriptionInput = sanitizeVisualDescription(
     params.recordingDescription ?? params.workflowDescription ?? '',
-    500
+    500,
   );
 
   checkAndLogPII(
-    [titleInput, descriptionInput, stepsPreview, transcriptExcerpt, documentExcerpt].join(' '),
+    [
+      titleInput,
+      descriptionInput,
+      stepsPreview,
+      transcriptExcerpt,
+      documentExcerpt,
+    ].join(' '),
     'compile-wiki-classification',
-    params.recordingId
+    params.recordingId,
   );
 
   const prompt = `You are a knowledge compiler assistant. Your task is to classify a screen recording into three labels that will be used as keys in an organization's wiki.
@@ -650,7 +680,7 @@ Rules:
   } catch (error) {
     console.error(
       `[compile-wiki] Classification call failed for ${params.recordingId}:`,
-      error
+      error,
     );
   }
 
@@ -663,7 +693,7 @@ function parseClassification(
     recordingTitle: string | null;
     workflowTitle: string | null;
     recordingId: string;
-  }
+  },
 ): WikiClassification {
   const fallback = fallbackClassification(params);
 
@@ -674,7 +704,9 @@ function parseClassification(
   try {
     let cleaned = responseText.trim();
     if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      cleaned = cleaned
+        .replace(/^```(?:json)?\s*\n?/, '')
+        .replace(/\n?```\s*$/, '');
     }
 
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
@@ -692,7 +724,7 @@ function parseClassification(
       routeConfidence: clampConfidence(
         typeof parsed.route_confidence === 'number'
           ? parsed.route_confidence
-          : null
+          : null,
       ),
       routeReason:
         typeof parsed.route_reason === 'string'
@@ -702,7 +734,7 @@ function parseClassification(
   } catch (error) {
     console.error(
       `[compile-wiki] Failed to parse classification JSON for ${params.recordingId}:`,
-      error
+      error,
     );
     return fallback;
   }
@@ -722,9 +754,11 @@ function fallbackClassification(params: {
   return {
     app: null,
     screen: null,
-    topic: normalizeSlug(source) || `recording-${params.recordingId.slice(0, 8)}`,
+    topic:
+      normalizeSlug(source) || `recording-${params.recordingId.slice(0, 8)}`,
     routeConfidence: 0.2,
-    routeReason: 'Fallback route inferred from the recording title because classification was incomplete.',
+    routeReason:
+      'Fallback route inferred from the recording title because classification was incomplete.',
   };
 }
 
@@ -822,13 +856,13 @@ async function queueRoutingReview(args: {
 
   if (updateError) {
     throw new Error(
-      `Failed to persist routing review metadata for ${recordingId}: ${updateError.message}`
+      `Failed to persist routing review metadata for ${recordingId}: ${updateError.message}`,
     );
   }
 
   console.log(
     `[compile-wiki] Queued routing review for recording ${recordingId} ` +
-      `(approval=${approvalId}, topic="${classification.topic}", app=${classification.app ?? 'null'}, screen=${classification.screen ?? 'null'})`
+      `(approval=${approvalId}, topic="${classification.topic}", app=${classification.app ?? 'null'}, screen=${classification.screen ?? 'null'})`,
   );
 }
 
@@ -843,7 +877,7 @@ async function findExistingWikiPage(
     topic: string;
     app: string | null;
     screen: string | null;
-  }
+  },
 ): Promise<OrgWikiPageRow | null> {
   let query = supabase
     .from('org_wiki_pages')
@@ -854,10 +888,12 @@ async function findExistingWikiPage(
 
   // supabase-js does not expose `IS NOT DISTINCT FROM`, so match on
   // nullability explicitly to treat null-null as equal.
-  query = params.app === null ? query.is('app', null) : query.eq('app', params.app);
-  query = params.screen === null
-    ? query.is('screen', null)
-    : query.eq('screen', params.screen);
+  query =
+    params.app === null ? query.is('app', null) : query.eq('app', params.app);
+  query =
+    params.screen === null
+      ? query.is('screen', null)
+      : query.eq('screen', params.screen);
 
   const { data, error } = await query.limit(1).maybeSingle();
 
@@ -891,33 +927,38 @@ async function generateWikiPageContent(params: {
 
   const titleInput = sanitizeVisualDescription(
     params.recordingTitle ?? params.workflowTitle ?? 'Untitled recording',
-    300
+    300,
   );
 
   const workflowStepsBlock = params.workflowSteps
     .slice(0, MAX_WORKFLOW_STEPS_IN_PROMPT)
     .map((step, i) => {
       const title = sanitizeVisualDescription(step.title ?? '', 200);
-      const description = sanitizeVisualDescription(step.description ?? '', 400);
+      const description = sanitizeVisualDescription(
+        step.description ?? '',
+        400,
+      );
       const action = sanitizeVisualDescription(step.action ?? '', 50);
       const uiEls = (step.uiElements ?? [])
         .slice(0, 10)
         .map((el) => sanitizeVisualDescription(String(el), 100))
         .join(', ');
       const line = `${i + 1}. ${title}${action ? ` (${action})` : ''}`;
-      const details = [description, uiEls ? `UI: ${uiEls}` : ''].filter(Boolean).join(' | ');
+      const details = [description, uiEls ? `UI: ${uiEls}` : '']
+        .filter(Boolean)
+        .join(' | ');
       return details ? `${line}\n   ${details}` : line;
     })
     .join('\n');
 
   const documentExcerpt = sanitizeVisualDescription(
     params.documentMarkdown ?? params.documentSummary ?? '',
-    MAX_DOCUMENT_CHARS
+    MAX_DOCUMENT_CHARS,
   );
 
   const transcriptExcerpt = sanitizeVisualDescription(
     params.transcript ?? '',
-    MAX_TRANSCRIPT_CHARS
+    MAX_TRANSCRIPT_CHARS,
   );
 
   const combinedInput = [
@@ -991,7 +1032,7 @@ ${transcriptExcerpt || '(no transcript available)'}
   } catch (error) {
     console.error(
       `[compile-wiki] Wiki page generation failed for ${params.recordingId}:`,
-      error
+      error,
     );
     throw error;
   }
@@ -1114,7 +1155,7 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
   console.log(
     `[compile-wiki] Update path — existing page ${existingPage.id} ` +
       `(org=${orgId}, app=${classification.app ?? 'null'}, ` +
-      `screen=${classification.screen ?? 'null'}, topic="${classification.topic}")`
+      `screen=${classification.screen ?? 'null'}, topic="${classification.topic}")`,
   );
 
   // ---- 30% — Load existing page already done above (passed in) -------------
@@ -1145,7 +1186,7 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
     // mutate content or confidence when the LLM output is unparseable.
     console.warn(
       `[compile-wiki] LLM diff unparseable for recording ${recordingId}, ` +
-        `appending source-only and returning`
+        `appending source-only and returning`,
     );
     await insertWikiPageSource(supabase, {
       pageId: existingPage.id,
@@ -1153,7 +1194,8 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
       recordingTitle,
       sourceType,
       sourceLabel,
-      summary: 'Source recorded (LLM diff unparseable — no content changes applied)',
+      summary:
+        'Source recorded (LLM diff unparseable — no content changes applied)',
     });
     progressCallback?.(100, 'Update path completed (no content changes)');
     return;
@@ -1221,7 +1263,7 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
       console.log(
         `[compile-wiki] Contradiction routed to manual review ` +
           `(mode=${settings.contradictionReviewMode}, conflicts=${diff.contradictions.length}, ` +
-          `confidence_delta=${diff.confidence_delta.toFixed(3)})`
+          `confidence_delta=${diff.confidence_delta.toFixed(3)})`,
       );
       await applyContradictionFlagged({
         supabase,
@@ -1253,7 +1295,10 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
       relationshipTarget.contentChanged || backlinksChanged;
 
     // ---- 97% — Cross-page contradiction detection (TRIB-41) ----------------
-    progressCallback?.(97, 'Detecting cross-page contradictions (best-effort)...');
+    progressCallback?.(
+      97,
+      'Detecting cross-page contradictions (best-effort)...',
+    );
     await runCrossPageContradictionDetection({
       supabase,
       orgId,
@@ -1266,7 +1311,10 @@ async function runUpdatePath(inputs: UpdatePathInputs): Promise<void> {
     });
 
     if (shouldRefreshEmbedding) {
-      progressCallback?.(99, 'Refreshing final wiki embedding (best-effort)...');
+      progressCallback?.(
+        99,
+        'Refreshing final wiki embedding (best-effort)...',
+      );
       await runBestEffortEmbedding(relationshipTarget.pageId, {
         source: relationshipTarget.embeddingContext,
         orgId,
@@ -1292,40 +1340,47 @@ async function callUpdateDiffLLM(params: {
 }): Promise<string> {
   const titleInput = sanitizeVisualDescription(
     params.recordingTitle ?? params.workflow?.title ?? 'Untitled recording',
-    300
+    300,
   );
 
   const workflowStepsBlock = params.workflowSteps
     .slice(0, MAX_WORKFLOW_STEPS_IN_PROMPT)
     .map((step, i) => {
       const title = sanitizeVisualDescription(step.title ?? '', 200);
-      const description = sanitizeVisualDescription(step.description ?? '', 400);
+      const description = sanitizeVisualDescription(
+        step.description ?? '',
+        400,
+      );
       const action = sanitizeVisualDescription(step.action ?? '', 50);
       const uiEls = (step.uiElements ?? [])
         .slice(0, 10)
         .map((el) => sanitizeVisualDescription(String(el), 100))
         .join(', ');
       const line = `${i + 1}. ${title}${action ? ` (${action})` : ''}`;
-      const details = [description, uiEls ? `UI: ${uiEls}` : ''].filter(Boolean).join(' | ');
+      const details = [description, uiEls ? `UI: ${uiEls}` : '']
+        .filter(Boolean)
+        .join(' | ');
       return details ? `${line}\n   ${details}` : line;
     })
     .join('\n');
 
   const documentExcerpt = sanitizeVisualDescription(
     params.document?.markdown ?? params.document?.summary ?? '',
-    MAX_DOCUMENT_CHARS
+    MAX_DOCUMENT_CHARS,
   );
 
   const transcriptExcerpt = sanitizeVisualDescription(
     params.transcript?.text ?? '',
-    MAX_TRANSCRIPT_CHARS
+    MAX_TRANSCRIPT_CHARS,
   );
 
   // PII scan mirrors the generation path (Gemini + logs)
   checkAndLogPII(
-    [titleInput, workflowStepsBlock, documentExcerpt, transcriptExcerpt].join(' '),
+    [titleInput, workflowStepsBlock, documentExcerpt, transcriptExcerpt].join(
+      ' ',
+    ),
     'compile-wiki-update-diff',
-    params.recordingId
+    params.recordingId,
   );
 
   // Follows product-architecture-v2.md Part 3 Component 4 Step 3b template.
@@ -1378,7 +1433,7 @@ Do not include any commentary before or after the JSON. Do not wrap the JSON in 
   } catch (error) {
     console.error(
       `[compile-wiki] Step 3b diff LLM call failed for ${params.recordingId}:`,
-      error
+      error,
     );
     return '';
   }
@@ -1386,14 +1441,16 @@ Do not include any commentary before or after the JSON. Do not wrap the JSON in 
 
 function parseUpdateDiff(
   responseText: string,
-  recordingId: string
+  recordingId: string,
 ): WikiDiffResult | null {
   if (!responseText) return null;
 
   try {
     let cleaned = responseText.trim();
     if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      cleaned = cleaned
+        .replace(/^```(?:json)?\s*\n?/, '')
+        .replace(/\n?```\s*$/, '');
     }
 
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
@@ -1401,36 +1458,41 @@ function parseUpdateDiff(
 
     const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
 
-    const rawAction = typeof parsed.action === 'string' ? parsed.action.toLowerCase() : '';
+    const rawAction =
+      typeof parsed.action === 'string' ? parsed.action.toLowerCase() : '';
     if (
       rawAction !== 'additive' &&
       rawAction !== 'redundant' &&
       rawAction !== 'contradiction'
     ) {
       console.warn(
-        `[compile-wiki] LLM diff returned unknown action "${rawAction}" for ${recordingId}`
+        `[compile-wiki] LLM diff returned unknown action "${rawAction}" for ${recordingId}`,
       );
       return null;
     }
 
     const additions = Array.isArray(parsed.additions)
-      ? parsed.additions
-          .map((v) => (typeof v === 'string' ? v.trim() : ''))
-          .filter((s): s is string => s.length > 0)
+      ? parsed.additions.flatMap((__item, __index, __array) => {
+          const __mapped = typeof __item === 'string' ? __item.trim() : '';
+          return __mapped.length > 0 ? [__mapped] : [];
+        })
       : [];
 
     const contradictions = Array.isArray(parsed.contradictions)
-      ? parsed.contradictions
-          .map((raw): ContradictionEntry | null => {
-            if (!raw || typeof raw !== 'object') return null;
-            const obj = raw as Record<string, unknown>;
-            const oldVal = typeof obj.old === 'string' ? obj.old.trim() : '';
-            const newVal = typeof obj.new === 'string' ? obj.new.trim() : '';
-            if (!oldVal || !newVal) return null;
-            const field = typeof obj.field === 'string' ? obj.field.trim() : undefined;
-            return field ? { old: oldVal, new: newVal, field } : { old: oldVal, new: newVal };
-          })
-          .filter((c): c is ContradictionEntry => c !== null)
+      ? parsed.contradictions.flatMap((raw): ContradictionEntry[] => {
+          if (!raw || typeof raw !== 'object') return [];
+          const obj = raw as Record<string, unknown>;
+          const oldVal = typeof obj.old === 'string' ? obj.old.trim() : '';
+          const newVal = typeof obj.new === 'string' ? obj.new.trim() : '';
+          if (!oldVal || !newVal) return [];
+          const field =
+            typeof obj.field === 'string' ? obj.field.trim() : undefined;
+          return [
+            field
+              ? { old: oldVal, new: newVal, field }
+              : { old: oldVal, new: newVal },
+          ];
+        })
       : [];
 
     const mergedRaw =
@@ -1438,8 +1500,9 @@ function parseUpdateDiff(
     const merged_content = stripCodeFences(mergedRaw) || null;
 
     const rawDelta = Number(parsed.confidence_delta);
-    const confidence_delta =
-      Number.isFinite(rawDelta) ? Math.max(-0.2, Math.min(0.2, rawDelta)) : 0;
+    const confidence_delta = Number.isFinite(rawDelta)
+      ? Math.max(-0.2, Math.min(0.2, rawDelta))
+      : 0;
 
     return {
       action: rawAction,
@@ -1451,7 +1514,7 @@ function parseUpdateDiff(
   } catch (error) {
     console.error(
       `[compile-wiki] Failed to parse Step 3b diff JSON for ${recordingId}:`,
-      error
+      error,
     );
     return null;
   }
@@ -1486,7 +1549,7 @@ async function applyRedundantUpdate(args: {
   } = args;
 
   const newConfidence = clampConfidence(
-    (existingPage.confidence ?? 0.5) + REDUNDANT_CONFIDENCE_DELTA
+    (existingPage.confidence ?? 0.5) + REDUNDANT_CONFIDENCE_DELTA,
   );
 
   const logEntry: CompilationLogEntry = {
@@ -1498,7 +1561,10 @@ async function applyRedundantUpdate(args: {
     confidence_delta: REDUNDANT_CONFIDENCE_DELTA,
   };
 
-  const updatedLog = appendCompilationLog(existingPage.compilation_log, logEntry);
+  const updatedLog = appendCompilationLog(
+    existingPage.compilation_log,
+    logEntry,
+  );
 
   const { error } = await supabase
     .from('org_wiki_pages')
@@ -1510,7 +1576,7 @@ async function applyRedundantUpdate(args: {
 
   if (error) {
     throw new Error(
-      `Failed to record redundant update on page ${existingPage.id}: ${error.message}`
+      `Failed to record redundant update on page ${existingPage.id}: ${error.message}`,
     );
   }
 
@@ -1525,7 +1591,7 @@ async function applyRedundantUpdate(args: {
 
   console.log(
     `[compile-wiki] Redundant update applied to page ${existingPage.id} ` +
-      `(confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`
+      `(confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`,
   );
 
   // Content unchanged on redundant — return existing content so Step 4 can
@@ -1572,7 +1638,7 @@ async function applyAdditiveUpdate(args: {
   if (!mergedContent) {
     console.warn(
       `[compile-wiki] Additive diff missing merged_content for recording ${recordingId}, ` +
-        `falling back to source-only record on page ${existingPage.id}`
+        `falling back to source-only record on page ${existingPage.id}`,
     );
     await insertWikiPageSource(supabase, {
       pageId: existingPage.id,
@@ -1580,7 +1646,8 @@ async function applyAdditiveUpdate(args: {
       recordingTitle,
       sourceType,
       sourceLabel,
-      summary: 'Additive classification but LLM returned no merged content — source recorded only',
+      summary:
+        'Additive classification but LLM returned no merged content — source recorded only',
     });
     return {
       pageId: existingPage.id,
@@ -1591,7 +1658,7 @@ async function applyAdditiveUpdate(args: {
   }
 
   const newConfidence = clampConfidence(
-    (existingPage.confidence ?? 0.5) + diff.confidence_delta
+    (existingPage.confidence ?? 0.5) + diff.confidence_delta,
   );
 
   const logEntry: CompilationLogEntry = {
@@ -1604,7 +1671,10 @@ async function applyAdditiveUpdate(args: {
     confidence_delta: diff.confidence_delta,
   };
 
-  const updatedLog = appendCompilationLog(existingPage.compilation_log, logEntry);
+  const updatedLog = appendCompilationLog(
+    existingPage.compilation_log,
+    logEntry,
+  );
 
   const { error } = await supabase
     .from('org_wiki_pages')
@@ -1617,7 +1687,7 @@ async function applyAdditiveUpdate(args: {
 
   if (error) {
     throw new Error(
-      `Failed to apply additive update to page ${existingPage.id}: ${error.message}`
+      `Failed to apply additive update to page ${existingPage.id}: ${error.message}`,
     );
   }
 
@@ -1632,7 +1702,7 @@ async function applyAdditiveUpdate(args: {
 
   console.log(
     `[compile-wiki] Additive update applied to page ${existingPage.id} ` +
-      `(+${diff.additions.length} additions, confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`
+      `(+${diff.additions.length} additions, confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`,
   );
 
   return {
@@ -1693,7 +1763,10 @@ async function applyContradictionFlagged(args: {
     resolved_by: null,
   };
 
-  const updatedLog = appendCompilationLog(existingPage.compilation_log, logEntry);
+  const updatedLog = appendCompilationLog(
+    existingPage.compilation_log,
+    logEntry,
+  );
 
   const { error } = await supabase
     .from('org_wiki_pages')
@@ -1704,7 +1777,7 @@ async function applyContradictionFlagged(args: {
 
   if (error) {
     throw new Error(
-      `Failed to flag contradiction on page ${existingPage.id}: ${error.message}`
+      `Failed to flag contradiction on page ${existingPage.id}: ${error.message}`,
     );
   }
 
@@ -1719,7 +1792,7 @@ async function applyContradictionFlagged(args: {
 
   console.log(
     `[compile-wiki] Contradiction flagged on page ${existingPage.id} ` +
-      `(${diff.contradictions.length} conflicts, awaiting admin review via TRIB-34)`
+      `(${diff.contradictions.length} conflicts, awaiting admin review via TRIB-34)`,
   );
 }
 
@@ -1761,7 +1834,7 @@ async function applyContradictionWithSupersede(args: {
   if (!mergedContent) {
     console.warn(
       `[compile-wiki] Auto-publish contradiction missing merged_content for recording ${recordingId}, ` +
-        `falling back to flagged path on page ${existingPage.id}`
+        `falling back to flagged path on page ${existingPage.id}`,
     );
     await applyContradictionFlagged({
       supabase,
@@ -1777,7 +1850,7 @@ async function applyContradictionWithSupersede(args: {
   }
 
   const newConfidence = clampConfidence(
-    (existingPage.confidence ?? 0.5) + diff.confidence_delta
+    (existingPage.confidence ?? 0.5) + diff.confidence_delta,
   );
 
   const appliedLogEntry: CompilationLogEntry = {
@@ -1813,26 +1886,27 @@ async function applyContradictionWithSupersede(args: {
     compilation_log: [appliedLogEntry] as unknown as Json,
   };
 
-  const supersedeResponse = await (supabase as unknown as SupersedeOrgWikiPageRpc)
-    .rpc('supersede_org_wiki_page', {
-      p_existing_page_id: existingPage.id,
-      p_org_id: orgId,
-      p_app: newPageInsert.app ?? null,
-      p_screen: newPageInsert.screen ?? null,
-      p_topic: newPageInsert.topic,
-      p_content: newPageInsert.content,
-      p_confidence: newPageInsert.confidence ?? 0.5,
-      p_supersedes_id: existingPage.id,
-      p_compilation_log: newPageInsert.compilation_log as Json,
-      p_valid_until: nowIso,
-    });
+  const supersedeResponse = await (
+    supabase as unknown as SupersedeOrgWikiPageRpc
+  ).rpc('supersede_org_wiki_page', {
+    p_existing_page_id: existingPage.id,
+    p_org_id: orgId,
+    p_app: newPageInsert.app ?? null,
+    p_screen: newPageInsert.screen ?? null,
+    p_topic: newPageInsert.topic,
+    p_content: newPageInsert.content,
+    p_confidence: newPageInsert.confidence ?? 0.5,
+    p_supersedes_id: existingPage.id,
+    p_compilation_log: newPageInsert.compilation_log as Json,
+    p_valid_until: nowIso,
+  });
 
   const supersedeError = supersedeResponse.error;
   const newPageId = supersedeResponse.data;
 
   if (supersedeError || !newPageId) {
     throw new Error(
-      `Failed to atomically supersede page ${existingPage.id}: ${supersedeError?.message ?? 'unknown error'}`
+      `Failed to atomically supersede page ${existingPage.id}: ${supersedeError?.message ?? 'unknown error'}`,
     );
   }
 
@@ -1847,7 +1921,7 @@ async function applyContradictionWithSupersede(args: {
 
   console.log(
     `[compile-wiki] Contradiction auto-applied: superseded ${existingPage.id} → ${newPageId} ` +
-      `(${diff.contradictions.length} conflicts resolved, confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`
+      `(${diff.contradictions.length} conflicts resolved, confidence ${existingPage.confidence.toFixed(2)} → ${newConfidence.toFixed(2)})`,
   );
 
   return {
@@ -1869,7 +1943,7 @@ async function applyContradictionWithSupersede(args: {
  */
 function appendCompilationLog(
   existing: Json | null | undefined,
-  entry: CompilationLogEntry
+  entry: CompilationLogEntry,
 ): CompilationLogEntry[] {
   const base = Array.isArray(existing)
     ? (existing as unknown as CompilationLogEntry[])
@@ -1892,10 +1966,12 @@ function buildDiffSummary(diff: WikiDiffResult): string {
   parts.push(
     contradictionCount === 1
       ? '1 contradiction'
-      : `${contradictionCount} contradictions`
+      : `${contradictionCount} contradictions`,
   );
   if (additionCount > 0) {
-    parts.push(additionCount === 1 ? '1 addition' : `${additionCount} additions`);
+    parts.push(
+      additionCount === 1 ? '1 addition' : `${additionCount} additions`,
+    );
   }
 
   // Include a truncated preview of the first contradicted field so admins
@@ -1921,7 +1997,7 @@ async function insertWikiPageSource(
     sourceType: WikiPageSourceType;
     sourceLabel: string;
     summary: string;
-  }
+  },
 ): Promise<void> {
   const titleForSummary = params.recordingTitle?.trim()
     ? params.recordingTitle.trim()
@@ -1941,7 +2017,7 @@ async function insertWikiPageSource(
   if (error) {
     // Mirror the new-page branch's best-effort posture: log but don't throw.
     console.error(
-      `[compile-wiki] Failed to insert wiki_page_sources row for page ${params.pageId}: ${error.message}`
+      `[compile-wiki] Failed to insert wiki_page_sources row for page ${params.pageId}: ${error.message}`,
     );
   }
 }
@@ -1958,7 +2034,7 @@ async function insertWikiPageSource(
  */
 async function runBestEffortEmbedding(
   pageId: string,
-  context: Record<string, unknown>
+  context: Record<string, unknown>,
 ): Promise<boolean> {
   return generateOrgWikiPageEmbeddingBestEffort(pageId, context);
 }

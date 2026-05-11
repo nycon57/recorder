@@ -60,9 +60,9 @@ function findClosingDelimiter(source: string, startFrom: number): number {
         return i;
       }
     }
-    const next = source.indexOf('\n', i);
+    const next = source.slice(i).search('\n');
     if (next === -1) break;
-    i = next + 1;
+    i += next + 1;
   }
   return -1;
 }
@@ -81,7 +81,7 @@ function parseYamlSubset(yaml: string): Record<string, unknown> {
       continue;
     }
 
-    const colonIdx = line.indexOf(':');
+    const colonIdx = line.search(':');
     if (colonIdx === -1) {
       i++;
       continue;
@@ -125,17 +125,19 @@ function parseYamlSubset(yaml: string): Record<string, unknown> {
 function parseFlowArray(raw: string): string[] {
   // Strip outer brackets
   const inner = raw.replace(/^\[/, '').replace(/\].*$/, '');
-  return inner
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => s.replace(/^['"]|['"]$/g, ''));
+  return inner.split(',').flatMap((__item, __index, __array) => {
+    const __mapped = __item.trim();
+    return __mapped ? [__mapped.replace(/^['"]|['"]$/g, '')]
+      : [];
+  });
 }
 
 function parseScalar(raw: string): unknown {
   // Quoted strings
-  if ((raw.startsWith('"') && raw.endsWith('"')) ||
-      (raw.startsWith("'") && raw.endsWith("'"))) {
+  if (
+    (raw.startsWith('"') && raw.endsWith('"')) ||
+    (raw.startsWith("'") && raw.endsWith("'"))
+  ) {
     return raw.slice(1, -1);
   }
 

@@ -6,9 +6,16 @@
  */
 
 import { NextRequest } from 'next/server';
-import { apiHandler, requireOrg, successResponse, errors, parseBody } from '@/lib/utils/api';
-import { runWhatIfScenario } from '@/lib/services/cost-analysis';
 import { z } from 'zod';
+
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  errors,
+  parseBody,
+} from '@/lib/utils/api';
+import { runWhatIfScenario } from '@/lib/services/cost-analysis';
 
 /**
  * POST /api/analytics/costs/what-if
@@ -44,16 +51,22 @@ const whatIfSchema = z.object({
     .refine(
       (dist) => {
         if (!dist) return true;
-        const total = (dist.hot || 0) + (dist.warm || 0) + (dist.cold || 0) + (dist.glacier || 0);
+        const total =
+          (dist.hot || 0) +
+          (dist.warm || 0) +
+          (dist.cold || 0) +
+          (dist.glacier || 0);
         return Math.abs(total - 100) < 0.01; // Allow small floating point errors
       },
-      { message: 'Tier distribution percentages must sum to 100' }
+      { message: 'Tier distribution percentages must sum to 100' },
     ),
 });
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId } = await requireOrg();
-  const body = await parseBody(request, whatIfSchema);
+  const [{ orgId }, body] = await Promise.all([
+    requireOrg(),
+    parseBody(request, whatIfSchema),
+  ]);
 
   try {
     // Type assertion for parsed body - runWhatIfScenario expects WhatIfScenario['assumptions']
@@ -66,7 +79,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   } catch (error) {
     console.error('[Analytics What-If] Error:', error);
     throw new Error(
-      `Failed to run what-if analysis: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to run what-if analysis: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 });

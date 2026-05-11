@@ -42,7 +42,7 @@ export interface HierarchicalSearchOptions {
   threshold?: number;
 }
 
-export interface DualEmbeddings {
+interface DualEmbeddings {
   embedding1536: number[];
   embedding3072: number[];
 }
@@ -52,7 +52,7 @@ export interface DualEmbeddings {
  * - 1536-dim for chunk-level search
  * - 3072-dim for summary-level search
  */
-export async function generateDualEmbeddings(
+async function generateDualEmbeddings(
   text: string
 ): Promise<DualEmbeddings> {
   const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
@@ -217,7 +217,7 @@ function deduplicateResults(
 /**
  * Search within a specific content item using hierarchical search
  */
-export async function hierarchicalSearchRecording(
+async function hierarchicalSearchRecording(
   contentId: string,
   query: string,
   orgId: string,
@@ -242,7 +242,7 @@ export async function hierarchicalSearchRecording(
  * Get recording summaries for a given organization
  * Useful for debugging and testing
  */
-export async function getRecordingSummaries(
+async function getRecordingSummaries(
   orgId: string,
   limit: number = 10
 ): Promise<Array<{ contentId: string; summaryText: string }>> {

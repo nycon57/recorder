@@ -33,7 +33,7 @@ export interface McpToolContext {
 export class McpToolError extends Error {
   constructor(
     public readonly code: string,
-    message: string
+    message: string,
   ) {
     super(message);
     this.name = 'McpToolError';
@@ -75,13 +75,19 @@ interface TranscriptJoinResultRow {
 /** Unwrap a Supabase `.single()` result, throwing McpToolError on failure. */
 function unwrapSingleRow<T>(
   data: T | null,
-  error: { code: string; message: string } | null
+  error: { code: string; message: string } | null,
 ): T {
   if (error) {
     if (error.code === 'PGRST116') {
-      throw new McpToolError('not_found', 'Content not found or not accessible');
+      throw new McpToolError(
+        'not_found',
+        'Content not found or not accessible',
+      );
     }
-    throw new McpToolError('internal_error', `Database error: ${error.message}`);
+    throw new McpToolError(
+      'internal_error',
+      `Database error: ${error.message}`,
+    );
   }
   if (!data) {
     throw new McpToolError('not_found', 'Content not found or not accessible');
@@ -90,7 +96,10 @@ function unwrapSingleRow<T>(
 }
 
 /** Extract the joined content row and verify org ownership. */
-function verifyOrgAccess(joinedContent: unknown, orgId: string): ContentJoinRow {
+function verifyOrgAccess(
+  joinedContent: unknown,
+  orgId: string,
+): ContentJoinRow {
   const joined = (
     Array.isArray(joinedContent) ? joinedContent[0] : joinedContent
   ) as ContentJoinRow;
@@ -121,7 +130,7 @@ interface AnswerQuestionResult {
 
 export async function handleAnswerQuestion(
   input: AnswerQuestionInput,
-  ctx: McpToolContext
+  ctx: McpToolContext,
 ): Promise<AnswerQuestionResult> {
   const compiledMemory = await resolveCompiledMemoryAnswerContext({
     orgId: ctx.orgId,
@@ -167,7 +176,7 @@ interface SearchRecordingResult {
 
 export async function handleSearchRecordings(
   input: SearchRecordingsInput,
-  ctx: McpToolContext
+  ctx: McpToolContext,
 ): Promise<SearchRecordingResult[]> {
   const { query, limit } = input;
   const pages = await searchCompiledOrgWikiPages({
@@ -208,7 +217,7 @@ type SearchKnowledgeResult =
 
 export async function handleSearchKnowledge(
   input: SearchKnowledgeInput,
-  ctx: McpToolContext
+  ctx: McpToolContext,
 ): Promise<SearchKnowledgeResult[]> {
   const limit = Math.max(1, Math.min(20, input.limit ?? 5));
   const [orgWiki, vendorWiki] = await Promise.all([
@@ -242,7 +251,7 @@ interface GetWikiPageInput {
 
 export async function handleGetWikiPage(
   input: GetWikiPageInput,
-  ctx: McpToolContext
+  ctx: McpToolContext,
 ): Promise<Awaited<ReturnType<typeof getOrgWikiPage>>> {
   const page =
     input.source === 'org_wiki'
@@ -250,7 +259,10 @@ export async function handleGetWikiPage(
       : await getVendorWikiPage({ pageId: input.pageId });
 
   if (!page) {
-    throw new McpToolError('not_found', 'Wiki page not found or not accessible');
+    throw new McpToolError(
+      'not_found',
+      'Wiki page not found or not accessible',
+    );
   }
 
   return page;
@@ -276,13 +288,15 @@ interface SearchConceptResult {
 
 export async function handleSearchConcepts(
   input: SearchConceptsInput,
-  ctx: McpToolContext
+  ctx: McpToolContext,
 ): Promise<SearchConceptResult[]> {
   const { query, conceptType, limit } = input;
 
   let dbQuery = supabaseAdmin
     .from('knowledge_concepts')
-    .select('id, name, normalized_name, concept_type, mention_count, description')
+    .select(
+      'id, name, normalized_name, concept_type, mention_count, description',
+    )
     .eq('org_id', ctx.orgId)
     .gte('mention_count', 1)
     .order('mention_count', { ascending: false })
@@ -295,7 +309,10 @@ export async function handleSearchConcepts(
   const { data: concepts, error } = await dbQuery;
 
   if (error) {
-    throw new McpToolError('internal_error', `Database error: ${error.message}`);
+    throw new McpToolError(
+      'internal_error',
+      `Database error: ${error.message}`,
+    );
   }
 
   if (!concepts || concepts.length === 0) {
@@ -311,7 +328,7 @@ export async function handleSearchConcepts(
   }
 
   const scored = concepts
-    .map((c) => {
+    .flatMap((c) => {
       const conceptName = c.name.toLowerCase();
       let score = 0;
 
@@ -324,18 +341,19 @@ export async function handleSearchConcepts(
       } else {
         const conceptWords = conceptName.split(/[\s_-]+/);
         const matching = queryWords.filter((qw: string) =>
-          conceptWords.some((cw: string) => cw.includes(qw) || qw.includes(cw))
+          conceptWords.some((cw: string) => cw.includes(qw) || qw.includes(cw)),
         );
         if (matching.length > 0) {
           score =
             0.5 +
-            (matching.length / Math.max(queryWords.length, conceptWords.length)) * 0.3;
+            (matching.length /
+              Math.max(queryWords.length, conceptWords.length)) *
+              0.3;
         }
       }
 
-      return { concept: c, score };
+      return score > 0 ? [{ concept: c, score }] : [];
     })
-    .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 
@@ -378,7 +396,7 @@ interface ExploreKnowledgeGraphResult {
 
 export async function handleExploreKnowledgeGraph(
   input: ExploreKnowledgeGraphInput,
-  ctx: McpToolContext
+  ctx: McpToolContext,
 ): Promise<ExploreKnowledgeGraphResult> {
   const { conceptId, depth } = input;
 
@@ -404,10 +422,16 @@ export async function handleExploreKnowledgeGraph(
 
   // Traverse relationships up to the requested depth using BFS
   const visited = new Set<string>([conceptId]);
-  let frontier = [conceptId];
   const allEdges: RelatedConceptEdge[] = [];
 
-  for (let d = 0; d < clampedDepth && frontier.length > 0; d++) {
+  const traverseRelationships = async (
+    depth: number,
+    frontier: string[],
+  ): Promise<void> => {
+    if (depth >= clampedDepth || frontier.length === 0) {
+      return;
+    }
+
     const { data: relationships, error: relError } = await supabaseAdmin
       .from('concept_relationships')
       .select(
@@ -415,14 +439,17 @@ export async function handleExploreKnowledgeGraph(
         relationship_type,
         strength,
         related:related_concept_id(id, name, concept_type, mention_count, description, org_id)
-      `
+      `,
       )
       .in('concept_id', frontier)
       .eq('org_id', ctx.orgId)
       .order('strength', { ascending: false });
 
     if (relError) {
-      throw new McpToolError('internal_error', `Failed fetching concept_relationships: ${relError.message}`);
+      throw new McpToolError(
+        'internal_error',
+        `Failed fetching concept_relationships: ${relError.message}`,
+      );
     }
 
     const nextFrontier: string[] = [];
@@ -457,8 +484,10 @@ export async function handleExploreKnowledgeGraph(
       });
     }
 
-    frontier = nextFrontier;
-  }
+    await traverseRelationships(depth + 1, nextFrontier);
+  };
+
+  await traverseRelationships(0, [conceptId]);
 
   return { concept, relatedConcepts: allEdges };
 }
@@ -481,7 +510,7 @@ interface GetDocumentResult {
 
 export async function handleGetDocument(
   input: GetDocumentInput,
-  ctx: McpToolContext
+  ctx: McpToolContext,
 ): Promise<GetDocumentResult> {
   const { contentId } = input;
 
@@ -498,7 +527,7 @@ export async function handleGetDocument(
         title,
         org_id
       )
-    `
+    `,
     )
     .eq('content_id', contentId)
     .single();
@@ -538,7 +567,7 @@ interface GetTranscriptResult {
 
 export async function handleGetTranscript(
   input: GetTranscriptInput,
-  ctx: McpToolContext
+  ctx: McpToolContext,
 ): Promise<GetTranscriptResult> {
   const { contentId } = input;
 
@@ -554,7 +583,7 @@ export async function handleGetTranscript(
         org_id,
         duration_sec
       )
-    `
+    `,
     )
     .eq('content_id', contentId)
     .single();

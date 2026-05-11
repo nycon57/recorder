@@ -35,7 +35,7 @@ export interface VerificationResult {
  * @param secret - The webhook secret key
  * @param options - Additional verification options
  */
-export function verifyWebhookSignature(
+function verifyWebhookSignature(
   payload: string,
   signature: string,
   secret: string,
@@ -131,7 +131,7 @@ export function verifyWebhookSignature(
  * @param source - Source of the webhook (e.g., 'stripe', 'custom')
  * @returns True if the event has already been processed
  */
-export async function isWebhookEventProcessed(
+async function isWebhookEventProcessed(
   eventId: string,
   source: string
 ): Promise<boolean> {
@@ -218,7 +218,7 @@ export async function verifyWebhook(
  * @param timestamp - Optional timestamp to include
  * @returns Signature string
  */
-export function generateWebhookSignature(
+function generateWebhookSignature(
   payload: string,
   secret: string,
   timestamp?: number

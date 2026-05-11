@@ -1,7 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { X, Play, Pause, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react';
+import { useReducer, useRef, useEffect } from 'react';
+import {
+  X,
+  Play,
+  Pause,
+  RotateCcw,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
 
 import { Dialog, DialogContent, DialogTitle } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
@@ -20,11 +27,32 @@ const MIN_SPEED = 0.1;
 const MAX_SPEED = 5;
 
 export function Teleprompter({ isOpen, onClose }: TeleprompterProps) {
-  const [text, setText] = useState('');
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState(DEFAULT_SPEED);
-  const [showInput, setShowInput] = useState(true);
-  const [scrollPosition, setScrollPosition] = useState(0);
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        text: string;
+        isPlaying: boolean;
+        speed: number;
+        showInput: boolean;
+        scrollPosition: number;
+      },
+      patch: Partial<{
+        text: string;
+        isPlaying: boolean;
+        speed: number;
+        showInput: boolean;
+        scrollPosition: number;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      text: '',
+      isPlaying: false,
+      speed: DEFAULT_SPEED,
+      showInput: true,
+      scrollPosition: 0,
+    },
+  );
+  const { text, isPlaying, speed, showInput, scrollPosition } = state;
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
 
@@ -39,12 +67,12 @@ export function Teleprompter({ isOpen, onClose }: TeleprompterProps) {
       const maxScroll = container.scrollHeight - container.clientHeight;
 
       if (scrollPosition >= maxScroll) {
-        setIsPlaying(false);
+        dispatch({ isPlaying: false });
         return;
       }
 
       const newPosition = scrollPosition + speed;
-      setScrollPosition(newPosition);
+      dispatch({ scrollPosition: newPosition });
       container.scrollTop = newPosition;
 
       animationFrameRef.current = requestAnimationFrame(scroll);
@@ -61,17 +89,18 @@ export function Teleprompter({ isOpen, onClose }: TeleprompterProps) {
 
   const handleTogglePlay = () => {
     if (showInput) {
-      setShowInput(false);
-      setIsPlaying(true);
+      dispatch({ showInput: false, isPlaying: true });
     } else {
-      setIsPlaying(!isPlaying);
+      dispatch({ isPlaying: !isPlaying });
     }
   };
 
   const handleReset = () => {
-    setIsPlaying(false);
-    setScrollPosition(0);
-    setSpeed(DEFAULT_SPEED);
+    dispatch({
+      isPlaying: false,
+      scrollPosition: 0,
+      speed: DEFAULT_SPEED,
+    });
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
     }
@@ -82,17 +111,20 @@ export function Teleprompter({ isOpen, onClose }: TeleprompterProps) {
 
     const container = scrollContainerRef.current;
     const seekAmount = container.clientHeight * 0.1;
-    const newPosition = direction === 'down'
-      ? Math.min(scrollPosition + seekAmount, container.scrollHeight - container.clientHeight)
-      : Math.max(scrollPosition - seekAmount, 0);
+    const newPosition =
+      direction === 'down'
+        ? Math.min(
+            scrollPosition + seekAmount,
+            container.scrollHeight - container.clientHeight,
+          )
+        : Math.max(scrollPosition - seekAmount, 0);
 
-    setScrollPosition(newPosition);
+    dispatch({ scrollPosition: newPosition });
     container.scrollTop = newPosition;
   };
 
   const handleClose = () => {
-    setIsPlaying(false);
-    setShowInput(true);
+    dispatch({ isPlaying: false, showInput: true });
     onClose();
   };
 
@@ -104,7 +136,9 @@ export function Teleprompter({ isOpen, onClose }: TeleprompterProps) {
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
-          <DialogTitle className="text-lg font-semibold">Teleprompter</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">
+            Teleprompter
+          </DialogTitle>
           <Button
             variant="ghost"
             size="sm"
@@ -120,7 +154,7 @@ export function Teleprompter({ isOpen, onClose }: TeleprompterProps) {
           {showInput ? (
             <Textarea
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => dispatch({ text: e.target.value })}
               placeholder="Enter your script here..."
               className="h-full resize-none border-0 rounded-none text-lg p-6 focus-visible:ring-0"
               aria-label="Teleprompter script input"
@@ -128,7 +162,7 @@ export function Teleprompter({ isOpen, onClose }: TeleprompterProps) {
           ) : (
             <div
               ref={scrollContainerRef}
-              className="h-full overflow-y-auto bg-black text-white px-12 py-24"
+              className="h-full overflow-y-auto bg-zinc-950 text-white px-12 py-24"
               style={{ scrollBehavior: 'smooth' }}
             >
               <div className="text-3xl leading-relaxed whitespace-pre-wrap">
@@ -149,7 +183,7 @@ export function Teleprompter({ isOpen, onClose }: TeleprompterProps) {
               <Slider
                 id="speed-slider"
                 value={[speed]}
-                onValueChange={(values) => setSpeed(values[0])}
+                onValueChange={(values) => dispatch({ speed: values[0] })}
                 min={MIN_SPEED}
                 max={MAX_SPEED}
                 step={0.1}

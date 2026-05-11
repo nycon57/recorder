@@ -55,7 +55,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const { userId, orgId } = await requireOrg();
   const query = parseSearchParams<ListCommentsQueryInput>(
     request,
-    listCommentsQuerySchema
+    listCommentsQuerySchema,
   );
 
   const supabase = await createClient();
@@ -80,7 +80,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       p_org_id: orgId,
       p_limit: query.limit,
       p_offset: query.offset,
-    }
+    },
   );
 
   if (commentsError) {
@@ -127,10 +127,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * - comment: Created comment with user details
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { userId, orgId } = await requireOrg();
-  const body = await parseBody<CreateCommentInput>(request, createCommentSchema);
-
-  const supabase = await createClient();
+  const [{ userId, orgId }, body, supabase] = await Promise.all([
+    requireOrg(),
+    parseBody<CreateCommentInput>(request, createCommentSchema),
+    createClient(),
+  ]);
 
   // Verify user has access to the recording
   const { data: recording, error: recordingError } = await supabase
@@ -146,12 +147,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   // Validate timestamp only for video/audio content
   const isMediaContent = ['recording', 'video', 'audio'].includes(
-    recording.content_type || ''
+    recording.content_type || '',
   );
 
   if (body.timestamp_sec !== undefined && !isMediaContent) {
     throw errors.badRequest(
-      'Timestamps are only supported for video and audio content'
+      'Timestamps are only supported for video and audio content',
     );
   }
 
@@ -201,7 +202,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       p_org_id: orgId,
       p_limit: 1,
       p_offset: 0,
-    }
+    },
   );
 
   if (fetchError || !commentWithUser || commentWithUser.length === 0) {
@@ -212,12 +213,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   // Find the created comment in the results
   const createdComment = (commentWithUser as CommentWithUser[]).find(
-    (c) => c.id === newComment.id
+    (c) => c.id === newComment.id,
   );
 
   return successResponse(
     { comment: createdComment || newComment },
     undefined,
-    201
+    201,
   );
 });

@@ -52,7 +52,7 @@ function orderPagesByRequestedIds<T extends { id: string }>(
   pageIds: string[],
 ): T[] {
   const rankById = new Map(pageIds.map((id, index) => [id, index]));
-  return [...pages].sort((left, right) => {
+  return pages.toSorted((left, right) => {
     const leftRank = rankById.get(left.id) ?? Number.MAX_SAFE_INTEGER;
     const rightRank = rankById.get(right.id) ?? Number.MAX_SAFE_INTEGER;
     if (leftRank !== rightRank) return leftRank - rightRank;

@@ -1,7 +1,7 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
 import { ColumnDef } from '@tanstack/react-table';
 import {
   FileVideo,
@@ -30,6 +30,7 @@ import {
 import { TagBadge } from '@/app/components/tags/TagBadge';
 import { FavoriteButton } from '@/app/components/favorites/FavoriteButton';
 import type { ContentItem } from '@/app/components/content/ContentCard';
+import { formatStableDateTime } from '@/lib/utils/formatting';
 
 type LibraryTag = {
   id: string;
@@ -67,21 +68,23 @@ function formatDuration(seconds: number | null) {
 function getContentIcon(type: string | null) {
   switch (type) {
     case 'recording':
-      return <Video className="h-4 w-4" />;
+      return <Video className="size-4" />;
     case 'video':
-      return <FileVideo className="h-4 w-4" />;
+      return <FileVideo className="size-4" />;
     case 'audio':
-      return <FileAudio className="h-4 w-4" />;
+      return <FileAudio className="size-4" />;
     case 'document':
-      return <FileText className="h-4 w-4" />;
+      return <FileText className="size-4" />;
     case 'text':
-      return <FileText className="h-4 w-4" />;
+      return <FileText className="size-4" />;
     default:
-      return <File className="h-4 w-4" />;
+      return <File className="size-4" />;
   }
 }
 
-function getStatusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function getStatusVariant(
+  status: string,
+): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
     case 'completed':
       return 'default';
@@ -107,7 +110,9 @@ interface LibraryColumnActions {
 /**
  * Create column definitions for the library table
  */
-export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<ContentItem>[] {
+export function createLibraryColumns(
+  actions: LibraryColumnActions,
+): ColumnDef<ContentItem>[] {
   return [
     // Selection column
     {
@@ -141,12 +146,15 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
       cell: ({ row }) => {
         const item = row.original;
         return (
-          <div className="flex items-center justify-center w-10 h-10 rounded bg-muted overflow-hidden">
+          <div className="relative flex items-center justify-center size-10 rounded bg-muted overflow-hidden">
             {item.thumbnail_url ? (
-              <img
+              <Image
                 src={item.thumbnail_url}
                 alt=""
-                className="w-full h-full object-cover"
+                fill
+                sizes="40px"
+                className="object-cover"
+                unoptimized
               />
             ) : (
               <div className="text-muted-foreground">
@@ -170,7 +178,7 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
         >
           Title
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+          <ArrowUpDown className="ml-2 size-4" />
         </Button>
       ),
       cell: ({ row }) => {
@@ -182,7 +190,7 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
             className="group hover:underline flex items-center gap-2 font-medium"
           >
             <span className="truncate max-w-md">{title}</span>
-            <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+            <ExternalLink className="size-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
           </Link>
         );
       },
@@ -211,16 +219,17 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
         const item = row.original;
         if (item.deleted_at) {
           return (
-            <Badge variant="secondary" className="bg-destructive/10 text-destructive border-destructive/20">
-              <Trash2 className="w-3 h-3 mr-1" />
+            <Badge
+              variant="secondary"
+              className="bg-destructive/10 text-destructive border-destructive/20"
+            >
+              <Trash2 className="size-3 mr-1" />
               Trashed
             </Badge>
           );
         }
         return (
-          <Badge variant={getStatusVariant(item.status)}>
-            {item.status}
-          </Badge>
+          <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
         );
       },
     },
@@ -257,12 +266,12 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
         >
           Created
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+          <ArrowUpDown className="ml-2 size-4" />
         </Button>
       ),
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground">
-          {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
+          {formatStableDateTime(row.original.created_at)}
         </span>
       ),
     },
@@ -297,7 +306,11 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
       id: 'favorite',
       header: '',
       cell: ({ row }) => (
-        <div onClick={(e) => e.stopPropagation()}>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="presentation"
+        >
           <FavoriteButton
             recordingId={row.original.id}
             isFavorite={Boolean((row.original as LibraryRow).is_favorite)}
@@ -317,30 +330,36 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
         const item = row.original;
 
         return (
-          <div onClick={(e) => e.stopPropagation()}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role="presentation"
+          >
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <MoreVertical className="h-4 w-4" />
+                <Button variant="ghost" size="sm" className="size-8 p-0">
+                  <MoreVertical className="size-4" />
                   <span className="sr-only">Open menu</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild>
                   <Link href={`/library/${item.id}`}>
-                    <ExternalLink className="mr-2 h-4 w-4" />
+                    <ExternalLink className="mr-2 size-4" />
                     View Details
                   </Link>
                 </DropdownMenuItem>
                 {actions.onShare && (
                   <DropdownMenuItem onClick={() => actions.onShare!(item.id)}>
-                    <Share2 className="mr-2 h-4 w-4" />
+                    <Share2 className="mr-2 size-4" />
                     Share
                   </DropdownMenuItem>
                 )}
                 {actions.onDownload && (
-                  <DropdownMenuItem onClick={() => actions.onDownload!(item.id)}>
-                    <Download className="mr-2 h-4 w-4" />
+                  <DropdownMenuItem
+                    onClick={() => actions.onDownload!(item.id)}
+                  >
+                    <Download className="mr-2 size-4" />
                     Download
                   </DropdownMenuItem>
                 )}
@@ -351,7 +370,7 @@ export function createLibraryColumns(actions: LibraryColumnActions): ColumnDef<C
                       onClick={() => actions.onDelete!(item.id)}
                       className="text-destructive focus:text-destructive"
                     >
-                      <Trash2 className="mr-2 h-4 w-4" />
+                      <Trash2 className="mr-2 size-4" />
                       Move to Trash
                     </DropdownMenuItem>
                   </>

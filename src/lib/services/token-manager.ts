@@ -335,7 +335,7 @@ export function createMicrosoftRefreshFunction(
 /**
  * Create a refresh function for Notion OAuth
  */
-export function createNotionRefreshFunction(
+function createNotionRefreshFunction(
   clientId: string,
   clientSecret: string
 ): RefreshFunction {
@@ -352,5 +352,3 @@ export function createNotionRefreshFunction(
 // =====================================================
 // HELPER EXPORTS
 // =====================================================
-
-export default TokenManager;

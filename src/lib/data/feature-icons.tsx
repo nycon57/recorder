@@ -41,7 +41,7 @@ import type { IconName } from './features';
 /**
  * Map of icon names to Lucide components
  */
-export const ICON_MAP: Record<IconName, LucideIcon> = {
+const ICON_MAP: Record<IconName, LucideIcon> = {
   Video,
   Mic,
   Search,
@@ -63,7 +63,7 @@ export const ICON_MAP: Record<IconName, LucideIcon> = {
 /**
  * Get a Lucide icon component by name
  */
-export function getFeatureIcon(name: IconName): LucideIcon {
+function getFeatureIcon(name: IconName): LucideIcon {
   return ICON_MAP[name];
 }
 

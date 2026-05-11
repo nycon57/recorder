@@ -55,15 +55,16 @@ export const POST = apiHandler(
   async (
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
-  ) => {
-    const { orgId, userId, role } = await requireOrg();
-    // Use admin client to bypass RLS - auth already validated via requireOrg()
-    const supabase = supabaseAdmin;
-    const { id } = await params;
+    ) => {
+      const { orgId, userId, role } = await requireOrg();
+      // Use admin client to bypass RLS - auth already validated via requireOrg()
+      const supabase = supabaseAdmin;
 
-    if (!hasPermission(role as OrganizationRole, 'recording:create')) {
-      return errors.forbidden();
-    }
+      if (!hasPermission(role as OrganizationRole, 'recording:create')) {
+        return errors.forbidden();
+      }
+
+      const { id } = await params;
 
     // Parse optional body parameters
     let body: unknown = {};

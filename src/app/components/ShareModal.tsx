@@ -19,6 +19,7 @@ import { RadioGroup, RadioGroupItem } from '@/app/components/ui/radio-group';
 import { Separator } from '@/app/components/ui/separator';
 import { Badge } from '@/app/components/ui/badge';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
+import { formatDateInputValue } from '@/lib/utils/formatting';
 
 interface Share {
   id: string;
@@ -40,7 +41,13 @@ interface ShareModalProps {
   onShareRevoked?: () => void;
 }
 
-export default function ShareModal({
+export default function ShareModal(
+  props: Parameters<typeof useShareModalImplementation>[0],
+) {
+  return useShareModalImplementation(props);
+}
+
+function useShareModalImplementation({
   open,
   onOpenChange,
   recordingId,
@@ -48,14 +55,35 @@ export default function ShareModal({
   onShareCreated,
   onShareRevoked,
 }: ShareModalProps) {
-  const [shareType, setShareType] = React.useState<'public' | 'password'>('public');
-  const [password, setPassword] = React.useState('');
-  const [expiresAt, setExpiresAt] = React.useState('');
-  const [isCreating, setIsCreating] = React.useState(false);
-  const [revokingId, setRevokingId] = React.useState<string | null>(null);
+  const [state, dispatch] = React.useReducer(
+    (
+      current: {
+        shareType: 'public' | 'password';
+        password: string;
+        expiresAt: string;
+        isCreating: boolean;
+        revokingId: string | null;
+      },
+      patch: Partial<{
+        shareType: 'public' | 'password';
+        password: string;
+        expiresAt: string;
+        isCreating: boolean;
+        revokingId: string | null;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      shareType: 'public',
+      password: '',
+      expiresAt: '',
+      isCreating: false,
+      revokingId: null,
+    },
+  );
+  const { shareType, password, expiresAt, isCreating, revokingId } = state;
 
   const handleCreateShare = async () => {
-    setIsCreating(true);
+    dispatch({ isCreating: true });
     try {
       const body: any = {
         target_type: 'recording',
@@ -90,9 +118,7 @@ export default function ShareModal({
       toast.success('Share link copied to clipboard');
 
       // Reset form
-      setPassword('');
-      setExpiresAt('');
-      setShareType('public');
+      dispatch({ password: '', expiresAt: '', shareType: 'public' });
 
       // Notify parent
       if (onShareCreated) {
@@ -101,7 +127,7 @@ export default function ShareModal({
     } catch (error: any) {
       toast.error(error.message || 'Failed to create share');
     } finally {
-      setIsCreating(false);
+      dispatch({ isCreating: false });
     }
   };
 
@@ -110,7 +136,7 @@ export default function ShareModal({
       return;
     }
 
-    setRevokingId(shareId);
+    dispatch({ revokingId: shareId });
     try {
       const response = await fetch(`/api/share/${shareId}`, {
         method: 'DELETE',
@@ -129,7 +155,7 @@ export default function ShareModal({
     } catch (error) {
       toast.error('Failed to revoke share');
     } finally {
-      setRevokingId(null);
+      dispatch({ revokingId: null });
     }
   };
 
@@ -171,7 +197,8 @@ export default function ShareModal({
         <DialogHeader>
           <DialogTitle>Share Recording</DialogTitle>
           <DialogDescription>
-            Create a shareable link for this recording. You can optionally add password protection.
+            Create a shareable link for this recording. You can optionally add
+            password protection.
           </DialogDescription>
         </DialogHeader>
 
@@ -180,22 +207,33 @@ export default function ShareModal({
           <div className="space-y-4">
             <div className="space-y-3">
               <Label>Share Type</Label>
-              <RadioGroup value={shareType} onValueChange={(v: any) => setShareType(v)}>
-                <div className="flex items-center space-x-2">
+              <RadioGroup
+                value={shareType}
+                onValueChange={(v: any) => dispatch({ shareType: v })}
+              >
+                <div className="flex items-center gap-x-2">
                   <RadioGroupItem value="public" id="public" />
-                  <Label htmlFor="public" className="font-normal cursor-pointer">
+                  <Label
+                    htmlFor="public"
+                    className="font-normal cursor-pointer"
+                  >
                     <div className="flex items-center gap-2">
                       <Globe className="size-4 text-muted-foreground" />
                       <span>Public - Anyone with the link can view</span>
                     </div>
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <RadioGroupItem value="password" id="password" />
-                  <Label htmlFor="password" className="font-normal cursor-pointer">
+                  <Label
+                    htmlFor="password"
+                    className="font-normal cursor-pointer"
+                  >
                     <div className="flex items-center gap-2">
                       <Lock className="size-4 text-muted-foreground" />
-                      <span>Password Protected - Requires password to view</span>
+                      <span>
+                        Password Protected - Requires password to view
+                      </span>
                     </div>
                   </Label>
                 </div>
@@ -210,7 +248,7 @@ export default function ShareModal({
                   type="password"
                   placeholder="Enter password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => dispatch({ password: e.target.value })}
                 />
               </div>
             )}
@@ -221,8 +259,8 @@ export default function ShareModal({
                 id="expires"
                 type="date"
                 value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => dispatch({ expiresAt: e.target.value })}
+                min={formatDateInputValue()}
               />
             </div>
 
@@ -234,7 +272,7 @@ export default function ShareModal({
               {isCreating ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Creating...
+                  Creating…
                 </>
               ) : (
                 'Create Share Link'
@@ -247,7 +285,9 @@ export default function ShareModal({
             <>
               <Separator />
               <div className="space-y-3">
-                <h4 className="text-sm font-semibold">Active Shares ({shares.length})</h4>
+                <h4 className="text-sm font-semibold">
+                  Active Shares ({shares.length})
+                </h4>
                 <ScrollArea className="max-h-[300px]">
                   <div className="space-y-3">
                     {shares.map((share) => (
@@ -286,14 +326,18 @@ export default function ShareModal({
                             <Button
                               size="icon-sm"
                               variant="ghost"
-                              onClick={() => handleCopyShareLink(share.share_id)}
+                              onClick={() =>
+                                handleCopyShareLink(share.share_id)
+                              }
                             >
                               <Copy className="size-4" />
                             </Button>
                             <Button
                               size="icon-sm"
                               variant="ghost"
-                              onClick={() => window.open(`/s/${share.share_id}`, '_blank')}
+                              onClick={() =>
+                                window.open(`/s/${share.share_id}`, '_blank')
+                              }
                             >
                               <ExternalLink className="size-4" />
                             </Button>

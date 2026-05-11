@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Skeleton } from '@/app/components/ui/skeleton';
 
@@ -16,64 +22,42 @@ interface HealthData {
 }
 
 export default function HealthScoreGauge() {
-  const [health, setHealth] = useState<HealthData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const {
+    data: health,
+    isLoading,
+    error,
+  } = useQuery<HealthData, Error>({
+    queryKey: ['analytics', 'metrics', 'health-score'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        '/api/analytics/metrics?includeHealth=true',
+        { signal },
+      );
 
-  useEffect(() => {
-    const fetchHealth = async () => {
-      // Create new AbortController for this fetch
-      abortControllerRef.current = new AbortController();
-
-      try {
-        const response = await fetch('/api/analytics/metrics?includeHealth=true', {
-          signal: abortControllerRef.current.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch health data');
-        }
-
-        const { data } = await response.json();
-
-        const score = data.health?.score || 0;
-        setHealth({
-          score,
-          trend: data.health?.trend || 'stable',
-          trendValue: data.health?.trendValue || 0,
-          status:
-            score >= 90 ? 'excellent' :
-            score >= 75 ? 'good' :
-            score >= 60 ? 'fair' : 'poor',
-          lastChecked: data.health?.lastChecked || new Date().toISOString(),
-        });
-        setError(null);
-      } catch (err) {
-        // Ignore abort errors
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-
-        console.error('Error fetching health data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load health data');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch health data');
       }
-    };
 
-    fetchHealth();
+      const { data } = await response.json();
+      const score = data.health?.score || 0;
 
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchHealth, 30000);
-
-    return () => {
-      clearInterval(interval);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+      return {
+        score,
+        trend: data.health?.trend || 'stable',
+        trendValue: data.health?.trendValue || 0,
+        status:
+          score >= 90
+            ? 'excellent'
+            : score >= 75
+              ? 'good'
+              : score >= 60
+                ? 'fair'
+                : 'poor',
+        lastChecked: data.health?.lastChecked || new Date().toISOString(),
+      };
+    },
+    refetchInterval: 30000,
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -108,11 +92,11 @@ export default function HealthScoreGauge() {
   const getTrendIcon = (trend: string) => {
     switch (trend) {
       case 'up':
-        return <TrendingUp className="h-4 w-4 text-green-600" />;
+        return <TrendingUp className="size-4 text-green-600" />;
       case 'down':
-        return <TrendingDown className="h-4 w-4 text-red-600" />;
+        return <TrendingDown className="size-4 text-red-600" />;
       default:
-        return <Minus className="h-4 w-4 text-muted-foreground" />;
+        return <Minus className="size-4 text-muted-foreground" />;
     }
   };
 
@@ -126,7 +110,7 @@ export default function HealthScoreGauge() {
     });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -144,7 +128,9 @@ export default function HealthScoreGauge() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading health data: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading health data: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -161,11 +147,12 @@ export default function HealthScoreGauge() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Activity className="h-5 w-5" />
+          <Activity className="size-5" />
           Overall System Health
         </CardTitle>
         <CardDescription>
-          Composite health score based on storage, performance, and reliability metrics
+          Composite health score based on storage, performance, and reliability
+          metrics
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -174,7 +161,7 @@ export default function HealthScoreGauge() {
           <div className="flex flex-col items-center justify-center">
             <div className="relative w-64 h-32">
               {/* Gauge Background */}
-              <svg viewBox="0 0 200 100" className="w-full h-full">
+              <svg viewBox="0 0 200 100" className="size-full">
                 {/* Background Arc */}
                 <path
                   d="M 20 90 A 80 80 0 0 1 180 90"
@@ -236,7 +223,9 @@ export default function HealthScoreGauge() {
 
             {/* Score Display */}
             <div className="text-center mt-4">
-              <div className={`text-5xl font-bold ${getStatusColor(health.status)}`}>
+              <div
+                className={`text-5xl font-bold ${getStatusColor(health.status)}`}
+              >
                 {health.score.toFixed(0)}
               </div>
               <Badge
@@ -253,30 +242,45 @@ export default function HealthScoreGauge() {
             <div>
               <h3 className="text-sm font-medium mb-4">Health Status</h3>
               <div className="space-y-3">
-                <div className={`rounded-lg p-4 ${getStatusBgColor(health.status)}`}>
-                  <p className={`text-sm font-medium ${getStatusColor(health.status)}`}>
-                    {health.status === 'excellent' && 'Excellent - All systems operating optimally'}
-                    {health.status === 'good' && 'Good - Systems performing well'}
+                <div
+                  className={`rounded-lg p-4 ${getStatusBgColor(health.status)}`}
+                >
+                  <p
+                    className={`text-sm font-medium ${getStatusColor(health.status)}`}
+                  >
+                    {health.status === 'excellent' &&
+                      'Excellent - All systems operating optimally'}
+                    {health.status === 'good' &&
+                      'Good - Systems performing well'}
                     {health.status === 'fair' && 'Fair - Some attention needed'}
-                    {health.status === 'poor' && 'Poor - Immediate attention required'}
+                    {health.status === 'poor' &&
+                      'Poor - Immediate attention required'}
                   </p>
                 </div>
 
                 <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <span className="text-sm text-muted-foreground">Health Trend</span>
+                  <span className="text-sm text-muted-foreground">
+                    Health Trend
+                  </span>
                   <div className="flex items-center gap-2">
                     {getTrendIcon(health.trend)}
                     <span className="text-sm font-medium">
-                      {health.trend === 'up' && `+${health.trendValue.toFixed(1)}%`}
-                      {health.trend === 'down' && `${health.trendValue.toFixed(1)}%`}
+                      {health.trend === 'up' &&
+                        `+${health.trendValue.toFixed(1)}%`}
+                      {health.trend === 'down' &&
+                        `${health.trendValue.toFixed(1)}%`}
                       {health.trend === 'stable' && 'Stable'}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <span className="text-sm text-muted-foreground">Last Checked</span>
-                  <span className="text-sm font-medium">{formatTimestamp(health.lastChecked)}</span>
+                  <span className="text-sm text-muted-foreground">
+                    Last Checked
+                  </span>
+                  <span className="text-sm font-medium">
+                    {formatTimestamp(health.lastChecked)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -284,8 +288,9 @@ export default function HealthScoreGauge() {
             <div>
               <h3 className="text-sm font-medium mb-2">Score Breakdown</h3>
               <p className="text-xs text-muted-foreground">
-                Health score is calculated based on storage availability (40%), job success rate (30%),
-                API response times (20%), and alert frequency (10%).
+                Health score is calculated based on storage availability (40%),
+                job success rate (30%), API response times (20%), and alert
+                frequency (10%).
               </p>
             </div>
           </div>

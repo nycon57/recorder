@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 
 type EventRow = Database['public']['Tables']['events']['Row'];
 
-export type ExtensionDebugSessionEventType =
+type ExtensionDebugSessionEventType =
   | 'session_start_requested'
   | 'session_started'
   | 'session_ended'
@@ -22,13 +22,13 @@ export type ExtensionDebugSessionEventType =
   | 'tool_call_started'
   | 'tool_call_completed';
 
-export type ExtensionDebugSessionKnowledgeMode =
+type ExtensionDebugSessionKnowledgeMode =
   | 'dom_only'
   | 'vendor_backed'
   | 'org_backed'
   | 'unknown';
 
-export type ExtensionDebugSessionMatchBasis =
+type ExtensionDebugSessionMatchBasis =
   | 'exact'
   | 'screen_alias'
   | 'app_only'
@@ -37,7 +37,7 @@ export type ExtensionDebugSessionMatchBasis =
   | 'unknown';
 
 export type ExtensionDebugSessionStatus = 'active' | 'completed' | 'failed';
-export type ExtensionDebugSessionSince = '1h' | '24h' | '7d' | '30d' | 'all';
+type ExtensionDebugSessionSince = '1h' | '24h' | '7d' | '30d' | 'all';
 
 export interface ExtensionDebugSessionFilters {
   app?: string;
@@ -83,7 +83,7 @@ export interface ExtensionDebugSessionEvent {
   fingerprint: string | null;
 }
 
-export interface ExtensionDebugSessionSummary {
+interface ExtensionDebugSessionSummary {
   id: string;
   startedAt: string;
   endedAt: string | null;
@@ -103,7 +103,7 @@ export interface ExtensionDebugSessionSummary {
   latestError: string | null;
 }
 
-export interface ExtensionDebugSessionTurn {
+interface ExtensionDebugSessionTurn {
   id: string;
   startedAt: string;
   userMessage: ExtensionDebugSessionEvent | null;
@@ -118,14 +118,14 @@ export interface ExtensionDebugSessionTimeline {
   nonTurnEvents: ExtensionDebugSessionEvent[];
 }
 
-export interface ExtensionDebugSessionTranscriptEntry {
+interface ExtensionDebugSessionTranscriptEntry {
   speaker: 'user' | 'assistant';
   turnId: string | null;
   occurredAt: string;
   messageText: string;
 }
 
-export interface ExtensionDebugSessionReviewPageContext {
+interface ExtensionDebugSessionReviewPageContext {
   occurredAt: string;
   app: string | null;
   screen: string | null;
@@ -135,7 +135,7 @@ export interface ExtensionDebugSessionReviewPageContext {
   fingerprint: string | null;
 }
 
-export interface ExtensionDebugSessionReviewToolAction {
+interface ExtensionDebugSessionReviewToolAction {
   toolName: string;
   status: 'started' | 'completed' | 'failed';
   occurredAt: string;
@@ -148,7 +148,7 @@ export interface ExtensionDebugSessionReviewToolAction {
   error: string | null;
 }
 
-export interface ExtensionDebugSessionFailurePoint {
+interface ExtensionDebugSessionFailurePoint {
   code:
     | 'mic_permission'
     | 'tool_failure'
@@ -162,7 +162,7 @@ export interface ExtensionDebugSessionFailurePoint {
   evidence: string;
 }
 
-export interface ExtensionDebugSessionReviewTurn {
+interface ExtensionDebugSessionReviewTurn {
   id: string;
   startedAt: string;
   userMessage: string | null;
@@ -572,7 +572,7 @@ export function parseExtensionDebugSessionFilters(
   };
 }
 
-export function normalizeExtensionDebugSessionEvent(
+function normalizeExtensionDebugSessionEvent(
   row: EventRow,
 ): ExtensionDebugSessionEvent | null {
   if (row.type !== 'extension.debug_session.event') return null;
@@ -638,7 +638,7 @@ export function normalizeExtensionDebugSessionEvent(
   };
 }
 
-export function summarizeExtensionDebugSessions(
+function summarizeExtensionDebugSessions(
   events: ExtensionDebugSessionEvent[],
 ): ExtensionDebugSessionSummary[] {
   const bySession = new Map<string, ExtensionDebugSessionEvent[]>();
@@ -654,7 +654,7 @@ export function summarizeExtensionDebugSessions(
 
   return Array.from(bySession.entries())
     .map(([sessionId, sessionEvents]) => {
-      const orderedEvents = [...sessionEvents].sort(eventSort);
+      const orderedEvents = sessionEvents.toSorted(eventSort);
       const startedAt =
         orderedEvents[0]?.occurredAt ?? orderedEvents[0]?.createdAt;
       const endedEvent = [...orderedEvents]
@@ -694,7 +694,10 @@ export function summarizeExtensionDebugSessions(
             .find((event) => event.knowledgeMode !== 'unknown')
             ?.knowledgeMode ?? 'unknown',
         turnCount: new Set(
-          orderedEvents.map((event) => event.turnId).filter(Boolean),
+          orderedEvents.flatMap((__item, __index, __array) => {
+            const __mapped = __item.turnId;
+            return __mapped ? [__mapped] : [];
+          }),
         ).size,
         toolCallCount: orderedEvents.filter(
           (event) => event.eventType === 'tool_call_started',
@@ -716,7 +719,7 @@ export function summarizeExtensionDebugSessions(
     );
 }
 
-export function matchesExtensionDebugSessionFilters(
+function matchesExtensionDebugSessionFilters(
   session: ExtensionDebugSessionSummary,
   filters: Partial<ExtensionDebugSessionFilters>,
 ): boolean {
@@ -756,7 +759,7 @@ export function matchesExtensionDebugSessionFilters(
   return true;
 }
 
-export function buildExtensionDebugSessionTimeline(args: {
+function buildExtensionDebugSessionTimeline(args: {
   sessionId: string;
   events: ExtensionDebugSessionEvent[];
 }): ExtensionDebugSessionTimeline {
@@ -806,31 +809,27 @@ export function buildExtensionDebugSessionTimeline(args: {
   };
 }
 
-export function buildExtensionDebugSessionReview(args: {
+function buildExtensionDebugSessionReview(args: {
   sessionId: string;
   events: ExtensionDebugSessionEvent[];
 }): ExtensionDebugSessionReview {
   const timeline = buildExtensionDebugSessionTimeline(args);
-  const transcript = timeline.events
-    .map((event) => buildTranscriptEntry(event))
-    .filter(
-      (entry): entry is ExtensionDebugSessionTranscriptEntry => entry !== null,
-    );
+  const transcript = timeline.events.flatMap((__item, __index, __array) => {
+    const __mapped = buildTranscriptEntry(__item);
+    return __mapped !== null ? [__mapped] : [];
+  });
 
   const turns = timeline.turns.map((turn) => {
-    const turnEvents = [...turn.events].sort(eventSort);
-    const assistantReplies = turnEvents
-      .filter(
-        (event) =>
-          event.eventType === 'assistant_message' && !!event.messageText,
-      )
-      .map((event) => event.messageText as string);
-    const transcriptEntries = turnEvents
-      .map((event) => buildTranscriptEntry(event))
-      .filter(
-        (entry): entry is ExtensionDebugSessionTranscriptEntry =>
-          entry !== null,
-      );
+    const turnEvents = turn.events.toSorted(eventSort);
+    const assistantReplies = turnEvents.flatMap((__item, __index, __array) =>
+      __item.eventType === 'assistant_message' && !!__item.messageText
+        ? [__item.messageText as string]
+        : [],
+    );
+    const transcriptEntries = turnEvents.flatMap((__item, __index, __array) => {
+      const __mapped = buildTranscriptEntry(__item);
+      return __mapped !== null ? [__mapped] : [];
+    });
     const turnStartTime = new Date(turn.startedAt).getTime();
     const latestPriorContext = [...timeline.nonTurnEvents]
       .reverse()
@@ -865,9 +864,10 @@ export function buildExtensionDebugSessionReview(args: {
       assistantReplies,
       toolActions: buildTurnToolActions(turnEvents),
       pageContexts: dedupedPageContexts,
-      errors: turnEvents
-        .map((event) => event.error)
-        .filter((value): value is string => !!value),
+      errors: turnEvents.flatMap((__item, __index, __array) => {
+        const __mapped = __item.error;
+        return __mapped ? [__mapped] : [];
+      }),
       transcript: transcriptEntries,
     };
   });
@@ -912,16 +912,26 @@ export async function listExtensionDebugSessions(args: {
     );
   }
 
-  const normalized = (data ?? [])
-    .map((row) => normalizeExtensionDebugSessionEvent(row))
-    .filter((event): event is ExtensionDebugSessionEvent => event !== null)
-    .filter((event) => event.orgId === args.orgId);
+  const normalized = (data ?? []).flatMap((__item, __index, __array) => {
+    const __mapped = normalizeExtensionDebugSessionEvent(__item);
+    return __mapped !== null && __mapped.orgId === args.orgId ? [__mapped] : [];
+  });
 
   const availableApps = Array.from(
-    new Set(normalized.map((event) => event.app).filter(Boolean)),
+    new Set(
+      normalized.flatMap((__item, __index, __array) => {
+        const __mapped = __item.app;
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   ).sort() as string[];
   const availableHosts = Array.from(
-    new Set(normalized.map((event) => event.urlHost).filter(Boolean)),
+    new Set(
+      normalized.flatMap((__item, __index, __array) => {
+        const __mapped = __item.urlHost;
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   ).sort() as string[];
   const sessions = summarizeExtensionDebugSessions(normalized)
     .filter((session) =>
@@ -953,13 +963,14 @@ export async function getExtensionDebugSessionTimeline(args: {
     );
   }
 
-  const normalized = (data ?? [])
-    .map((row) => normalizeExtensionDebugSessionEvent(row))
-    .filter((event): event is ExtensionDebugSessionEvent => event !== null)
-    .filter(
-      (event) =>
-        event.orgId === args.orgId && event.sessionId === args.sessionId,
-    );
+  const normalized = (data ?? []).flatMap((__item, __index, __array) => {
+    const __mapped = normalizeExtensionDebugSessionEvent(__item);
+    return __mapped !== null &&
+      __mapped.orgId === args.orgId &&
+      __mapped.sessionId === args.sessionId
+      ? [__mapped]
+      : [];
+  });
 
   if (normalized.length === 0) {
     return null;

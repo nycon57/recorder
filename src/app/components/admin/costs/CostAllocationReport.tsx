@@ -1,10 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { FileText, Download, Calendar, Filter, Building2, TrendingUp, TrendingDown } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  FileText,
+  Download,
+  Calendar,
+  Filter,
+  Building2,
+  TrendingUp,
+  TrendingDown,
+} from 'lucide-react';
 import Link from 'next/link';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
@@ -34,33 +49,24 @@ interface AllocationData {
 }
 
 export default function CostAllocationReport() {
-  const [data, setData] = useState<AllocationData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'cost' | 'storage' | 'users'>('cost');
   const [isExporting, setIsExporting] = useState(false);
 
-  useEffect(() => {
-    const fetchAllocationData = async () => {
-      try {
-        const response = await fetch('/api/analytics/costs/allocation');
+  const { data, isLoading, error } = useQuery<AllocationData, Error>({
+    queryKey: ['analytics', 'costs', 'allocation'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch('/api/analytics/costs/allocation', {
+        signal,
+      });
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch allocation report');
-        }
-
-        const { data: allocationData } = await response.json();
-        setData(allocationData);
-      } catch (err) {
-        console.error('Error fetching allocation data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load allocation data');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch allocation report');
       }
-    };
 
-    fetchAllocationData();
-  }, []);
+      const { data: allocationData } = await response.json();
+      return allocationData;
+    },
+  });
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -88,7 +94,8 @@ export default function CostAllocationReport() {
       const { toast } = await import('@/app/components/ui/use-toast');
       toast({
         title: 'Export Failed',
-        description: err instanceof Error ? err.message : 'Failed to export report',
+        description:
+          err instanceof Error ? err.message : 'Failed to export report',
         variant: 'destructive',
       });
     } finally {
@@ -99,7 +106,7 @@ export default function CostAllocationReport() {
     }
   };
 
-  const getSortedEntries = () => {
+  const sortedEntries = useMemo(() => {
     if (!data) return [];
 
     const entries = [...data.allocations];
@@ -113,7 +120,7 @@ export default function CostAllocationReport() {
       default:
         return entries;
     }
-  };
+  }, [data, sortBy]);
 
   const getCurrentPeriod = (): string => {
     const now = new Date();
@@ -134,7 +141,7 @@ export default function CostAllocationReport() {
     });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -152,7 +159,9 @@ export default function CostAllocationReport() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading allocation report: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading allocation report: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -162,19 +171,17 @@ export default function CostAllocationReport() {
     return null;
   }
 
-  const sortedEntries = getSortedEntries();
-
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
+              <FileText className="size-5" />
               Cost Allocation Report
             </CardTitle>
             <CardDescription className="flex items-center gap-2 mt-1">
-              <Calendar className="h-3 w-3" />
+              <Calendar className="size-3" />
               {getCurrentPeriod()} • Generated {getGeneratedTime()}
             </CardDescription>
           </div>
@@ -205,8 +212,13 @@ export default function CostAllocationReport() {
                 Users
               </Button>
             </div>
-            <Button size="sm" variant="outline" onClick={handleExport} disabled={isExporting}>
-              <Download className="h-4 w-4 mr-2" />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExport}
+              disabled={isExporting}
+            >
+              <Download className="size-4 mr-2" />
               {isExporting ? 'Exporting...' : 'Export CSV'}
             </Button>
           </div>
@@ -215,7 +227,7 @@ export default function CostAllocationReport() {
       <CardContent>
         {sortedEntries.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            <Building2 className="h-12 w-12 mx-auto mb-4" />
+            <Building2 className="size-12 mx-auto mb-4" />
             <p className="text-sm">No allocation data available</p>
           </div>
         ) : (
@@ -240,9 +252,11 @@ export default function CostAllocationReport() {
               >
                 {/* Organization */}
                 <div className="col-span-3 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <Building2 className="size-4 text-muted-foreground shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{entry.organizationName}</p>
+                    <p className="text-sm font-medium truncate">
+                      {entry.organizationName}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {entry.recordingCount} recordings
                     </p>
@@ -285,20 +299,21 @@ export default function CostAllocationReport() {
                 <div className="col-span-1">
                   <div className="flex items-center gap-1">
                     {entry.trend > 0 ? (
-                      <TrendingUp className="h-3 w-3 text-red-600" />
+                      <TrendingUp className="size-3 text-red-600" />
                     ) : entry.trend < 0 ? (
-                      <TrendingDown className="h-3 w-3 text-green-600" />
+                      <TrendingDown className="size-3 text-green-600" />
                     ) : null}
                     <span
                       className={`text-xs ${
                         entry.trend > 0
                           ? 'text-red-600'
                           : entry.trend < 0
-                          ? 'text-green-600'
-                          : 'text-muted-foreground'
+                            ? 'text-green-600'
+                            : 'text-muted-foreground'
                       }`}
                     >
-                      {entry.trend > 0 ? '+' : ''}{entry.trend.toFixed(0)}%
+                      {entry.trend > 0 ? '+' : ''}
+                      {entry.trend.toFixed(0)}%
                     </span>
                   </div>
                 </div>
@@ -309,7 +324,9 @@ export default function CostAllocationReport() {
             <div className="grid grid-cols-12 gap-4 px-4 py-3 border-t bg-muted/50 rounded-lg font-semibold">
               <div className="col-span-3">Total Platform</div>
               <div className="col-span-2">
-                <Badge className="text-xs">{formatCurrency(data.totals.totalCost)}</Badge>
+                <Badge className="text-xs">
+                  {formatCurrency(data.totals.totalCost)}
+                </Badge>
               </div>
               <div className="col-span-7"></div>
             </div>

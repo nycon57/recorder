@@ -12,14 +12,18 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
  * DELETE /api/favorites/[recordingId] - Remove item from favorites
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ recordingId: string }> }) => {
-    const { orgId, userId } = await requireOrg();
-    const { recordingId } = await params;
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ recordingId: string }> },
+  ) => {
+    const [{ orgId, userId }, { recordingId }] = await Promise.all([
+      requireOrg(),
+      params,
+    ]);
 
-    // Verify favorite exists for this user
     const { data: existing, error: fetchError } = await supabaseAdmin
       .from('favorites')
-      .select('user_id, recording_id')
+      .select('user_id, content_id')
       .eq('user_id', userId)
       .eq('content_id', recordingId)
       .single();
@@ -28,22 +32,23 @@ export const DELETE = apiHandler(
       return errors.notFound('Favorite', undefined);
     }
 
-    // Get recording title for activity log
     const { data: recording } = await supabaseAdmin
       .from('content')
       .select('title')
-      .eq('id', recordingId)
+      .eq('id', existing.content_id)
       .single();
 
-    // Remove from favorites
     const { error: deleteError } = await supabaseAdmin
       .from('favorites')
       .delete()
-      .eq('user_id', userId)
-      .eq('content_id', recordingId);
+      .eq('user_id', existing.user_id)
+      .eq('content_id', existing.content_id);
 
     if (deleteError) {
-      console.error('[DELETE /api/favorites/[recordingId]] Error removing favorite:', deleteError);
+      console.error(
+        '[DELETE /api/favorites/[recordingId]] Error removing favorite:',
+        deleteError,
+      );
       throw new Error('Failed to remove favorite');
     }
 
@@ -58,5 +63,5 @@ export const DELETE = apiHandler(
     });
 
     return successResponse({ deleted: true });
-  }
+  },
 );

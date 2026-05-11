@@ -11,10 +11,10 @@ import { recordUsage, calculateCredits } from '@/lib/services/agent-metering';
 import { checkUsageLimits } from '@/lib/services/usage-alerts';
 
 /** Agent activity log record matching the agent_activity_log table columns */
-export type AgentActivityLog = Database['public']['Tables']['agent_activity_log']['Row'];
+type AgentActivityLog = Database['public']['Tables']['agent_activity_log']['Row'];
 
 /** Stats returned by getAgentActionStats */
-export interface AgentActionStats {
+interface AgentActionStats {
   total: number;
   success: number;
   failure: number;
@@ -184,7 +184,7 @@ export async function withAgentLogging<T>(
  * Paginated query for agent activity with optional filters.
  * Ordered by created_at DESC.
  */
-export async function getAgentActivity(params: {
+async function getAgentActivity(params: {
   orgId: string;
   agentType?: string;
   actionType?: string;
@@ -223,7 +223,7 @@ export async function getAgentActivity(params: {
  * Uses get_agent_action_stats RPC for parameterized aggregation.
  * Returns all-zero stats when no matching actions exist.
  */
-export async function getAgentActionStats(params: {
+async function getAgentActionStats(params: {
   orgId: string;
   agentType?: string;
   startDate?: string;

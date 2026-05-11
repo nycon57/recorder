@@ -19,7 +19,7 @@ export const SOURCE_STATUS_VALUES = Object.values(SOURCE_STATUS);
 
 export type RecordingStatus =
   (typeof SOURCE_STATUS)[keyof typeof SOURCE_STATUS];
-export type SourceStatusInput = RecordingStatus | 'failed';
+type SourceStatusInput = RecordingStatus | 'failed';
 export type SourceStatusDisplayState =
   | 'uploading'
   | 'queued'
@@ -140,7 +140,7 @@ export function getStatusLabel(status: string): string {
   return getSourceStatusConfig(status)?.label ?? status;
 }
 
-export function getStatusColor(status: string): string {
+function getStatusColor(status: string): string {
   return getSourceStatusConfig(status)?.color ?? 'bg-gray-500';
 }
 
@@ -161,7 +161,7 @@ export function isProcessingStatus(status: string): boolean {
   return getSourceStatusConfig(status)?.active ?? false;
 }
 
-export function isCompletedStatus(status: string): boolean {
+function isCompletedStatus(status: string): boolean {
   return normalizeSourceStatus(status) === SOURCE_STATUS.COMPLETED;
 }
 

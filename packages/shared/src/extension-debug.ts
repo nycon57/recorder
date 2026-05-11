@@ -1,4 +1,4 @@
-import type { KnowledgeAvailability, KnowledgeMatchBasis } from './types.js';
+import type { KnowledgeAvailability, KnowledgeMatchBasis } from './types';
 
 export type ExtensionDebugSessionEventType =
   | 'session_start_requested'

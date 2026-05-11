@@ -21,7 +21,7 @@ export interface Highlight {
   similarity?: number;
 }
 
-export interface HighlightableContentProps {
+interface HighlightableContentProps {
   /**
    * The content to display and highlight
    */
@@ -58,6 +58,79 @@ export interface HighlightableContentProps {
   contentType?: 'text' | 'markdown';
 }
 
+type HighlightMatch = { start: number; end: number; highlightId: string };
+
+function HighlightedContentBody({
+  content,
+  matches,
+  highlightsEnabled,
+  currentHighlightId,
+  highlightRefsMap,
+}: {
+  content: string;
+  matches: HighlightMatch[];
+  highlightsEnabled: boolean;
+  currentHighlightId?: string;
+  highlightRefsMap: React.MutableRefObject<Map<string, HTMLElement>>;
+}) {
+  if (!highlightsEnabled || matches.length === 0) {
+    return (
+      <pre className="whitespace-pre-wrap font-sans leading-relaxed">
+        {content}
+      </pre>
+    );
+  }
+
+  const segments: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  matches.forEach((match) => {
+    // Add text before highlight
+    if (match.start > lastIndex) {
+      segments.push(
+        <span key={`text-${match.start}`}>
+          {content.slice(lastIndex, match.start)}
+        </span>,
+      );
+    }
+
+    // Add highlighted text
+    const isCurrentHighlight = match.highlightId === currentHighlightId;
+    segments.push(
+      <mark
+        key={`highlight-${match.highlightId}`}
+        ref={(el) => {
+          if (el) {
+            highlightRefsMap.current.set(match.highlightId, el);
+          }
+        }}
+        data-highlight-id={match.highlightId}
+        className={cn(
+          'rounded px-1 transition-colors',
+          isCurrentHighlight
+            ? 'bg-yellow-300/60 ring-2 ring-yellow-400 dark:bg-yellow-500/40 dark:ring-yellow-500'
+            : 'bg-yellow-200/30 dark:bg-yellow-500/20',
+        )}
+      >
+        {content.slice(match.start, match.end)}
+      </mark>,
+    );
+
+    lastIndex = match.end;
+  });
+
+  // Add remaining text
+  if (lastIndex < content.length) {
+    segments.push(<span key="text-end">{content.slice(lastIndex)}</span>);
+  }
+
+  return (
+    <pre className="whitespace-pre-wrap font-sans leading-relaxed">
+      {segments}
+    </pre>
+  );
+}
+
 /**
  * HighlightableContent Component
  *
@@ -68,7 +141,7 @@ export interface HighlightableContentProps {
  * - Toggle highlight visibility
  * - Scroll to highlight via refs
  */
-export function HighlightableContent({
+function HighlightableContent({
   content,
   highlights,
   currentHighlightId,
@@ -89,21 +162,23 @@ export function HighlightableContent({
    * Strip markdown and formatting symbols for better matching
    */
   const stripFormatting = (text: string): string => {
-    return text
-      // Remove markdown headings (# ## ### etc)
-      .replace(/^#{1,6}\s+/gm, '')
-      // Remove markdown bold/italic (**text** or *text* or __text__ or _text_)
-      .replace(/(\*\*|__)(.*?)\1/g, '$2')
-      .replace(/(\*|_)(.*?)\1/g, '$2')
-      // Remove markdown links [text](url)
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      // Remove markdown code blocks ```code```
-      .replace(/```[\s\S]*?```/g, '')
-      .replace(/`([^`]+)`/g, '$1')
-      // Remove extra whitespace and normalize
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toLowerCase();
+    return (
+      text
+        // Remove markdown headings (# ## ### etc)
+        .replace(/^#{1,6}\s+/gm, '')
+        // Remove markdown bold/italic (**text** or *text* or __text__ or _text_)
+        .replace(/(\*\*|__)(.*?)\1/g, '$2')
+        .replace(/(\*|_)(.*?)\1/g, '$2')
+        // Remove markdown links [text](url)
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        // Remove markdown code blocks ```code```
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`([^`]+)`/g, '$1')
+        // Remove extra whitespace and normalize
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+    );
   };
 
   /**
@@ -112,7 +187,7 @@ export function HighlightableContent({
    */
   const findInOriginal = (
     originalContent: string,
-    normalizedSearchText: string
+    normalizedSearchText: string,
   ): { start: number; end: number } | null => {
     const contentLower = originalContent.toLowerCase();
 
@@ -126,13 +201,16 @@ export function HighlightableContent({
     }
 
     // Try with first 100 characters (truncated search for long chunks)
-    const truncatedSearch = normalizedSearchText.substring(0, Math.min(100, normalizedSearchText.length));
+    const truncatedSearch = normalizedSearchText.substring(
+      0,
+      Math.min(100, normalizedSearchText.length),
+    );
     const truncatedIndex = contentLower.indexOf(truncatedSearch);
     if (truncatedIndex !== -1) {
       // Found beginning, extend to full length or content end
       const estimatedEnd = Math.min(
         truncatedIndex + normalizedSearchText.length,
-        originalContent.length
+        originalContent.length,
       );
       return {
         start: truncatedIndex,
@@ -141,7 +219,9 @@ export function HighlightableContent({
     }
 
     // Try word-by-word matching (more flexible)
-    const searchWords = normalizedSearchText.split(' ').filter(w => w.length > 3); // Only significant words
+    const searchWords = normalizedSearchText
+      .split(' ')
+      .filter((w) => w.length > 3); // Only significant words
     if (searchWords.length > 0) {
       const firstWord = searchWords[0];
       const wordIndex = contentLower.indexOf(firstWord);
@@ -149,7 +229,10 @@ export function HighlightableContent({
         // Found first significant word, estimate boundaries
         return {
           start: wordIndex,
-          end: Math.min(wordIndex + normalizedSearchText.length, originalContent.length),
+          end: Math.min(
+            wordIndex + normalizedSearchText.length,
+            originalContent.length,
+          ),
         };
       }
     }
@@ -177,7 +260,7 @@ export function HighlightableContent({
       return [];
     }
 
-    const matches: Array<{ start: number; end: number; highlightId: string }> = [];
+    const matches: HighlightMatch[] = [];
 
     for (const highlight of highlights) {
       // Normalize search text (strip formatting and normalize whitespace)
@@ -230,71 +313,17 @@ export function HighlightableContent({
     return matches;
   }, [content, highlights, highlightsEnabled]);
 
-  /**
-   * Render content with highlights
-   */
-  const renderHighlightedContent = () => {
-    if (!highlightsEnabled || findMatches.length === 0) {
-      return <pre className="whitespace-pre-wrap font-sans leading-relaxed">{content}</pre>;
-    }
-
-    const segments: React.ReactNode[] = [];
-    let lastIndex = 0;
-
-    findMatches.forEach((match, idx) => {
-      // Add text before highlight
-      if (match.start > lastIndex) {
-        segments.push(
-          <span key={`text-${idx}`}>
-            {content.slice(lastIndex, match.start)}
-          </span>
-        );
-      }
-
-      // Add highlighted text
-      const isCurrentHighlight = match.highlightId === currentHighlightId;
-      segments.push(
-        <mark
-          key={`highlight-${match.highlightId}`}
-          ref={(el) => {
-            if (el) {
-              highlightRefsMap.current.set(match.highlightId, el);
-            }
-          }}
-          data-highlight-id={match.highlightId}
-          className={cn(
-            'rounded px-1 transition-colors',
-            isCurrentHighlight
-              ? 'bg-yellow-300/60 ring-2 ring-yellow-400 dark:bg-yellow-500/40 dark:ring-yellow-500'
-              : 'bg-yellow-200/30 dark:bg-yellow-500/20'
-          )}
-        >
-          {content.slice(match.start, match.end)}
-        </mark>
-      );
-
-      lastIndex = match.end;
-    });
-
-    // Add remaining text
-    if (lastIndex < content.length) {
-      segments.push(
-        <span key="text-end">
-          {content.slice(lastIndex)}
-        </span>
-      );
-    }
-
-    return (
-      <pre className="whitespace-pre-wrap font-sans leading-relaxed">
-        {segments}
-      </pre>
-    );
-  };
-
   return (
-    <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
-      {renderHighlightedContent()}
+    <div
+      className={cn('prose prose-sm dark:prose-invert max-w-none', className)}
+    >
+      <HighlightedContentBody
+        content={content}
+        matches={findMatches}
+        highlightsEnabled={highlightsEnabled}
+        currentHighlightId={currentHighlightId}
+        highlightRefsMap={highlightRefsMap}
+      />
     </div>
   );
 }

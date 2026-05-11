@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import type { Audience, DocsNavTree } from '@/lib/docs';
 
@@ -22,12 +24,12 @@ export function DocsNav({ tree }: DocsNavProps) {
     >
       {/* Brand / title bar */}
       <div className="flex h-14 shrink-0 items-center border-b border-[color:var(--docs-border)] px-4">
-        <a
+        <Link
           href="/docs"
           className="font-[family-name:var(--font-space-grotesk)] text-sm font-semibold tracking-tight text-[color:var(--docs-text-primary)] transition-colors hover:text-[color:var(--docs-amber)]"
         >
           Documentation
-        </a>
+        </Link>
       </div>
 
       <ScrollArea className="flex-1 px-3 py-4">

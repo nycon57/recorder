@@ -104,7 +104,9 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
 
   // Delete storage files
   const filesToDelete = deletedRecordings.flatMap((rec) =>
-    [rec.storage_path_raw, rec.storage_path_processed].filter(Boolean)
+    [rec.storage_path_raw, rec.storage_path_processed].filter(
+      (path): path is string => typeof path === 'string' && path.length > 0,
+    )
   );
 
   if (filesToDelete.length > 0) {

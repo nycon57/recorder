@@ -62,7 +62,6 @@ interface MetricsData {
 export default function AdminMetricsPage() {
   const [timeRange, setTimeRange] = useState('24h');
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -90,15 +89,13 @@ export default function AdminMetricsPage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
     }
   }
 
-  if (loading && !metrics) {
+  if (!metrics && !error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full size-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -107,7 +104,7 @@ export default function AdminMetricsPage() {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
@@ -151,11 +148,11 @@ export default function AdminMetricsPage() {
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Total Searches
             </CardTitle>
-            <Search className="h-4 w-4 text-muted-foreground" />
+            <Search className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -166,9 +163,9 @@ export default function AdminMetricsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Avg Latency</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <Clock className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -179,9 +176,9 @@ export default function AdminMetricsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">P95 Latency</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -192,11 +189,11 @@ export default function AdminMetricsPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Cache Hit Rate
             </CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
+            <Zap className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -213,15 +210,15 @@ export default function AdminMetricsPage() {
       <Tabs defaultValue="search" className="space-y-4">
         <TabsList>
           <TabsTrigger value="search">
-            <Search className="h-4 w-4 mr-2" />
+            <Search className="size-4 mr-2" />
             Search Performance
           </TabsTrigger>
           <TabsTrigger value="cache">
-            <Zap className="h-4 w-4 mr-2" />
+            <Zap className="size-4 mr-2" />
             Cache Statistics
           </TabsTrigger>
           <TabsTrigger value="distribution">
-            <Activity className="h-4 w-4 mr-2" />
+            <Activity className="size-4 mr-2" />
             Distribution
           </TabsTrigger>
         </TabsList>

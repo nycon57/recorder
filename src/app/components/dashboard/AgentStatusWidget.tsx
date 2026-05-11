@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { auth } from '@/lib/auth/auth';
 import {
   Bot,
   Brain,
@@ -11,6 +10,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 
+import { auth } from '@/lib/auth/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { fetchAgentStatusSummary } from '@/lib/services/agent-status';
 import {

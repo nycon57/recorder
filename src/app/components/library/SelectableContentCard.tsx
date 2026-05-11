@@ -56,6 +56,18 @@ export function SelectableContentCard({
     }
   };
 
+  const handleCardKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+
+    const target = e.target as HTMLElement;
+    const isInteractive = target.closest('a, button, input, [role="button"]');
+
+    if (!isInteractive || target === e.currentTarget) {
+      e.preventDefault();
+      onSelect(item.id, !selected);
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -64,6 +76,9 @@ export function SelectableContentCard({
         selected && 'ring-2 ring-primary ring-offset-2 rounded-lg'
       )}
       onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      role="button"
+      tabIndex={0}
     >
       {/* Selection checkbox - always visible on mobile, hover on desktop */}
       <div className="absolute top-2 left-2 z-10 sm:opacity-0 sm:group-hover/selectable:opacity-100 transition-opacity">
@@ -74,6 +89,8 @@ export function SelectableContentCard({
             selected && 'bg-primary border-primary'
           )}
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="presentation"
         >
           <Checkbox
             checked={selected}

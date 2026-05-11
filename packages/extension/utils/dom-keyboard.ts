@@ -45,20 +45,20 @@ function toModifier(token: string): SupportedModifier | null {
 }
 
 function normalizeKeyPress(args: PressKeyArgs): NormalizedKeyPress {
-  const rawParts = args.key
-    .split('+')
-    .map((part) => part.trim())
-    .filter(Boolean);
+  const rawParts: string[] = [];
+  for (const part of args.key.split('+')) {
+    const trimmed = part.trim();
+    if (trimmed) rawParts.push(trimmed);
+  }
 
   const keyPart = rawParts.pop() ?? args.key;
   const modifierParts = [...rawParts, ...(args.modifiers ?? [])];
-  const modifiers = Array.from(
-    new Set(
-      modifierParts
-        .map((modifier) => toModifier(modifier))
-        .filter((modifier): modifier is SupportedModifier => modifier !== null),
-    ),
-  );
+  const modifierSet = new Set<SupportedModifier>();
+  for (const modifier of modifierParts) {
+    const normalized = toModifier(modifier);
+    if (normalized) modifierSet.add(normalized);
+  }
+  const modifiers = Array.from(modifierSet);
 
   return {
     key: keyPart,

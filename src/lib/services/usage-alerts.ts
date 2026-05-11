@@ -16,7 +16,7 @@ import { getRedis } from '@/lib/rate-limit/redis';
 // Types
 // ---------------------------------------------------------------------------
 
-export type AlertLevel = 'warning' | 'critical' | 'hard_stop';
+type AlertLevel = 'warning' | 'critical' | 'hard_stop';
 
 export interface UsageAlert {
   level: AlertLevel;

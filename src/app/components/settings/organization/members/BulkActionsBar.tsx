@@ -22,7 +22,7 @@ export function BulkActionsBar({
     <div className="border rounded-lg bg-muted/50 p-4">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <Alert className="flex-1 max-w-sm">
-          <Users className="h-4 w-4" />
+          <Users className="size-4" />
           <AlertDescription className="ml-2">
             {selectedCount} member{selectedCount !== 1 ? 's' : ''} selected
           </AlertDescription>
@@ -34,7 +34,7 @@ export function BulkActionsBar({
             size="sm"
             onClick={onExport}
           >
-            <Download className="h-4 w-4 mr-2" />
+            <Download className="size-4 mr-2" />
             Export
           </Button>
 
@@ -43,7 +43,7 @@ export function BulkActionsBar({
             size="sm"
             onClick={onDelete}
           >
-            <Trash2 className="h-4 w-4 mr-2" />
+            <Trash2 className="size-4 mr-2" />
             Remove
           </Button>
 
@@ -52,7 +52,7 @@ export function BulkActionsBar({
             size="sm"
             onClick={onClear}
           >
-            <X className="h-4 w-4 mr-2" />
+            <X className="size-4 mr-2" />
             Clear Selection
           </Button>
         </div>

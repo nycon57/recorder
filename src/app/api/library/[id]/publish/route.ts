@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath, updateTag } from 'next/cache';
 
 import {
   apiHandler,
@@ -14,7 +15,6 @@ import {
   errors,
   generateRequestId,
 } from '@/lib/utils/api';
-import { revalidatePath, updateTag } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { DocumentPublisher } from '@/lib/services/document-publisher';
 import {
@@ -104,8 +104,10 @@ export const POST = apiHandler(
     { params }: { params: Promise<{ id: string }> },
   ) => {
     const requestId = generateRequestId();
-    const { orgId, userId } = await requireOrg();
-    const { id: contentId } = await params;
+    const [{ orgId, userId }, { id: contentId }] = await Promise.all([
+      requireOrg(),
+      params,
+    ]);
 
     console.log(
       `[Publish API] POST request for content ${contentId}, org ${orgId}`,
@@ -316,8 +318,10 @@ export const GET = apiHandler(
     { params }: { params: Promise<{ id: string }> },
   ) => {
     const requestId = generateRequestId();
-    const { orgId } = await requireOrg();
-    const { id: contentId } = await params;
+    const [{ orgId }, { id: contentId }] = await Promise.all([
+      requireOrg(),
+      params,
+    ]);
 
     try {
       // 1. Verify content exists and belongs to org

@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 import {
   X,
   ChevronDown,
@@ -11,7 +11,7 @@ import {
   ExternalLink,
   Sparkles,
   Zap,
-  Activity
+  Activity,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
@@ -26,9 +26,15 @@ import {
 } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/app/components/ui/collapsible';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/app/components/ui/collapsible';
 
-import ProcessingStageIndicator, { ProcessingStage } from './ProcessingStageIndicator';
+import ProcessingStageIndicator, {
+  ProcessingStage,
+} from './ProcessingStageIndicator';
 import StreamingTextDisplay from './StreamingTextDisplay';
 import ErrorRecoveryPanel, { ProcessingError } from './ErrorRecoveryPanel';
 
@@ -42,7 +48,14 @@ interface ReprocessStreamModalProps {
 }
 
 interface StreamEvent {
-  type: 'progress' | 'log' | 'transcript_chunk' | 'document_chunk' | 'error' | 'complete' | 'heartbeat';
+  type:
+    | 'progress'
+    | 'log'
+    | 'transcript_chunk'
+    | 'document_chunk'
+    | 'error'
+    | 'complete'
+    | 'heartbeat';
   step?: 'transcribe' | 'document' | 'embeddings' | 'all';
   progress?: number;
   message: string;
@@ -50,7 +63,180 @@ interface StreamEvent {
   timestamp: string;
 }
 
-export default function ReprocessStreamModal({
+function createInitialStages(): ProcessingStage[] {
+  return [
+    {
+      id: 'transcribe',
+      label: 'Transcribing audio…',
+      status: 'in_progress',
+      progress: 0,
+    },
+    {
+      id: 'document',
+      label: 'Generating document…',
+      status: 'pending',
+      progress: 0,
+    },
+    {
+      id: 'embeddings',
+      label: 'Preparing search…',
+      status: 'pending',
+      progress: 0,
+    },
+  ];
+}
+
+type ReprocessState = {
+  currentStage: string;
+  stages: ProcessingStage[];
+  streamingText: string;
+  contentType: 'transcript' | 'document';
+  isStreaming: boolean;
+  logs: string[];
+  logsOpen: boolean;
+  error: ProcessingError | null;
+  completed: boolean;
+  elapsedTime: number;
+  estimatedTimeRemaining?: number;
+  charCount: number;
+  processingSpeed: number;
+};
+
+type ReprocessAction =
+  | { type: 'reset' }
+  | { type: 'tick'; elapsedTime: number }
+  | { type: 'log'; message: string }
+  | {
+      type: 'progress';
+      step: string;
+      progress?: number;
+      log?: string;
+    }
+  | {
+      type: 'chunk';
+      contentType: 'transcript' | 'document';
+      message: string;
+      charsPerSecond?: number;
+    }
+  | { type: 'complete'; message: string }
+  | { type: 'error'; error: ProcessingError }
+  | { type: 'patch'; patch: Partial<ReprocessState> };
+
+const initialReprocessState: ReprocessState = {
+  currentStage: 'transcribe',
+  stages: createInitialStages(),
+  streamingText: '',
+  contentType: 'transcript',
+  isStreaming: false,
+  logs: [],
+  logsOpen: false,
+  error: null,
+  completed: false,
+  elapsedTime: 0,
+  estimatedTimeRemaining: undefined,
+  charCount: 0,
+  processingSpeed: 0,
+};
+
+function reprocessReducer(
+  state: ReprocessState,
+  action: ReprocessAction,
+): ReprocessState {
+  switch (action.type) {
+    case 'reset':
+      return { ...initialReprocessState, stages: createInitialStages() };
+    case 'tick':
+      return { ...state, elapsedTime: action.elapsedTime };
+    case 'log':
+      return { ...state, logs: [...state.logs, action.message] };
+    case 'progress': {
+      const currentIndex = state.stages.findIndex(
+        (stage) => stage.id === action.step,
+      );
+      const stages = state.stages.map((stage, stageIndex) => {
+        if (stage.id === action.step) {
+          return {
+            ...stage,
+            status: 'in_progress' as ProcessingStage['status'],
+            progress: action.progress || stage.progress,
+          };
+        }
+
+        if (stageIndex < currentIndex && stage.status !== 'completed') {
+          return {
+            ...stage,
+            status: 'completed' as ProcessingStage['status'],
+            progress: 100,
+          };
+        }
+
+        return stage;
+      });
+
+      return {
+        ...state,
+        currentStage: action.step,
+        stages,
+        logs: action.log ? [...state.logs, action.log] : state.logs,
+      };
+    }
+    case 'chunk':
+      return {
+        ...state,
+        isStreaming: true,
+        contentType: action.contentType,
+        streamingText: state.streamingText + action.message,
+        charCount: state.charCount + action.message.length,
+        processingSpeed:
+          action.charsPerSecond === undefined
+            ? state.processingSpeed
+            : state.processingSpeed * 0.7 + action.charsPerSecond * 0.3,
+      };
+    case 'complete':
+      return {
+        ...state,
+        completed: true,
+        isStreaming: false,
+        stages: state.stages.map((stage) => ({
+          ...stage,
+          status:
+            stage.status === 'in_progress' || stage.status === 'completed'
+              ? 'completed'
+              : stage.status,
+          progress:
+            stage.status === 'in_progress' || stage.status === 'completed'
+              ? 100
+              : stage.progress,
+        })),
+        logs: [...state.logs, action.message],
+      };
+    case 'error':
+      return {
+        ...state,
+        error: action.error,
+        isStreaming: false,
+        stages: state.stages.map((stage) =>
+          stage.status === 'in_progress'
+            ? { ...stage, status: 'error' as ProcessingStage['status'] }
+            : stage,
+        ),
+        logs: [
+          ...state.logs,
+          `[${new Date().toLocaleTimeString()}] ✗ Error: ${action.error.message}`,
+        ],
+      };
+    case 'patch':
+      return { ...state, ...action.patch };
+  }
+}
+
+export default function ReprocessStreamModal(
+  props: Parameters<typeof useReprocessStreamModalImplementation>[0],
+) {
+  return useReprocessStreamModalImplementation(props);
+}
+
+function useReprocessStreamModalImplementation({
   open,
   onOpenChange,
   recordingId,
@@ -58,35 +244,40 @@ export default function ReprocessStreamModal({
   recordingTitle,
   mode = 'reprocess', // Default to reprocess for backward compatibility
 }: ReprocessStreamModalProps) {
-  const router = useRouter();
-  const [currentStage, setCurrentStage] = React.useState<string>('transcribe');
-  const [stages, setStages] = React.useState<ProcessingStage[]>([
-    { id: 'transcribe', label: 'Transcribing audio...', status: 'in_progress', progress: 0 },
-    { id: 'document', label: 'Generating document...', status: 'pending', progress: 0 },
-    { id: 'embeddings', label: 'Preparing search...', status: 'pending', progress: 0 },
-  ]);
-  const [streamingText, setStreamingText] = React.useState('');
-  const [contentType, setContentType] = React.useState<'transcript' | 'document'>('transcript');
-  const [isStreaming, setIsStreaming] = React.useState(false);
-  const [logs, setLogs] = React.useState<string[]>([]);
-  const [logsOpen, setLogsOpen] = React.useState(false);
-  const [error, setError] = React.useState<ProcessingError | null>(null);
-  const [completed, setCompleted] = React.useState(false);
-  const [startTime, setStartTime] = React.useState<number>(Date.now());
-  const [elapsedTime, setElapsedTime] = React.useState(0);
-  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = React.useState<number | undefined>(undefined);
-  const [charCount, setCharCount] = React.useState(0);
-  const [processingSpeed, setProcessingSpeed] = React.useState(0);
+  const { push } = useRouter();
+  const [state, dispatch] = React.useReducer(
+    reprocessReducer,
+    initialReprocessState,
+  );
+  const {
+    currentStage,
+    stages,
+    streamingText,
+    contentType,
+    isStreaming,
+    logs,
+    logsOpen,
+    error,
+    completed,
+    elapsedTime,
+    estimatedTimeRemaining,
+    charCount,
+    processingSpeed,
+  } = state;
+  const startTimeRef = React.useRef<number>(0);
   const eventSourceRef = React.useRef<EventSource | null>(null);
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
-  const lastChunkTimeRef = React.useRef<number>(Date.now());
+  const lastChunkTimeRef = React.useRef<number>(0);
   const chunkCountRef = React.useRef<number>(0);
 
   // Update elapsed time
   React.useEffect(() => {
     if (!completed && !error) {
       timerRef.current = setInterval(() => {
-        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+        dispatch({
+          type: 'tick',
+          elapsedTime: Math.floor((Date.now() - startTimeRef.current) / 1000),
+        });
       }, 1000);
     }
 
@@ -95,155 +286,70 @@ export default function ReprocessStreamModal({
         clearInterval(timerRef.current);
       }
     };
-  }, [startTime, completed, error]);
+  }, [completed, error]);
 
-  // Initialize SSE connection
-  React.useEffect(() => {
-    if (!open || !recordingId) return;
+  const dispatchChunk = React.useCallback((
+    contentType: 'transcript' | 'document',
+    message: string,
+  ) => {
+    const now = Date.now();
+    const timeDelta = (now - lastChunkTimeRef.current) / 1000;
+    dispatch({
+      type: 'chunk',
+      contentType,
+      message,
+      charsPerSecond: timeDelta > 0 ? message.length / timeDelta : undefined,
+    });
+    lastChunkTimeRef.current = now;
+    chunkCountRef.current += 1;
+  }, []);
 
-    const connectSSE = () => {
-      try {
-        setStartTime(Date.now());
-        setElapsedTime(0);
-        setCompleted(false);
-        setError(null);
-        setStreamingText('');
-        setLogs([]);
+  const handleError = React.useCallback((error: ProcessingError) => {
+    dispatch({ type: 'error', error });
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+  }, []);
 
-        // Construct URL based on mode
-        const url = mode === 'finalize'
-          ? `/api/recordings/${recordingId}/finalize/stream?startProcessing=true`
-          : `/api/recordings/${recordingId}/reprocess/stream?step=${step}`;
-
-        const eventSource = new EventSource(url);
-        eventSourceRef.current = eventSource;
-
-        eventSource.onopen = () => {
-          setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Connected to processing stream`]);
-        };
-
-        // Listen for all SSE events via message event
-        eventSource.onmessage = (event) => {
-          try {
-            const streamEvent: StreamEvent = JSON.parse(event.data);
-            handleStreamEvent(streamEvent);
-          } catch (err) {
-            console.error('Failed to parse SSE event:', err);
-          }
-        };
-
-        eventSource.onerror = (err) => {
-          console.error('EventSource error:', err);
-          handleError({
-            type: 'network',
-            message: 'Connection to server lost. Please check your network and try again.',
-            timestamp: new Date().toISOString(),
-          });
-          eventSource.close();
-        };
-      } catch (err) {
-        console.error('Failed to connect:', err);
-        handleError({
-          type: 'network',
-          message: 'Failed to establish connection. Please try again.',
-          timestamp: new Date().toISOString(),
-        });
-      }
-    };
-
-    connectSSE();
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    };
-  }, [open, recordingId, step]);
-
-  const handleStreamEvent = (event: StreamEvent) => {
+  const handleStreamEvent = React.useCallback((event: StreamEvent) => {
     const timestamp = new Date().toLocaleTimeString();
 
     switch (event.type) {
       case 'progress':
         // Update stage status and progress
         if (event.step) {
-          setCurrentStage(event.step);
-          setStages((prev) =>
-            prev.map((stage) => {
-              if (stage.id === event.step) {
-                return {
-                  ...stage,
-                  status: 'in_progress' as ProcessingStage['status'],
-                  progress: event.progress || stage.progress,
-                };
-              }
-              // Mark previous stages as completed
-              const currentIndex = prev.findIndex((s) => s.id === event.step);
-              const stageIndex = prev.findIndex((s) => s.id === stage.id);
-              if (stageIndex < currentIndex && stage.status !== 'completed') {
-                return { ...stage, status: 'completed' as ProcessingStage['status'], progress: 100 };
-              }
-              return stage;
-            })
-          );
+          dispatch({
+            type: 'progress',
+            step: event.step,
+            progress: event.progress,
+            log: event.message ? `[${timestamp}] ${event.message}` : undefined,
+          });
+          break;
         }
         if (event.message) {
-          setLogs((prev) => [...prev, `[${timestamp}] ${event.message}`]);
+          dispatch({ type: 'log', message: `[${timestamp}] ${event.message}` });
         }
         break;
 
       case 'transcript_chunk':
         // Handle transcript streaming
-        setIsStreaming(true);
-        setContentType('transcript');
-        setStreamingText((prev) => prev + event.message);
-        setCharCount((prev) => prev + event.message.length);
-
-        // Calculate processing speed
-        const now = Date.now();
-        const timeDelta = (now - lastChunkTimeRef.current) / 1000; // seconds
-        if (timeDelta > 0) {
-          const charsPerSecond = event.message.length / timeDelta;
-          setProcessingSpeed((prev) => prev * 0.7 + charsPerSecond * 0.3); // Smoothed average
-        }
-        lastChunkTimeRef.current = now;
-        chunkCountRef.current += 1;
+        dispatchChunk('transcript', event.message);
         break;
 
       case 'document_chunk':
         // Handle document streaming
-        setIsStreaming(true);
-        setContentType('document');
-        setStreamingText((prev) => prev + event.message);
-        setCharCount((prev) => prev + event.message.length);
-
-        // Calculate processing speed for documents
-        const docNow = Date.now();
-        const docTimeDelta = (docNow - lastChunkTimeRef.current) / 1000;
-        if (docTimeDelta > 0) {
-          const charsPerSecond = event.message.length / docTimeDelta;
-          setProcessingSpeed((prev) => prev * 0.7 + charsPerSecond * 0.3);
-        }
-        lastChunkTimeRef.current = docNow;
-        chunkCountRef.current += 1;
+        dispatchChunk('document', event.message);
         break;
 
       case 'log':
-        setLogs((prev) => [...prev, `[${timestamp}] ${event.message}`]);
+        dispatch({ type: 'log', message: `[${timestamp}] ${event.message}` });
         break;
 
       case 'complete':
-        setCompleted(true);
-        setIsStreaming(false);
-        setStages((prev) =>
-          prev.map((stage) => ({
-            ...stage,
-            status: stage.status === 'in_progress' || stage.status === 'completed' ? 'completed' : stage.status,
-            progress: stage.status === 'in_progress' || stage.status === 'completed' ? 100 : stage.progress,
-          }))
-        );
-        setLogs((prev) => [...prev, `[${timestamp}] ✓ ${event.message}`]);
+        dispatch({
+          type: 'complete',
+          message: `[${timestamp}] ✓ ${event.message}`,
+        });
 
         // Trigger confetti celebration
         if (typeof window !== 'undefined') {
@@ -273,35 +379,85 @@ export default function ReprocessStreamModal({
         // Keep connection alive, no action needed
         break;
     }
-  };
+  }, [dispatchChunk, handleError]);
 
-  const handleError = (error: ProcessingError) => {
-    setError(error);
-    setIsStreaming(false);
-    setStages((prev) =>
-      prev.map((stage) => {
-        if (stage.status === 'in_progress') {
-          return { ...stage, status: 'error' as ProcessingStage['status'] };
-        }
-        return stage;
-      })
-    );
-    setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ✗ Error: ${error.message}`]);
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-  };
+  // Initialize SSE connection
+  React.useEffect(() => {
+    if (!open || !recordingId) return;
+
+    const connectSSE = () => {
+      try {
+        const now = Date.now();
+        startTimeRef.current = now;
+        lastChunkTimeRef.current = now;
+        chunkCountRef.current = 0;
+        dispatch({ type: 'reset' });
+
+        // Construct URL based on mode
+        const url =
+          mode === 'finalize'
+            ? `/api/recordings/${recordingId}/finalize/stream?startProcessing=true`
+            : `/api/recordings/${recordingId}/reprocess/stream?step=${step}`;
+
+        const eventSource = new EventSource(url);
+        eventSourceRef.current = eventSource;
+
+        eventSource.onopen = () => {
+          dispatch({
+            type: 'log',
+            message: `[${new Date().toLocaleTimeString()}] Connected to processing stream`,
+          });
+        };
+
+        // Listen for all SSE events via message event
+        eventSource.onmessage = (event) => {
+          try {
+            const streamEvent: StreamEvent = JSON.parse(event.data);
+            handleStreamEvent(streamEvent);
+          } catch (err) {
+            console.error('Failed to parse SSE event:', err);
+          }
+        };
+
+        eventSource.onerror = (err) => {
+          console.error('EventSource error:', err);
+          handleError({
+            type: 'network',
+            message:
+              'Connection to server lost. Please check your network and try again.',
+            timestamp: new Date().toISOString(),
+          });
+          eventSource.close();
+        };
+      } catch (err) {
+        console.error('Failed to connect:', err);
+        handleError({
+          type: 'network',
+          message: 'Failed to establish connection. Please try again.',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    };
+
+    connectSSE();
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [handleError, handleStreamEvent, mode, open, recordingId, step]);
 
   const handleRetry = () => {
-    setError(null);
-    setCompleted(false);
+    dispatch({ type: 'patch', patch: { error: null, completed: false } });
     // Re-trigger SSE connection
     onOpenChange(false);
     setTimeout(() => onOpenChange(true), 100);
   };
 
   const handleViewRecording = () => {
-    router.push(`/library/${recordingId}`);
+    push(`/library/${recordingId}`);
     onOpenChange(false);
   };
 
@@ -339,8 +495,11 @@ export default function ReprocessStreamModal({
         showCloseButton={false}
       >
         {/* Animated Background Gradient */}
-        <motion.div
-          className={cn('absolute inset-0 -z-10 transition-all duration-1000', getStageGradient())}
+        <m.div
+          className={cn(
+            'absolute inset-0 -z-10 transition-all duration-1000',
+            getStageGradient(),
+          )}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         />
@@ -350,7 +509,7 @@ export default function ReprocessStreamModal({
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-2">
-                <motion.div
+                <m.div
                   animate={!completed && !error ? { rotate: 360 } : {}}
                   transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
                 >
@@ -365,9 +524,13 @@ export default function ReprocessStreamModal({
                   ) : (
                     <Zap className="size-5 text-amber-600 dark:text-amber-500" />
                   )}
-                </motion.div>
+                </m.div>
                 <DialogTitle className="text-xl font-semibold">
-                  {completed ? 'Processing Complete' : error ? 'Processing Failed' : 'Processing Recording'}
+                  {completed
+                    ? 'Processing Complete'
+                    : error
+                      ? 'Processing Failed'
+                      : 'Processing Recording'}
                 </DialogTitle>
               </div>
               <DialogDescription className="text-sm">
@@ -387,13 +550,16 @@ export default function ReprocessStreamModal({
 
           {/* Live Stats Bar */}
           {!completed && !error && (
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               className="mt-4 flex items-center gap-6 text-xs text-muted-foreground"
             >
               <div className="flex items-center gap-2">
-                <Activity className="size-3.5 animate-pulse" aria-hidden="true" />
+                <Activity
+                  className="size-3.5 animate-pulse"
+                  aria-hidden="true"
+                />
                 <span>Live</span>
               </div>
               {processingSpeed > 0 && (
@@ -408,12 +574,12 @@ export default function ReprocessStreamModal({
                   <span>{charCount.toLocaleString()} chars</span>
                 </div>
               )}
-            </motion.div>
+            </m.div>
           )}
         </DialogHeader>
 
         {/* Content */}
-        <ScrollArea className="flex-1 px-6 py-6">
+        <ScrollArea className="flex-1 p-6">
           <div className="space-y-8">
             {/* Error State */}
             {error && (
@@ -426,37 +592,48 @@ export default function ReprocessStreamModal({
 
             {/* Success State */}
             {completed && !error && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="rounded-lg border-2 border-green-600 dark:border-green-500 bg-green-50 dark:bg-green-950/30 p-6 text-center"
               >
-                <motion.div
-                  initial={{ scale: 0, rotate: -180 }}
+                <m.div
+                  initial={{ scale: 0.95, rotate: -180 }}
                   animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.2 }}
+                  transition={{
+                    type: 'spring',
+                    stiffness: 200,
+                    damping: 15,
+                    delay: 0.2,
+                  }}
                   className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-green-600 dark:bg-green-500 text-white"
                 >
                   <CheckCircle2 className="size-8" />
-                </motion.div>
+                </m.div>
                 <h3 className="text-lg font-semibold text-green-900 dark:text-green-100">
                   Processing Completed Successfully!
                 </h3>
                 <p className="mt-2 text-sm text-green-800 dark:text-green-200">
                   Your recording has been reprocessed and is ready to view.
                 </p>
-                <Button onClick={handleViewRecording} className="mt-4" aria-label="View recording">
+                <Button
+                  onClick={handleViewRecording}
+                  className="mt-4"
+                  aria-label="View recording"
+                >
                   <ExternalLink className="size-4 mr-2" />
                   View Recording
                 </Button>
-              </motion.div>
+              </m.div>
             )}
 
             {/* Processing Stages */}
             {!error && !completed && (
               <ProcessingStageIndicator
                 currentStep={currentStage}
-                progress={stages.find((s) => s.id === currentStage)?.progress || 0}
+                progress={
+                  stages.find((s) => s.id === currentStage)?.progress || 0
+                }
                 stages={stages}
                 elapsedTime={elapsedTime}
               />
@@ -464,7 +641,7 @@ export default function ReprocessStreamModal({
 
             {/* Streaming Content */}
             {streamingText && !error && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-3"
@@ -484,14 +661,17 @@ export default function ReprocessStreamModal({
                     )}
                   </h3>
                   {processingSpeed > 0 && (
-                    <motion.div
+                    <m.div
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       className="flex items-center gap-1.5 text-xs text-muted-foreground"
                     >
-                      <Zap className="size-3 text-amber-500" aria-hidden="true" />
+                      <Zap
+                        className="size-3 text-amber-500"
+                        aria-hidden="true"
+                      />
                       <span>{Math.round(processingSpeed)} chars/sec</span>
-                    </motion.div>
+                    </m.div>
                   )}
                 </div>
                 <StreamingTextDisplay
@@ -499,12 +679,17 @@ export default function ReprocessStreamModal({
                   isStreaming={isStreaming}
                   language={contentType === 'document' ? 'markdown' : 'plain'}
                 />
-              </motion.div>
+              </m.div>
             )}
 
             {/* Server Logs */}
             {logs.length > 0 && (
-              <Collapsible open={logsOpen} onOpenChange={setLogsOpen}>
+              <Collapsible
+                open={logsOpen}
+                onOpenChange={(nextOpen) =>
+                  dispatch({ type: 'patch', patch: { logsOpen: nextOpen } })
+                }
+              >
                 <div className="rounded-lg border bg-muted/50">
                   <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/80 transition-colors">
                     <div className="flex items-center gap-2">
@@ -521,15 +706,15 @@ export default function ReprocessStreamModal({
                     <ScrollArea className="h-[200px] border-t bg-background">
                       <div className="p-4 font-mono text-xs space-y-1">
                         {logs.map((log, index) => (
-                          <motion.div
-                            key={index}
+                          <m.div
+                            key={JSON.stringify(log)}
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.02 * index }}
                             className="text-muted-foreground"
                           >
                             {log}
-                          </motion.div>
+                          </m.div>
                         ))}
                       </div>
                     </ScrollArea>
@@ -544,8 +729,13 @@ export default function ReprocessStreamModal({
         {!error && !completed && (
           <div className="px-6 py-4 border-t bg-muted/30">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Processing in progress...</span>
-              <Button variant="ghost" size="sm" onClick={handleClose} aria-label="Cancel processing">
+              <span>Processing in progress…</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClose}
+                aria-label="Cancel processing"
+              >
                 Cancel
               </Button>
             </div>

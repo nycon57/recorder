@@ -6,7 +6,7 @@ export default function AnalyticsLoading() {
       {/* Header Skeleton */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-lg bg-muted animate-pulse" />
+          <div className="size-12 rounded-lg bg-muted animate-pulse" />
           <div className="space-y-2">
             <div className="h-8 w-48 bg-muted animate-pulse rounded" />
             <div className="h-4 w-64 bg-muted animate-pulse rounded" />
@@ -22,12 +22,17 @@ export default function AnalyticsLoading() {
 
       {/* Key Metrics Cards Skeleton */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[...Array(4)].map((_, i) => (
-          <Card key={i}>
+        {[
+          'metric-card-1',
+          'metric-card-2',
+          'metric-card-3',
+          'metric-card-4',
+        ].map((skeletonId) => (
+          <Card key={skeletonId}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="h-4 w-32 bg-muted animate-pulse rounded" />
-                <div className="h-4 w-4 bg-muted animate-pulse rounded" />
+                <div className="size-4 bg-muted animate-pulse rounded" />
               </div>
             </CardHeader>
             <CardContent>
@@ -55,8 +60,8 @@ export default function AnalyticsLoading() {
         </Card>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {[...Array(2)].map((_, i) => (
-            <Card key={i}>
+          {['chart-card-1', 'chart-card-2'].map((skeletonId) => (
+            <Card key={skeletonId}>
               <CardHeader>
                 <div className="h-6 w-48 bg-muted animate-pulse rounded" />
                 <div className="h-4 w-64 bg-muted animate-pulse rounded mt-2" />

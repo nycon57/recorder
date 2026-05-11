@@ -2,6 +2,9 @@
 
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { TrendingUp, Zap, Activity, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
+
 import {
   BarChart,
   Bar,
@@ -12,10 +15,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-} from 'recharts';
-import { TrendingUp, Zap, Activity, AlertCircle } from 'lucide-react';
-import Link from 'next/link';
-
+} from '@/app/components/analytics/dynamic-recharts';
 import {
   Card,
   CardContent,
@@ -91,8 +91,8 @@ function UsageLoading() {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
-        {[1, 2, 3].map((i) => (
-          <Card key={i}>
+        {['usage-card-1', 'usage-card-2', 'usage-card-3'].map((skeletonId) => (
+          <Card key={skeletonId}>
             <CardHeader className="pb-2">
               <Skeleton className="h-4 w-[120px]" />
             </CardHeader>
@@ -128,9 +128,9 @@ function StatCard({
 }) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
@@ -161,7 +161,7 @@ export default function UsagePage() {
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-10">
           <AlertCircle
-            className="h-8 w-8 text-muted-foreground mb-3"
+            className="size-8 text-muted-foreground mb-3"
             aria-hidden="true"
           />
           <p className="text-sm text-muted-foreground">
@@ -214,7 +214,7 @@ export default function UsagePage() {
           </p>
         </div>
         <div className="trbd-icon-chip" aria-hidden="true">
-          <Zap className="h-5 w-5" />
+          <Zap className="size-5" />
         </div>
       </div>
 
@@ -225,7 +225,7 @@ export default function UsagePage() {
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="flex items-start gap-3 pt-6">
             <AlertCircle
-              className="h-5 w-5 text-primary flex-shrink-0 mt-0.5"
+              className="size-5 text-primary flex-shrink-0 mt-0.5"
               aria-hidden="true"
             />
             <div>

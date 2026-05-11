@@ -78,7 +78,11 @@ type ContentStorageRecord = {
 };
 
 function getContentStoragePath(recording: ContentStorageRecord): string | null {
-  return recording.storage_path_raw || recording.storage_path_processed || recording.storage_path_r2;
+  return (
+    recording.storage_path_raw ||
+    recording.storage_path_processed ||
+    recording.storage_path_r2
+  );
 }
 
 /**
@@ -98,7 +102,7 @@ async function validateFilePath(filePath: string): Promise<string> {
     return absolutePath;
   } catch (error) {
     throw new Error(
-      `Invalid file path: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Invalid file path: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 }
@@ -107,9 +111,9 @@ async function validateFilePath(filePath: string): Promise<string> {
  * Calculate difference hash (dHash) for video
  * Extracts keyframe, resizes to 9x8, compares adjacent pixels
  */
-export async function calculateVideoHash(
+async function calculateVideoHash(
   filePath: string,
-  timestamp: number = 10
+  timestamp: number = 10,
 ): Promise<string> {
   let frameFile: tmp.FileResult | null = null;
 
@@ -135,7 +139,7 @@ export async function calculateVideoHash(
         '-y',
         frameFile.path,
       ],
-      { timeout: FFMPEG_TIMEOUT_MS, killSignal: 'SIGKILL' }
+      { timeout: FFMPEG_TIMEOUT_MS, killSignal: 'SIGKILL' },
     );
 
     // Calculate dHash from frame - spawn ffmpeg and read stdout directly
@@ -172,7 +176,11 @@ export async function calculateVideoHash(
 
       ffmpegProcess.on('error', (err) => {
         const stderrOutput = Buffer.concat(stderrChunks).toString('utf8');
-        reject(new Error(`ffmpeg process error: ${err.message}${stderrOutput ? `: ${stderrOutput}` : ''}`));
+        reject(
+          new Error(
+            `ffmpeg process error: ${err.message}${stderrOutput ? `: ${stderrOutput}` : ''}`,
+          ),
+        );
       });
     });
 
@@ -201,7 +209,10 @@ export async function calculateVideoHash(
       try {
         await frameFile.cleanup();
       } catch (cleanupError) {
-        console.error('[SimilarityDetector] Error cleaning up frame file:', cleanupError);
+        console.error(
+          '[SimilarityDetector] Error cleaning up frame file:',
+          cleanupError,
+        );
       }
     }
   }
@@ -211,7 +222,7 @@ export async function calculateVideoHash(
  * Calculate audio fingerprint using spectral analysis
  * Extracts audio, performs FFT, generates fingerprint
  */
-export async function calculateAudioHash(filePath: string): Promise<string> {
+async function calculateAudioHash(filePath: string): Promise<string> {
   let audioFile: tmp.FileResult | null = null;
 
   try {
@@ -239,7 +250,7 @@ export async function calculateAudioHash(filePath: string): Promise<string> {
         '-y',
         audioFile.path,
       ],
-      { timeout: FFMPEG_TIMEOUT_MS, killSignal: 'SIGKILL' }
+      { timeout: FFMPEG_TIMEOUT_MS, killSignal: 'SIGKILL' },
     );
 
     // Calculate audio fingerprint - spawn ffmpeg and read stdout directly
@@ -282,7 +293,11 @@ export async function calculateAudioHash(filePath: string): Promise<string> {
 
       ffmpegProcess.on('error', (err) => {
         const stderrOutput = Buffer.concat(stderrChunks).toString('utf8');
-        reject(new Error(`ffmpeg process error: ${err.message}${stderrOutput ? `: ${stderrOutput}` : ''}`));
+        reject(
+          new Error(
+            `ffmpeg process error: ${err.message}${stderrOutput ? `: ${stderrOutput}` : ''}`,
+          ),
+        );
       });
     });
 
@@ -309,7 +324,10 @@ export async function calculateAudioHash(filePath: string): Promise<string> {
       try {
         await audioFile.cleanup();
       } catch (cleanupError) {
-        console.error('[SimilarityDetector] Error cleaning up audio file:', cleanupError);
+        console.error(
+          '[SimilarityDetector] Error cleaning up audio file:',
+          cleanupError,
+        );
       }
     }
   }
@@ -321,7 +339,7 @@ export async function calculateAudioHash(filePath: string): Promise<string> {
 export async function calculatePerceptualHash(
   contentId: string,
   storagePath: string,
-  storageProvider: StorageProvider
+  storageProvider: StorageProvider,
 ): Promise<PerceptualHash | null> {
   let tempPath: string | undefined;
 
@@ -337,7 +355,9 @@ export async function calculatePerceptualHash(
     if (!storagePath) {
       const { data: recording } = await supabase
         .from('content')
-        .select('storage_path_raw, storage_path_processed, storage_path_r2, duration_sec')
+        .select(
+          'storage_path_raw, storage_path_processed, storage_path_r2, duration_sec',
+        )
         .eq('id', contentId)
         .single();
 
@@ -366,7 +386,7 @@ export async function calculatePerceptualHash(
       pathToUse,
       pathToUse, // Use same path for both (manager will handle)
       storageProvider,
-      { asBuffer: false } // Download to temp file
+      { asBuffer: false }, // Download to temp file
     );
 
     if (!downloadResult.success || !downloadResult.data) {
@@ -388,7 +408,10 @@ export async function calculatePerceptualHash(
       createdAt: new Date(),
     };
   } catch (error) {
-    console.error('[SimilarityDetector] Error calculating perceptual hash:', error);
+    console.error(
+      '[SimilarityDetector] Error calculating perceptual hash:',
+      error,
+    );
     return null;
   } finally {
     // Always cleanup temp file
@@ -396,7 +419,10 @@ export async function calculatePerceptualHash(
       try {
         await fs.unlink(tempPath);
       } catch (cleanupError) {
-        console.error('[SimilarityDetector] Error cleaning up temp file:', cleanupError);
+        console.error(
+          '[SimilarityDetector] Error cleaning up temp file:',
+          cleanupError,
+        );
       }
     }
   }
@@ -427,7 +453,10 @@ export function hammingDistance(hash1: string, hash2: string): number {
 /**
  * Convert Hamming distance to similarity percentage
  */
-export function hammingToSimilarity(distance: number, hashBits: number = 256): number {
+export function hammingToSimilarity(
+  distance: number,
+  hashBits: number = 256,
+): number {
   const maxDistance = hashBits;
   const similarity = ((maxDistance - distance) / maxDistance) * 100;
   return Math.max(0, Math.min(100, similarity));
@@ -441,7 +470,7 @@ export async function findSimilarRecordings(
   audioHash: string,
   orgId: string,
   config: SimilarityConfig = DEFAULT_CONFIG,
-  excludeRecordingId?: string
+  excludeRecordingId?: string,
 ): Promise<SimilarityMatch[]> {
   const supabase = createClient();
 
@@ -506,7 +535,10 @@ export async function findSimilarRecordings(
         });
       }
     } catch (error) {
-      console.error(`[SimilarityDetector] Error comparing with ${recording.id}:`, error);
+      console.error(
+        `[SimilarityDetector] Error comparing with ${recording.id}:`,
+        error,
+      );
       continue;
     }
   }
@@ -520,7 +552,9 @@ export async function findSimilarRecordings(
 /**
  * Store perceptual hash in database
  */
-export async function storePerceptualHash(hash: PerceptualHash): Promise<boolean> {
+export async function storePerceptualHash(
+  hash: PerceptualHash,
+): Promise<boolean> {
   const supabase = createClient();
 
   try {
@@ -550,7 +584,7 @@ export async function storePerceptualHash(hash: PerceptualHash): Promise<boolean
  */
 export async function batchProcessSimilarity(
   orgId: string,
-  batchSize: number = 50
+  batchSize: number = 50,
 ): Promise<{
   processed: number;
   matches: number;
@@ -561,7 +595,9 @@ export async function batchProcessSimilarity(
   // Get recordings without perceptual hashes
   const { data: recordings, error } = await supabase
     .from('content')
-    .select('id, storage_path_raw, storage_path_processed, storage_path_r2, storage_provider')
+    .select(
+      'id, storage_path_raw, storage_path_processed, storage_path_r2, storage_provider',
+    )
     .eq('org_id', orgId)
     .is('video_hash', null)
     .is('deleted_at', null)
@@ -575,59 +611,69 @@ export async function batchProcessSimilarity(
     };
   }
 
-  let processed = 0;
-  let matches = 0;
-  const errors: string[] = [];
+  const results = await Promise.all(
+    recordings.map(async (recording) => {
+      try {
+        const storagePath = getContentStoragePath(recording);
 
-  for (const recording of recordings) {
-    try {
-      const storagePath = getContentStoragePath(recording);
+        if (!storagePath) {
+          return {
+            processed: 0,
+            matches: 0,
+            errors: [`Missing storage path for ${recording.id}`],
+          };
+        }
 
-      if (!storagePath) {
-        errors.push(`Missing storage path for ${recording.id}`);
-        continue;
-      }
-
-      const hash = await calculatePerceptualHash(
-        recording.id,
-        storagePath,
-        toStorageProvider(recording.storage_provider)
-      );
-
-      if (!hash) {
-        errors.push(`Failed to calculate hash for ${recording.id}`);
-        continue;
-      }
-
-      // Store hash
-      await storePerceptualHash(hash);
-
-      // Find similar recordings
-      const similar = await findSimilarRecordings(
-        hash.videoHash,
-        hash.audioHash,
-        orgId,
-        DEFAULT_CONFIG,
-        recording.id
-      );
-
-      if (similar.length > 0) {
-        matches += similar.length;
-        console.log(
-          `[SimilarityDetector] Found ${similar.length} similar recordings for ${recording.id}`
+        const hash = await calculatePerceptualHash(
+          recording.id,
+          storagePath,
+          toStorageProvider(recording.storage_provider),
         );
-      }
 
-      processed++;
-    } catch (error) {
-      errors.push(`${recording.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
+        if (!hash) {
+          return {
+            processed: 0,
+            matches: 0,
+            errors: [`Failed to calculate hash for ${recording.id}`],
+          };
+        }
+
+        // Store hash
+        await storePerceptualHash(hash);
+
+        // Find similar recordings
+        const similar = await findSimilarRecordings(
+          hash.videoHash,
+          hash.audioHash,
+          orgId,
+          DEFAULT_CONFIG,
+          recording.id,
+        );
+
+        const matchCount = similar.length;
+        if (matchCount > 0) {
+          console.log(
+            `[SimilarityDetector] Found ${matchCount} similar recordings for ${recording.id}`,
+          );
+        }
+
+        return { processed: 1, matches: matchCount, errors: [] };
+      } catch (error) {
+        return {
+          processed: 0,
+          matches: 0,
+          errors: [
+            `${recording.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          ],
+        };
+      }
+    }),
+  );
 
   return {
-    processed,
-    matches,
-    errors,
+    processed: results.reduce((total, result) => total + result.processed, 0),
+    matches: results.reduce((total, result) => total + result.matches, 0),
+    errors: results.flatMap((result) => result.errors),
   };
 }
 

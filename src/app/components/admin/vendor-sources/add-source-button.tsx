@@ -25,19 +25,19 @@ import { NewIngestForm } from './new-ingest-form';
  */
 export function AddSourceButton() {
   const [open, setOpen] = useState(false);
-  const router = useRouter();
+  const { refresh } = useRouter();
 
   function handleSuccess() {
     setOpen(false);
     // Refresh to allow dashboard to pick up the new syncing source quickly
-    router.refresh();
+    refresh();
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
+          <Plus className="size-4" />
           New source
         </Button>
       </DialogTrigger>

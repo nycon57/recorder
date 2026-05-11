@@ -1,21 +1,21 @@
 import { z } from 'zod';
 
-export const KNOWLEDGE_GRAPH_NODE_KINDS = [
+const KNOWLEDGE_GRAPH_NODE_KINDS = [
   'org_page',
   'vendor_page',
   'cluster',
 ] as const;
 
-export type KnowledgeGraphNodeKind =
+type KnowledgeGraphNodeKind =
   (typeof KNOWLEDGE_GRAPH_NODE_KINDS)[number];
 
-export const KNOWLEDGE_GRAPH_EDGE_KINDS = [
+const KNOWLEDGE_GRAPH_EDGE_KINDS = [
   'org_relationship',
   'org_in_cluster',
   'org_matches_vendor',
 ] as const;
 
-export type KnowledgeGraphEdgeKind =
+type KnowledgeGraphEdgeKind =
   (typeof KNOWLEDGE_GRAPH_EDGE_KINDS)[number];
 
 export const WIKI_RELATIONSHIP_TYPES = [
@@ -70,7 +70,7 @@ interface KnowledgeGraphNodeBase {
   rawId: string;
 }
 
-export interface OrgPageGraphNode extends KnowledgeGraphNodeBase {
+interface OrgPageGraphNode extends KnowledgeGraphNodeBase {
   kind: 'org_page';
   topic: string;
   app: string | null;
@@ -81,14 +81,14 @@ export interface OrgPageGraphNode extends KnowledgeGraphNodeBase {
   updatedAt: string;
 }
 
-export interface VendorPageGraphNode extends KnowledgeGraphNodeBase {
+interface VendorPageGraphNode extends KnowledgeGraphNodeBase {
   kind: 'vendor_page';
   app: string;
   screen: string;
   sourceUrl: string | null;
 }
 
-export interface ClusterGraphNode extends KnowledgeGraphNodeBase {
+interface ClusterGraphNode extends KnowledgeGraphNodeBase {
   kind: 'cluster';
   name: string;
   memberCount: number;
@@ -109,7 +109,7 @@ interface KnowledgeGraphEdgeBase {
   target: string;
 }
 
-export interface OrgRelationshipGraphEdge extends KnowledgeGraphEdgeBase {
+interface OrgRelationshipGraphEdge extends KnowledgeGraphEdgeBase {
   kind: 'org_relationship';
   relationshipType: WikiRelationshipType;
   sourceType: WikiRelationshipSourceType;
@@ -117,12 +117,12 @@ export interface OrgRelationshipGraphEdge extends KnowledgeGraphEdgeBase {
   evidence: string | null;
 }
 
-export interface OrgClusterMembershipGraphEdge
+interface OrgClusterMembershipGraphEdge
   extends KnowledgeGraphEdgeBase {
   kind: 'org_in_cluster';
 }
 
-export interface OrgVendorMatchGraphEdge extends KnowledgeGraphEdgeBase {
+interface OrgVendorMatchGraphEdge extends KnowledgeGraphEdgeBase {
   kind: 'org_matches_vendor';
   matchKey: string;
 }
@@ -132,7 +132,7 @@ export type KnowledgeGraphEdge =
   | OrgClusterMembershipGraphEdge
   | OrgVendorMatchGraphEdge;
 
-export interface KnowledgeGraphMeta {
+interface KnowledgeGraphMeta {
   generatedAt: string;
   orgId: string;
   limits: {

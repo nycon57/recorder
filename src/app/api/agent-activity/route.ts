@@ -1,13 +1,23 @@
 import { NextRequest } from 'next/server';
 
-import { apiHandler, requireOrg, successResponse, errors } from '@/lib/utils/api';
+import {
+  apiHandler,
+  requireOrg,
+  successResponse,
+  errors,
+} from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { ActivityOutcome } from '@/lib/types/database';
 
 const PAGE_SIZE = 50;
 const STATS_CAP = 5000;
 
-const VALID_OUTCOMES = new Set<string>(['success', 'failure', 'skipped', 'pending_approval']);
+const VALID_OUTCOMES = new Set<string>([
+  'success',
+  'failure',
+  'skipped',
+  'pending_approval',
+]);
 
 /** GET /api/agent-activity - Paginated agent activity feed with stats and filters. */
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -40,42 +50,44 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   // Run queries in parallel: entries, stats, and filter options
-  const [entriesResult, statsResult, agentTypesResult, actionTypesResult] = await Promise.all([
-    // Paginated entries (range is inclusive, so PAGE_SIZE+1 rows detect hasMore)
-    applyFilters(
+  const [entriesResult, statsResult, agentTypesResult, actionTypesResult] =
+    await Promise.all([
+      // Paginated entries (range is inclusive, so PAGE_SIZE+1 rows detect hasMore)
+      applyFilters(
+        supabaseAdmin
+          .from('agent_activity_log')
+          .select('*')
+          .eq('org_id', orgId),
+      )
+        .order('created_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE),
+
+      // Stats aggregation data (capped for performance)
+      applyFilters(
+        supabaseAdmin
+          .from('agent_activity_log')
+          .select('outcome, tokens_used, agent_type, cost_estimate', {
+            count: 'exact',
+          })
+          .eq('org_id', orgId),
+      ).limit(STATS_CAP),
+
+      // Distinct agent types for filter dropdown (capped to avoid full table scan)
       supabaseAdmin
         .from('agent_activity_log')
-        .select('*')
+        .select('agent_type')
         .eq('org_id', orgId)
-    )
-      .order('created_at', { ascending: false })
-      .range(offset, offset + PAGE_SIZE),
+        .limit(1000)
+        .order('agent_type'),
 
-    // Stats aggregation data (capped for performance)
-    applyFilters(
+      // Distinct action types for filter dropdown (capped to avoid full table scan)
       supabaseAdmin
         .from('agent_activity_log')
-        .select('outcome, tokens_used, agent_type, cost_estimate', { count: 'exact' })
+        .select('action_type')
         .eq('org_id', orgId)
-    )
-      .limit(STATS_CAP),
-
-    // Distinct agent types for filter dropdown (capped to avoid full table scan)
-    supabaseAdmin
-      .from('agent_activity_log')
-      .select('agent_type')
-      .eq('org_id', orgId)
-      .limit(1000)
-      .order('agent_type'),
-
-    // Distinct action types for filter dropdown (capped to avoid full table scan)
-    supabaseAdmin
-      .from('agent_activity_log')
-      .select('action_type')
-      .eq('org_id', orgId)
-      .limit(1000)
-      .order('action_type'),
-  ]);
+        .limit(1000)
+        .order('action_type'),
+    ]);
 
   if (entriesResult.error) {
     throw new Error(`Failed to fetch entries: ${entriesResult.error.message}`);
@@ -84,10 +96,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
     throw new Error(`Failed to fetch stats: ${statsResult.error.message}`);
   }
   if (agentTypesResult.error) {
-    console.error('[Agent Activity] Failed to fetch agent types:', agentTypesResult.error.message);
+    console.error(
+      '[Agent Activity] Failed to fetch agent types:',
+      agentTypesResult.error.message,
+    );
   }
   if (actionTypesResult.error) {
-    console.error('[Agent Activity] Failed to fetch action types:', actionTypesResult.error.message);
+    console.error(
+      '[Agent Activity] Failed to fetch action types:',
+      actionTypesResult.error.message,
+    );
   }
 
   const entries = entriesResult.data ?? [];
@@ -95,9 +113,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const pageEntries = hasMore ? entries.slice(0, PAGE_SIZE) : entries;
 
   // Batch-fetch content titles for entries that reference content
-  const contentIds = [...new Set(
-    pageEntries.filter(e => e.content_id).map(e => e.content_id as string)
-  )];
+  const contentIds = [
+    ...new Set(
+      pageEntries.flatMap((__item, __index, __array) =>
+        __item.content_id ? [__item.content_id as string] : [],
+      ),
+    ),
+  ];
 
   const contentTitles: Record<string, string> = {};
   if (contentIds.length > 0) {
@@ -115,8 +137,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const statsData = statsResult.data ?? [];
   const totalCount = statsResult.count ?? statsData.length;
   const sampleSize = statsData.length;
-  const successCount = statsData.filter(r => r.outcome === 'success').length;
-  const totalTokens = statsData.reduce((sum, r) => sum + (r.tokens_used || 0), 0);
+  const successCount = statsData.filter((r) => r.outcome === 'success').length;
+  const totalTokens = statsData.reduce(
+    (sum, r) => sum + (r.tokens_used || 0),
+    0,
+  );
   const successRateIsSampled = totalCount !== sampleSize;
 
   // Most active agent by frequency
@@ -124,23 +149,31 @@ export const GET = apiHandler(async (request: NextRequest) => {
   for (const row of statsData) {
     agentCounts[row.agent_type] = (agentCounts[row.agent_type] || 0) + 1;
   }
-  const mostActiveAgent = Object.entries(agentCounts)
-    .sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const mostActiveAgent =
+    Object.entries(agentCounts).reduce<[string, number] | null>(
+      (current, entry) => (!current || entry[1] > current[1] ? entry : current),
+      null,
+    )?.[0] ?? null;
 
   // Deduplicate filter options
-  const agentTypes = [...new Set((agentTypesResult.data ?? []).map(r => r.agent_type))];
-  const actionTypes = [...new Set((actionTypesResult.data ?? []).map(r => r.action_type))];
+  const agentTypes = [
+    ...new Set((agentTypesResult.data ?? []).map((r) => r.agent_type)),
+  ];
+  const actionTypes = [
+    ...new Set((actionTypesResult.data ?? []).map((r) => r.action_type)),
+  ];
 
   return successResponse({
-    entries: pageEntries.map(entry => ({
+    entries: pageEntries.map((entry) => ({
       ...entry,
-      content_title: entry.content_id ? (contentTitles[entry.content_id] || null) : null,
+      content_title: entry.content_id
+        ? contentTitles[entry.content_id] || null
+        : null,
     })),
     stats: {
       totalActions: totalCount,
-      successRate: sampleSize > 0
-        ? Math.round((successCount / sampleSize) * 100)
-        : 0,
+      successRate:
+        sampleSize > 0 ? Math.round((successCount / sampleSize) * 100) : 0,
       successRateIsSampled,
       mostActiveAgent,
       totalTokens,

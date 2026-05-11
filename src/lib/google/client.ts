@@ -61,7 +61,7 @@ let _speechClient: SpeechClient | null = null;
  * Get Speech-to-Text client with proper authentication
  * Creates client lazily on first use to avoid initialization errors
  */
-export function getSpeechClient(): SpeechClient {
+function getSpeechClient(): SpeechClient {
   if (_speechClient) {
     return _speechClient;
   }
@@ -78,7 +78,7 @@ export function getSpeechClient(): SpeechClient {
 }
 
 // Legacy export for backwards compatibility (deprecated)
-export const speechClient = null; // Use getSpeechClient() instead
+const speechClient = null; // Use getSpeechClient() instead
 
 // Configuration constants
 export const GOOGLE_CONFIG = {
@@ -113,7 +113,7 @@ export const GOOGLE_CONFIG = {
 };
 
 // Prompt templates (same structure as OpenAI)
-export const PROMPTS = {
+const PROMPTS = {
   DOCIFY: `You are an expert technical writer. Convert the following transcript into a well-structured, readable document in Markdown format.
 
 Guidelines:

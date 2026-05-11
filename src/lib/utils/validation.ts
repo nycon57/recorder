@@ -3,6 +3,16 @@
  * Provides secure input validation to prevent injection attacks
  */
 
+import { randomBytes } from 'crypto';
+
+const stripControlChars = (value: string) =>
+  Array.from(value)
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code > 31 && code !== 127;
+    })
+    .join('');
+
 /**
  * SECURITY: Validate UUID v4 format to prevent SQL injection
  * @param uuid - The string to validate
@@ -21,7 +31,7 @@ export function isValidUUID(uuid: string): boolean {
  * @param uuids - Array of strings to validate
  * @returns Array of valid UUIDs only
  */
-export function sanitizeUUIDs(uuids: string[]): string[] {
+function sanitizeUUIDs(uuids: string[]): string[] {
   return uuids.filter(isValidUUID);
 }
 
@@ -30,7 +40,7 @@ export function sanitizeUUIDs(uuids: string[]): string[] {
  * @param email - The email string to validate
  * @returns true if valid email format, false otherwise
  */
-export function isValidEmail(email: string): boolean {
+function isValidEmail(email: string): boolean {
   // RFC 5322 compliant email regex (simplified)
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   return emailRegex.test(email);
@@ -42,10 +52,9 @@ export function isValidEmail(email: string): boolean {
  * @param maxLength - Maximum allowed length
  * @returns Sanitized string
  */
-export function sanitizeString(input: string, maxLength: number = 1000): string {
+function sanitizeString(input: string, maxLength: number = 1000): string {
   // Remove control characters and limit length
-  return input
-    .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
+  return stripControlChars(input)
     .replace(/[<>]/g, '') // Remove angle brackets
     .trim()
     .slice(0, maxLength);
@@ -57,7 +66,7 @@ export function sanitizeString(input: string, maxLength: number = 1000): string 
  * @param allowedChars - Additional allowed characters (default: hyphen and underscore)
  * @returns true if valid, false otherwise
  */
-export function isAlphanumeric(input: string, allowedChars: string = '-_'): boolean {
+function isAlphanumeric(input: string, allowedChars: string = '-_'): boolean {
   const pattern = new RegExp(`^[a-zA-Z0-9${allowedChars}]+$`);
   return pattern.test(input);
 }
@@ -68,7 +77,7 @@ export function isAlphanumeric(input: string, allowedChars: string = '-_'): bool
  * @param allowedHosts - Array of allowed hostnames
  * @returns true if valid and allowed, false otherwise
  */
-export function isValidURL(url: string, allowedHosts?: string[]): boolean {
+function isValidURL(url: string, allowedHosts?: string[]): boolean {
   try {
     const parsed = new URL(url);
 
@@ -95,7 +104,7 @@ export function isValidURL(url: string, allowedHosts?: string[]): boolean {
  * @param max - Maximum allowed value
  * @returns true if valid integer within range, false otherwise
  */
-export function isValidInteger(value: any, min: number = 0, max: number = Number.MAX_SAFE_INTEGER): boolean {
+function isValidInteger(value: any, min: number = 0, max: number = Number.MAX_SAFE_INTEGER): boolean {
   const num = Number(value);
   return Number.isInteger(num) && num >= min && num <= max;
 }
@@ -106,7 +115,7 @@ export function isValidInteger(value: any, min: number = 0, max: number = Number
  * @param allowedValues - Array of allowed values
  * @returns true if value is in allowed list, false otherwise
  */
-export function isValidEnum<T>(value: T, allowedValues: readonly T[]): boolean {
+function isValidEnum<T>(value: T, allowedValues: readonly T[]): boolean {
   return allowedValues.includes(value);
 }
 
@@ -115,7 +124,7 @@ export function isValidEnum<T>(value: T, allowedValues: readonly T[]): boolean {
  * @param jsonString - The string to validate as JSON
  * @returns Parsed object if valid, null otherwise
  */
-export function parseJSONSafe<T = any>(jsonString: string): T | null {
+function parseJSONSafe<T = any>(jsonString: string): T | null {
   try {
     return JSON.parse(jsonString);
   } catch {
@@ -129,7 +138,7 @@ export function parseJSONSafe<T = any>(jsonString: string): T | null {
  * @param allowedExtensions - Array of allowed extensions (without dot)
  * @returns true if extension is allowed, false otherwise
  */
-export function isValidFileExtension(filename: string, allowedExtensions: string[]): boolean {
+function isValidFileExtension(filename: string, allowedExtensions: string[]): boolean {
   const ext = filename.split('.').pop()?.toLowerCase();
   return ext ? allowedExtensions.includes(ext) : false;
 }
@@ -140,7 +149,7 @@ export function isValidFileExtension(filename: string, allowedExtensions: string
  * @param allowedTypes - Array of allowed MIME types or patterns
  * @returns true if MIME type is allowed, false otherwise
  */
-export function isValidMimeType(mimeType: string, allowedTypes: string[]): boolean {
+function isValidMimeType(mimeType: string, allowedTypes: string[]): boolean {
   return allowedTypes.some(allowed => {
     if (allowed.endsWith('/*')) {
       // Handle wildcard patterns like 'image/*'
@@ -156,7 +165,7 @@ export function isValidMimeType(mimeType: string, allowedTypes: string[]): boole
  * @param identifier - The identifier to sanitize
  * @returns Sanitized identifier safe for SQL
  */
-export function sanitizeSQLIdentifier(identifier: string): string {
+function sanitizeSQLIdentifier(identifier: string): string {
   // Only allow alphanumeric and underscore, must start with letter
   const sanitized = identifier.replace(/[^a-zA-Z0-9_]/g, '');
 
@@ -179,7 +188,7 @@ export function sanitizeSQLIdentifier(identifier: string): string {
  * @param action - The action being rate limited
  * @returns Consistent rate limit key
  */
-export function getRateLimitKey(identifier: string, action: string): string {
+function getRateLimitKey(identifier: string, action: string): string {
   if (!isValidUUID(identifier) && !isValidEmail(identifier)) {
     throw new Error('Invalid identifier for rate limiting');
   }
@@ -196,7 +205,7 @@ export function getRateLimitKey(identifier: string, action: string): string {
  * @param length - Token length in bytes (default 32)
  * @returns Hex-encoded random token
  */
-export function generateSecureToken(length: number = 32): string {
+function generateSecureToken(length: number = 32): string {
   if (typeof window !== 'undefined' && window.crypto) {
     // Browser environment
     const buffer = new Uint8Array(length);
@@ -206,13 +215,12 @@ export function generateSecureToken(length: number = 32): string {
       .join('');
   } else {
     // Node.js environment
-    const crypto = require('crypto');
-    return crypto.randomBytes(length).toString('hex');
+    return randomBytes(length).toString('hex');
   }
 }
 
 // Export validation schemas for common use cases
-export const ValidationSchemas = {
+const ValidationSchemas = {
   uuid: {
     validate: isValidUUID,
     error: 'Invalid UUID format',
@@ -236,19 +244,19 @@ export const ValidationSchemas = {
 } as const;
 
 // Type guards for TypeScript
-export function assertValidUUID(uuid: string): asserts uuid is string {
+function assertValidUUID(uuid: string): asserts uuid is string {
   if (!isValidUUID(uuid)) {
     throw new Error('Invalid UUID format');
   }
 }
 
-export function assertValidEmail(email: string): asserts email is string {
+function assertValidEmail(email: string): asserts email is string {
   if (!isValidEmail(email)) {
     throw new Error('Invalid email format');
   }
 }
 
-export function assertValidEnum<T>(value: T, allowedValues: readonly T[]): asserts value is T {
+function assertValidEnum<T>(value: T, allowedValues: readonly T[]): asserts value is T {
   if (!isValidEnum(value, allowedValues)) {
     throw new Error(`Invalid enum value. Allowed: ${allowedValues.join(', ')}`);
   }

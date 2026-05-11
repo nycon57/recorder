@@ -52,7 +52,7 @@ export interface SearchPerformanceMetrics {
   searchFailureAlerted: boolean;
 }
 
-export interface AlertCondition {
+interface AlertCondition {
   name: string;
   condition: (metrics: SearchPerformanceMetrics) => boolean;
   severity: 'info' | 'warning' | 'error';
@@ -454,9 +454,13 @@ class SearchMonitor {
     const successful = metrics.filter((m) => m.success);
     const withRetries = metrics.filter((m) => m.retrievalAttempts > 1);
 
+    const successfulWithSimilarity = successful.filter(
+      (m): m is SearchPerformanceMetrics & { avgSimilarity: number } =>
+        typeof m.avgSimilarity === 'number' && Number.isFinite(m.avgSimilarity),
+    );
     const avgSimilarity =
-      successful.reduce((sum, m) => sum + m.avgSimilarity, 0) /
-      (successful.length || 1);
+      successfulWithSimilarity.reduce((sum, m) => sum + m.avgSimilarity, 0) /
+      (successfulWithSimilarity.length || 1);
 
     const avgTimeMs =
       metrics.reduce((sum, m) => sum + m.totalTimeMs, 0) / metrics.length;
@@ -572,7 +576,6 @@ export async function monitoredSearch<T>(
  */
 export {
   SearchMonitor,
-  searchMonitor as default,
 };
 
 /**

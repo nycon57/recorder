@@ -4,14 +4,17 @@ import { apiHandler, requireAuth, successResponse } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/types/database';
 
-type SearchAnalyticsRow = Database['public']['Tables']['search_analytics']['Row'];
+type SearchAnalyticsRow =
+  Database['public']['Tables']['search_analytics']['Row'];
 type SearchWithFeedback = SearchAnalyticsRow & {
   user_feedback?: number | null;
 };
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { userId } = await requireAuth();
-  const supabase = await createClient();
+  const [{ userId }, supabase] = await Promise.all([
+    requireAuth(),
+    createClient(),
+  ]);
 
   const { searchParams } = new URL(request.url);
   const timeRange = searchParams.get('timeRange') || '30d';
@@ -71,7 +74,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   // Calculate trend (compare with previous period)
   const previousStartDate = new Date(startDate);
-  const daysDiff = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const daysDiff = Math.floor(
+    (now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+  );
   previousStartDate.setDate(previousStartDate.getDate() - daysDiff);
 
   const { data: previousSearches } = await supabase
@@ -82,24 +87,35 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .lt('created_at', startDate.toISOString());
 
   const previousCount = previousSearches?.length || 0;
-  const searchesTrend = previousCount > 0
-    ? Math.round(((totalSearches - previousCount) / previousCount) * 100)
-    : 0;
+  const searchesTrend =
+    previousCount > 0
+      ? Math.round(((totalSearches - previousCount) / previousCount) * 100)
+      : 0;
 
   // Most active day
   const dayCount: Record<string, number> = {};
   const searchesWithFeedback = (searches || []) as SearchWithFeedback[];
 
   searchesWithFeedback.forEach((search) => {
-    const day = new Date(search.created_at).toLocaleDateString('en-US', { weekday: 'short' });
+    const day = new Date(search.created_at).toLocaleDateString('en-US', {
+      weekday: 'short',
+    });
     dayCount[day] = (dayCount[day] || 0) + 1;
   });
 
-  const mostActiveDay = Object.entries(dayCount).sort(([, a], [, b]) => b - a)[0] || ['N/A', 0];
+  const mostActiveDay = Object.entries(dayCount).reduce<
+    [string, number] | null
+  >(
+    (current, entry) => (!current || entry[1] > current[1] ? entry : current),
+    null,
+  ) || ['N/A', 0];
 
   // Average search time
   const avgSearchTime = searches?.length
-    ? Math.round(searches.reduce((sum, s) => sum + (s.latency_ms || 0), 0) / searches.length)
+    ? Math.round(
+        searches.reduce((sum, s) => sum + (s.latency_ms || 0), 0) /
+          searches.length,
+      )
     : 0;
 
   // Top query type
@@ -109,7 +125,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
     typeCount[type] = (typeCount[type] || 0) + 1;
   });
 
-  const topTypeEntry = Object.entries(typeCount).sort(([, a], [, b]) => b - a)[0];
+  const topTypeEntry = Object.entries(typeCount).reduce<
+    [string, number] | null
+  >(
+    (current, entry) => (!current || entry[1] > current[1] ? entry : current),
+    null,
+  );
   const topQueryType = topTypeEntry
     ? {
         type: topTypeEntry[0],
@@ -119,7 +140,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
     : { type: 'N/A', count: 0, percentage: 0 };
 
   // Top queries
-  const queryMap = new Map<string, { count: number; lastSearched: string; feedbacks: number[] }>();
+  const queryMap = new Map<
+    string,
+    { count: number; lastSearched: string; feedbacks: number[] }
+  >();
 
   searchesWithFeedback.forEach((search) => {
     const query = search.query;
@@ -128,7 +152,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
     if (existing) {
       existing.count += 1;
-      existing.lastSearched = search.created_at > existing.lastSearched ? search.created_at : existing.lastSearched;
+      existing.lastSearched =
+        search.created_at > existing.lastSearched
+          ? search.created_at
+          : existing.lastSearched;
       if (typeof feedback === 'number') {
         existing.feedbacks.push(feedback);
       }
@@ -146,9 +173,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
       query,
       count: data.count,
       lastSearched: data.lastSearched,
-      avgFeedback: data.feedbacks.length > 0
-        ? data.feedbacks.reduce((sum, f) => sum + f, 0) / data.feedbacks.length
-        : null,
+      avgFeedback:
+        data.feedbacks.length > 0
+          ? data.feedbacks.reduce((sum, f) => sum + f, 0) /
+            data.feedbacks.length
+          : null,
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
@@ -162,32 +191,38 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .limit(20); // Get more to filter by view count
 
   // Get view counts for these recordings
-  const recordingIds = recordings?.map(r => r.id) || [];
-  const { data: viewCounts } = recordingIds.length > 0
-    ? await supabase
-        .from('recording_view_counts')
-        .select('recording_id, total_views, last_viewed_at')
-        .in('content_id', recordingIds)
-    : { data: null };
+  const recordingIds = recordings?.map((r) => r.id) || [];
+  const { data: viewCounts } =
+    recordingIds.length > 0
+      ? await supabase
+          .from('recording_view_counts')
+          .select('recording_id, total_views, last_viewed_at')
+          .in('content_id', recordingIds)
+      : { data: null };
 
   // Create a map of view counts
   const viewCountMap = new Map(
-    viewCounts?.map(vc => [vc.recording_id, {
-      count: vc.total_views,
-      lastViewed: vc.last_viewed_at
-    }]) || []
+    viewCounts?.map((vc) => [
+      vc.recording_id,
+      {
+        count: vc.total_views,
+        lastViewed: vc.last_viewed_at,
+      },
+    ]) || [],
   );
 
   // Combine and sort by view count
-  const topRecordings = recordings?.map((rec) => ({
-    id: rec.id,
-    title: rec.title || 'Untitled Recording',
-    viewCount: viewCountMap.get(rec.id)?.count || 0,
-    duration: rec.duration_sec || 0,
-    lastViewed: viewCountMap.get(rec.id)?.lastViewed ?? null,
-  }))
-    .sort((a, b) => b.viewCount - a.viewCount)
-    .slice(0, 5) || [];
+  const topRecordings =
+    recordings
+      ?.map((rec) => ({
+        id: rec.id,
+        title: rec.title || 'Untitled Recording',
+        viewCount: viewCountMap.get(rec.id)?.count || 0,
+        duration: rec.duration_sec || 0,
+        lastViewed: viewCountMap.get(rec.id)?.lastViewed ?? null,
+      }))
+      .sort((a, b) => b.viewCount - a.viewCount)
+      .slice(0, 5) || [];
 
   return successResponse({
     summary: {

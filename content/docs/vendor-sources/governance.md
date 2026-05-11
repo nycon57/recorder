@@ -1,11 +1,9 @@
 ---
-slug: vendor-sources/governance
 title: Governance
 description: Curation decisions for vendor sources — adding, removing, and managing page lifecycle.
 audience: system-admin
 section: vendor-sources
 order: 30
-updatedAt: "2026-04-20"
 related:
   - vendor-sources/sync-lifecycle
   - vendor-sources/failure-handling

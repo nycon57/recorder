@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, use, useState } from 'react';
 
 import type { Audience } from '@/lib/docs';
 
@@ -50,7 +50,7 @@ export function DocsSearchProvider({ children, audience }: DocsSearchProviderPro
 
 /** Consume search context inside the docs shell. */
 export function useDocsSearch(): DocsSearchContextValue {
-  const ctx = useContext(DocsSearchContext);
+  const ctx = use(DocsSearchContext);
   if (!ctx) {
     throw new Error('useDocsSearch must be used inside <DocsSearchProvider>');
   }

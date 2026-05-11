@@ -2,13 +2,9 @@
 
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import {
-  BrainIcon,
-  ChevronDownIcon,
-  DotIcon,
-  type LucideIcon,
-} from "lucide-react";
-import type { ComponentProps } from "react";
-import { createContext, memo, useContext, useMemo } from "react";
+  BrainIcon, ChevronDownIcon, DotIcon, type LucideIcon, } from "lucide-react";
+import type { ComponentProps } from 'react';
+import { createContext, memo, use, useMemo } from 'react';
 
 import { Badge } from "@/app/components/ui/badge";
 import {
@@ -28,7 +24,7 @@ const ChainOfThoughtContext = createContext<ChainOfThoughtContextValue | null>(
 );
 
 const useChainOfThought = () => {
-  const context = useContext(ChainOfThoughtContext);
+  const context = use(ChainOfThoughtContext);
   if (!context) {
     throw new Error(
       "ChainOfThought components must be used within ChainOfThought"
@@ -158,17 +154,17 @@ export const ChainOfThoughtStep = memo(
   }
 );
 
-export type ChainOfThoughtSearchResultsProps = ComponentProps<"div">;
+type ChainOfThoughtSearchResultsProps = ComponentProps<"div">;
 
-export const ChainOfThoughtSearchResults = memo(
+const ChainOfThoughtSearchResults = memo(
   ({ className, ...props }: ChainOfThoughtSearchResultsProps) => (
     <div className={cn("flex items-center gap-2", className)} {...props} />
   )
 );
 
-export type ChainOfThoughtSearchResultProps = ComponentProps<typeof Badge>;
+type ChainOfThoughtSearchResultProps = ComponentProps<typeof Badge>;
 
-export const ChainOfThoughtSearchResult = memo(
+const ChainOfThoughtSearchResult = memo(
   ({ className, children, ...props }: ChainOfThoughtSearchResultProps) => (
     <Badge
       className={cn("gap-1 px-2 py-0.5 font-normal text-xs", className)}
@@ -201,11 +197,11 @@ export const ChainOfThoughtContent = memo(
   }
 );
 
-export type ChainOfThoughtImageProps = ComponentProps<"div"> & {
+type ChainOfThoughtImageProps = ComponentProps<"div"> & {
   caption?: string;
 };
 
-export const ChainOfThoughtImage = memo(
+const ChainOfThoughtImage = memo(
   ({ className, children, caption, ...props }: ChainOfThoughtImageProps) => (
     <div className={cn("mt-2 space-y-2", className)} {...props}>
       <div className="relative flex max-h-[22rem] items-center justify-center overflow-hidden rounded-lg bg-muted p-3">

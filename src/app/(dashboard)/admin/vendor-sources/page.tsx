@@ -66,14 +66,16 @@ const DEFAULT_FILTERS: Filters = {
   freshness: 'all',
 };
 
+const TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('en', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
 function formatTimestamp(value: string | null | undefined): string {
   if (!value) return 'Never';
 
   try {
-    return new Intl.DateTimeFormat('en', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(new Date(value));
+    return TIMESTAMP_FORMATTER.format(new Date(value));
   } catch {
     return value;
   }
@@ -81,15 +83,21 @@ function formatTimestamp(value: string | null | undefined): string {
 
 function formatShortHash(value: string | null): string {
   if (!value) return 'Unavailable';
-  return value.length > 18 ? `${value.slice(0, 18)}...` : value;
+  return value.length > 18 ? `${value.slice(0, 18)}…` : value;
 }
 
-function renderBand(values: string[], fallback: string) {
+function VendorSourceBand({
+  values,
+  fallback,
+}: {
+  values: string[];
+  fallback: string;
+}) {
   if (values.length === 0) {
     return <span className="text-muted-foreground">{fallback}</span>;
   }
 
-  return values.join(', ');
+  return <>{values.join(', ')}</>;
 }
 
 function getLifecycleBadge(source: VendorSourceOpsItem) {
@@ -125,10 +133,17 @@ function isAttentionState(source: VendorSourceOpsItem): boolean {
   );
 }
 
-function matchesFreshness(source: VendorSourceOpsItem, filter: FreshnessFilter): boolean {
+function matchesFreshness(
+  source: VendorSourceOpsItem,
+  filter: FreshnessFilter,
+): boolean {
   switch (filter) {
     case 'current':
-      return Boolean(source.lastSuccessfulSyncAt) && !source.isDueForSync && !source.lastError;
+      return (
+        Boolean(source.lastSuccessfulSyncAt) &&
+        !source.isDueForSync &&
+        !source.lastError
+      );
     case 'due':
       return source.isDueForSync;
     case 'never':
@@ -147,10 +162,19 @@ function filterSources(
   const query = filters.query.trim().toLowerCase();
 
   return sources.filter((source) => {
-    if (filters.status !== 'all' && source.status !== filters.status) return false;
-    if (filters.terms !== 'all' && source.termsReviewStatus !== filters.terms) return false;
-    if (filters.sourceKind !== 'all' && source.sourceKind !== filters.sourceKind) return false;
-    if (filters.publisher !== 'all' && source.publisherHostname !== filters.publisher) {
+    if (filters.status !== 'all' && source.status !== filters.status)
+      return false;
+    if (filters.terms !== 'all' && source.termsReviewStatus !== filters.terms)
+      return false;
+    if (
+      filters.sourceKind !== 'all' &&
+      source.sourceKind !== filters.sourceKind
+    )
+      return false;
+    if (
+      filters.publisher !== 'all' &&
+      source.publisherHostname !== filters.publisher
+    ) {
       return false;
     }
     if (!matchesFreshness(source, filters.freshness)) return false;
@@ -177,12 +201,18 @@ function filterSources(
 }
 
 function uniqueSorted<T extends string>(values: T[]): T[] {
-  return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
+  return Array.from(new Set(values)).sort((left, right) =>
+    left.localeCompare(right),
+  );
 }
 
 function SummaryLedger({ snapshot }: { snapshot: VendorSourceOpsSnapshot }) {
   const metrics = [
-    ['Sources', snapshot.summary.totalSources.toString(), `${snapshot.summary.appsCovered} apps`],
+    [
+      'Sources',
+      snapshot.summary.totalSources.toString(),
+      `${snapshot.summary.appsCovered} apps`,
+    ],
     ['Healthy', snapshot.summary.healthySources.toString(), 'fresh'],
     ['Syncing', snapshot.summary.syncingSources.toString(), 'active jobs'],
     [
@@ -195,10 +225,16 @@ function SummaryLedger({ snapshot }: { snapshot: VendorSourceOpsSnapshot }) {
       ).toString(),
       'stale, blocked, failing, never',
     ],
-    ['Restricted', snapshot.summary.restrictedSources.toString(), 'terms gated'],
+    [
+      'Restricted',
+      snapshot.summary.restrictedSources.toString(),
+      'terms gated',
+    ],
     [
       'Lifecycle holds',
-      (snapshot.summary.pausedSources + snapshot.summary.retiredSources).toString(),
+      (
+        snapshot.summary.pausedSources + snapshot.summary.retiredSources
+      ).toString(),
       'paused or retired',
     ],
   ];
@@ -207,7 +243,9 @@ function SummaryLedger({ snapshot }: { snapshot: VendorSourceOpsSnapshot }) {
     <dl className="grid gap-px overflow-hidden rounded-md border bg-border sm:grid-cols-2 xl:grid-cols-6">
       {metrics.map(([label, value, helper]) => (
         <div key={label} className="bg-background px-3 py-2">
-          <dt className="text-xs font-medium uppercase text-muted-foreground">{label}</dt>
+          <dt className="text-xs font-medium uppercase text-muted-foreground">
+            {label}
+          </dt>
           <dd className="mt-1 flex items-baseline gap-2">
             <span className="text-xl font-semibold">{value}</span>
             <span className="text-xs text-muted-foreground">{helper}</span>
@@ -267,7 +305,11 @@ function FilterBar({
             value={filters.status}
             onValueChange={(value) => update('status', value as StatusFilter)}
           >
-            <SelectTrigger id="vendor-source-status" aria-label="Filter by source status" className="w-full">
+            <SelectTrigger
+              id="vendor-source-status"
+              aria-label="Filter by source status"
+              className="w-full"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -288,9 +330,15 @@ function FilterBar({
           </Label>
           <Select
             value={filters.terms}
-            onValueChange={(value) => update('terms', value as Filters['terms'])}
+            onValueChange={(value) =>
+              update('terms', value as Filters['terms'])
+            }
           >
-            <SelectTrigger id="vendor-source-terms" aria-label="Filter by terms status" className="w-full">
+            <SelectTrigger
+              id="vendor-source-terms"
+              aria-label="Filter by terms status"
+              className="w-full"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -310,9 +358,15 @@ function FilterBar({
           </Label>
           <Select
             value={filters.sourceKind}
-            onValueChange={(value) => update('sourceKind', value as Filters['sourceKind'])}
+            onValueChange={(value) =>
+              update('sourceKind', value as Filters['sourceKind'])
+            }
           >
-            <SelectTrigger id="vendor-source-kind" aria-label="Filter by source kind" className="w-full">
+            <SelectTrigger
+              id="vendor-source-kind"
+              aria-label="Filter by source kind"
+              className="w-full"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -334,7 +388,11 @@ function FilterBar({
             value={filters.publisher}
             onValueChange={(value) => update('publisher', value)}
           >
-            <SelectTrigger id="vendor-source-publisher" aria-label="Filter by publisher" className="w-full">
+            <SelectTrigger
+              id="vendor-source-publisher"
+              aria-label="Filter by publisher"
+              className="w-full"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -354,9 +412,15 @@ function FilterBar({
           </Label>
           <Select
             value={filters.freshness}
-            onValueChange={(value) => update('freshness', value as FreshnessFilter)}
+            onValueChange={(value) =>
+              update('freshness', value as FreshnessFilter)
+            }
           >
-            <SelectTrigger id="vendor-source-freshness" aria-label="Filter by freshness" className="w-full">
+            <SelectTrigger
+              id="vendor-source-freshness"
+              aria-label="Filter by freshness"
+              className="w-full"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -411,7 +475,10 @@ function SourceLedgerTable({
             const selected = source.id === selectedSourceId;
 
             return (
-              <TableRow key={source.id} data-state={selected ? 'selected' : undefined}>
+              <TableRow
+                key={source.id}
+                data-state={selected ? 'selected' : undefined}
+              >
                 <TableCell className="max-w-[320px] whitespace-normal">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -436,7 +503,13 @@ function SourceLedgerTable({
                   {source.publisherHostname}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={source.termsReviewStatus === 'approved' ? 'default' : 'outline'}>
+                  <Badge
+                    variant={
+                      source.termsReviewStatus === 'approved'
+                        ? 'default'
+                        : 'outline'
+                    }
+                  >
                     {source.termsReviewStatus}
                   </Badge>
                 </TableCell>
@@ -450,7 +523,9 @@ function SourceLedgerTable({
                 </TableCell>
                 <TableCell className="text-xs">
                   <div>{source.corpusPageCount} corpus</div>
-                  <div className="text-muted-foreground">{source.legacyPageCount} legacy</div>
+                  <div className="text-muted-foreground">
+                    {source.legacyPageCount} legacy
+                  </div>
                 </TableCell>
                 <TableCell className="max-w-[180px] whitespace-normal break-all font-mono text-xs">
                   <span title={source.contentHash ?? undefined}>
@@ -464,7 +539,7 @@ function SourceLedgerTable({
                       className="inline-flex items-center gap-1 text-primary hover:underline"
                     >
                       {source.latestSyncJobStatus ?? 'job'}
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className="size-3" />
                     </Link>
                   ) : (
                     <span className="text-muted-foreground">No job</span>
@@ -498,7 +573,9 @@ function DetailField({
 }) {
   return (
     <div className="min-w-0 space-y-1">
-      <dt className="text-xs font-medium uppercase text-muted-foreground">{label}</dt>
+      <dt className="text-xs font-medium uppercase text-muted-foreground">
+        {label}
+      </dt>
       <dd className="min-w-0 break-words text-sm">{children}</dd>
     </div>
   );
@@ -545,7 +622,7 @@ function SourceDetail({
 
       {source.lifecycle === 'retired' ? (
         <Alert>
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>
             Retired {formatTimestamp(source.retiredAt)}:{' '}
             {source.retirementReason ?? 'No reason recorded'}
@@ -553,31 +630,39 @@ function SourceDetail({
         </Alert>
       ) : source.lastError ? (
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{source.lastError}</AlertDescription>
         </Alert>
       ) : source.syncBlockReason ? (
         <Alert>
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>{source.syncBlockReason}</AlertDescription>
         </Alert>
       ) : null}
 
       <dl className="grid gap-4 sm:grid-cols-2">
         <DetailField label="Official assertion">
-          {source.officialSource ? 'Official source asserted' : 'Official source missing'}
+          {source.officialSource
+            ? 'Official source asserted'
+            : 'Official source missing'}
         </DetailField>
         <DetailField label="Publisher">{source.publisherHostname}</DetailField>
         <DetailField label="Source kind">{source.sourceKind}</DetailField>
         <DetailField label="Fetch strategy">{source.fetchStrategy}</DetailField>
         <DetailField label="Terms">{source.termsReviewStatus}</DetailField>
-        <DetailField label="Freshness target">{source.freshnessTarget}</DetailField>
+        <DetailField label="Freshness target">
+          {source.freshnessTarget}
+        </DetailField>
         <DetailField label="Last successful sync">
           {formatTimestamp(source.lastSuccessfulSyncAt)}
         </DetailField>
-        <DetailField label="Last attempt">{formatTimestamp(source.lastAttemptAt)}</DetailField>
+        <DetailField label="Last attempt">
+          {formatTimestamp(source.lastAttemptAt)}
+        </DetailField>
         <DetailField label="Content/corpus hash">
-          <span className="break-all font-mono text-xs">{source.contentHash ?? 'Unavailable'}</span>
+          <span className="break-all font-mono text-xs">
+            {source.contentHash ?? 'Unavailable'}
+          </span>
         </DetailField>
         <DetailField label="Latest sync job">
           {source.latestSyncJobId ? (
@@ -586,7 +671,7 @@ function SourceDetail({
               className="inline-flex items-center gap-1 text-primary hover:underline"
             >
               {source.latestSyncJobId}
-              <ExternalLink className="h-3 w-3" />
+              <ExternalLink className="size-3" />
             </Link>
           ) : (
             'No sync job recorded'
@@ -596,19 +681,28 @@ function SourceDetail({
           {source.latestSyncJobStatus ?? 'Unavailable'}
         </DetailField>
         <DetailField label="Latest job time">
-          {formatTimestamp(source.latestSyncJobCompletedAt ?? source.latestSyncJobCreatedAt)}
+          {formatTimestamp(
+            source.latestSyncJobCompletedAt ?? source.latestSyncJobCreatedAt,
+          )}
         </DetailField>
         <DetailField label="Version band">
-          {renderBand(source.versionBand, 'All versions')}
+          <VendorSourceBand
+            values={source.versionBand}
+            fallback="All versions"
+          />
         </DetailField>
-        <DetailField label="Plan band">{renderBand(source.planBand, 'All plans')}</DetailField>
+        <DetailField label="Plan band">
+          <VendorSourceBand values={source.planBand} fallback="All plans" />
+        </DetailField>
         <DetailField label="Corpus pages">
           {source.corpusPageCount} canonical / {source.legacyPageCount} legacy
         </DetailField>
         <DetailField label="Legal reviewed">
           {formatTimestamp(source.legalReviewedAt)}
         </DetailField>
-        <DetailField label="Reviewed by">{source.legalReviewedBy ?? 'Unassigned'}</DetailField>
+        <DetailField label="Reviewed by">
+          {source.legalReviewedBy ?? 'Unassigned'}
+        </DetailField>
         <DetailField label="Review evidence">
           {source.legalReviewReferenceUrl ? (
             <Link
@@ -627,7 +721,9 @@ function SourceDetail({
 
       {source.legalReviewNotes ? (
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase text-muted-foreground">Review notes</p>
+          <p className="text-xs font-medium uppercase text-muted-foreground">
+            Review notes
+          </p>
           <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
             {source.legalReviewNotes}
           </p>
@@ -685,9 +781,9 @@ export default function AdminVendorSourcesPage() {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">
-            Loading vendor source ledger...
+            Loading vendor source ledger…
           </p>
         </div>
       </div>
@@ -698,7 +794,7 @@ export default function AdminVendorSourcesPage() {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
-          <ShieldAlert className="h-4 w-4" />
+          <ShieldAlert className="size-4" />
           <AlertDescription>{inlineErrorMessage}</AlertDescription>
         </Alert>
       </div>
@@ -709,9 +805,9 @@ export default function AdminVendorSourcesPage() {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">
-            Loading vendor source ledger...
+            Loading vendor source ledger…
           </p>
         </div>
       </div>
@@ -730,7 +826,7 @@ export default function AdminVendorSourcesPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="trbd-page-title flex items-center gap-2">
-            <BookOpen className="h-7 w-7" />
+            <BookOpen className="size-7" />
             Vendor Source Ledger
           </h1>
           <p className="text-muted-foreground">
@@ -741,26 +837,26 @@ export default function AdminVendorSourcesPage() {
             <DocLink href="/docs/vendor-sources/sync-lifecycle">
               Sync lifecycle
             </DocLink>
-            <DocLink href="/docs/vendor-sources/governance">
-              Governance
-            </DocLink>
+            <DocLink href="/docs/vendor-sources/governance">Governance</DocLink>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">Updated {formatTimestamp(snapshot.generatedAt)}</Badge>
+          <Badge variant="outline">
+            Updated {formatTimestamp(snapshot.generatedAt)}
+          </Badge>
           <button
             type="button"
             onClick={refetch}
             className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className="size-4" />
             Refresh
           </button>
           <Link
             href="/admin/vendor-sources/health"
             className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted"
           >
-            <Activity className="h-4 w-4" />
+            <Activity className="size-4" />
             Health
           </Link>
           <AddSourceButton />
@@ -769,17 +865,18 @@ export default function AdminVendorSourcesPage() {
 
       {inlineErrorMessage ? (
         <Alert variant="destructive">
-          <ShieldAlert className="h-4 w-4" />
+          <ShieldAlert className="size-4" />
           <AlertDescription>{inlineErrorMessage}</AlertDescription>
         </Alert>
       ) : null}
 
       {needsAttention ? (
         <Alert>
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="size-4" />
           <AlertDescription>
-            {snapshot.summary.failingSources} failing, {snapshot.summary.staleSources}{' '}
-            stale, {snapshot.summary.blockedSources} blocked, and{' '}
+            {snapshot.summary.failingSources} failing,{' '}
+            {snapshot.summary.staleSources} stale,{' '}
+            {snapshot.summary.blockedSources} blocked, and{' '}
             {snapshot.summary.neverSyncedSources} never-synced source
             {snapshot.summary.totalSources === 1 ? '' : 's'} need operator
             attention.
@@ -787,16 +884,21 @@ export default function AdminVendorSourcesPage() {
         </Alert>
       ) : (
         <Alert>
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="size-4" />
           <AlertDescription>
-            All active shared vendor sources are currently healthy or actively syncing.
+            All active shared vendor sources are currently healthy or actively
+            syncing.
           </AlertDescription>
         </Alert>
       )}
 
       <SummaryLedger snapshot={snapshot} />
 
-      <FilterBar filters={filters} onFiltersChange={setFilters} sources={snapshot.sources} />
+      <FilterBar
+        filters={filters}
+        onFiltersChange={setFilters}
+        sources={snapshot.sources}
+      />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         <SourceLedgerTable

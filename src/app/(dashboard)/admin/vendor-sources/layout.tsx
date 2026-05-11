@@ -9,7 +9,7 @@
 import { type ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 
-import { requireSystemAdmin } from '@/lib/utils/api';
+import { canAccessSystemAdminPage } from '@/lib/auth/system-admin-page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +18,9 @@ interface Props {
 }
 
 export default async function VendorSourcesAdminLayout({ children }: Props) {
-  try {
-    await requireSystemAdmin();
-  } catch {
+  const hasAccess = await canAccessSystemAdminPage();
+
+  if (!hasAccess) {
     redirect('/dashboard');
   }
 

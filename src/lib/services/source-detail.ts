@@ -1,13 +1,13 @@
 import type { ContentType, RecordingStatus } from '@/lib/types/database';
 
-export type SourceDetailStageId =
+type SourceDetailStageId =
   | 'upload'
   | 'transcript'
   | 'document'
   | 'workflow'
   | 'knowledge';
 
-export type SourceDetailStageState =
+type SourceDetailStageState =
   | 'completed'
   | 'in_progress'
   | 'pending'
@@ -145,11 +145,15 @@ export function resolvePreferredSourceKnowledgePage(
   const active = pages.filter((page) => page.valid_until == null);
   const candidatePool = active.length > 0 ? active : pages;
 
-  return [...candidatePool].sort((left, right) => {
-    const leftTime = Date.parse(left.updated_at);
-    const rightTime = Date.parse(right.updated_at);
-    const leftValue = Number.isNaN(leftTime) ? 0 : leftTime;
-    const rightValue = Number.isNaN(rightTime) ? 0 : rightTime;
-    return rightValue - leftValue;
-  })[0] ?? null;
+  return candidatePool.reduce<SourceKnowledgePageCandidate | null>(
+    (latest, candidate) => {
+      if (!latest) return candidate;
+      const latestTime = Date.parse(latest.updated_at);
+      const candidateTime = Date.parse(candidate.updated_at);
+      const latestValue = Number.isNaN(latestTime) ? 0 : latestTime;
+      const candidateValue = Number.isNaN(candidateTime) ? 0 : candidateTime;
+      return candidateValue > latestValue ? candidate : latest;
+    },
+    null
+  );
 }

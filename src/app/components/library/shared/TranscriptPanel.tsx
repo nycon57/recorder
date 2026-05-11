@@ -14,7 +14,12 @@ import { toast } from 'sonner';
 
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
@@ -54,7 +59,7 @@ export default function TranscriptPanel({
 }: TranscriptPanelProps) {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [highlightedIndices, setHighlightedIndices] = React.useState<number[]>(
-    []
+    [],
   );
   const [isExpanded, setIsExpanded] = React.useState(true);
 
@@ -182,7 +187,8 @@ export default function TranscriptPanel({
             )}
             {highlightedIndices.length > 0 && (
               <Badge variant="secondary">
-                {highlightedIndices.length} match{highlightedIndices.length !== 1 ? 'es' : ''}
+                {highlightedIndices.length} match
+                {highlightedIndices.length !== 1 ? 'es' : ''}
               </Badge>
             )}
           </div>
@@ -220,7 +226,7 @@ export default function TranscriptPanel({
                     variant="ghost"
                     size="sm"
                     onClick={clearSearch}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 size-7 p-0"
                   >
                     <X className="size-3" />
                   </Button>
@@ -263,12 +269,25 @@ export default function TranscriptPanel({
                       const isHighlighted = highlightedIndices.includes(index);
                       const isSearchMatch =
                         searchQuery &&
-                        word.word.toLowerCase().includes(searchQuery.toLowerCase());
+                        word.word
+                          .toLowerCase()
+                          .includes(searchQuery.toLowerCase());
 
                       return (
-                        <React.Fragment key={index}>
+                        <React.Fragment key={JSON.stringify(word)}>
                           <span
-                            onClick={() => onTimestampClick && handleWordClick(word)}
+                            onClick={() =>
+                              onTimestampClick && handleWordClick(word)
+                            }
+                            onKeyDown={(event) => {
+                              if (!onTimestampClick) return;
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                handleWordClick(word);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={onTimestampClick ? 0 : -1}
                             className={`
                               ${onTimestampClick ? 'cursor-pointer' : ''}
                               transition-colors duration-150
@@ -289,8 +308,7 @@ export default function TranscriptPanel({
                             }
                           >
                             {word.word}
-                          </span>
-                          {' '}
+                          </span>{' '}
                         </React.Fragment>
                       );
                     })}
@@ -308,7 +326,8 @@ export default function TranscriptPanel({
             {/* Helper Text */}
             {onTimestampClick && hasWords && (
               <p className="text-xs text-muted-foreground">
-                Click on any word to jump to that point in the {words ? 'media' : 'recording'}
+                Click on any word to jump to that point in the{' '}
+                {words ? 'media' : 'recording'}
               </p>
             )}
 

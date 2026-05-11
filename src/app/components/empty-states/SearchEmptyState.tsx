@@ -31,7 +31,7 @@ interface SearchNoResultsStateProps {
 }
 
 export function SearchNoResultsState({ query, onClearSearch }: SearchNoResultsStateProps) {
-  const router = useRouter();
+  const { push } = useRouter();
 
   return (
     <Empty className="border-2 py-12">
@@ -70,7 +70,7 @@ export function SearchNoResultsState({ query, onClearSearch }: SearchNoResultsSt
         <div className="flex flex-col sm:flex-row gap-3">
           <Button
             size="lg"
-            onClick={() => router.push('/library')}
+            onClick={() => push('/library')}
             className="gap-2"
           >
             Browse Library
@@ -104,7 +104,7 @@ export function SearchNoResultsState({ query, onClearSearch }: SearchNoResultsSt
  * @refactored - Now uses @shadcn/empty as foundation
  */
 export function SearchInitialState() {
-  const router = useRouter();
+  const { push } = useRouter();
 
   const exampleQueries = [
     'meeting notes',
@@ -180,11 +180,11 @@ export function SearchInitialState() {
 
         {/* Browse Library CTA */}
         <div className="pt-6 border-t w-full max-w-md">
-          <Button
-            variant="outline"
-            onClick={() => router.push('/library')}
-            className="gap-2"
-          >
+            <Button
+              variant="outline"
+              onClick={() => push('/library')}
+              className="gap-2"
+            >
             Browse Library
             <ArrowRight className="size-4" />
           </Button>

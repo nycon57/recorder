@@ -14,11 +14,14 @@ import { QuotaManager } from '@/lib/services/quotas/quota-manager';
 import { RateLimiter } from '@/lib/services/quotas/rate-limiter';
 import { createRecordingSchema } from '@/lib/validations/api';
 import { SOURCE_STATUS } from '@/lib/utils/status-helpers';
+import type { Json } from '@/lib/types/database';
 
 // GET /api/recordings - List all recordings for the current org
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireOrg();
-  const supabase = await createClient();
+  const [{ orgId, userId }, supabase] = await Promise.all([
+    requireOrg(),
+    createClient(),
+  ]);
 
   // Parse query params
   const url = new URL(request.url);
@@ -56,13 +59,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
 // POST /api/recordings - Create a new recording entry
 export const POST = withRateLimit(
   apiHandler(async (request: NextRequest) => {
-    const { orgId, userId } = await requireOrg();
-
-    // Bot protection - verify request is from a legitimate browser
     const verification = await checkBotId();
     if (verification.isBot) {
       return errors.forbidden('Bot detected');
     }
+
+    const { orgId, userId } = await requireOrg();
 
     // Use admin client to bypass RLS - auth already validated via requireOrg()
     const supabase = supabaseAdmin;
@@ -104,7 +106,7 @@ export const POST = withRateLimit(
         title: title || null,
         description: description || null,
         status: SOURCE_STATUS.UPLOADING,
-        metadata: metadata || {},
+        metadata: (metadata || {}) as Json,
         analysis_type: analysisType || 'general',
         skip_analysis: skipAnalysis || false,
       })

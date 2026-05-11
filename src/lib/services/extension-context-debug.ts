@@ -7,7 +7,7 @@ import type {
 
 type EventRow = Database['public']['Tables']['events']['Row'];
 
-export type ExtensionContextDebugSince = '1h' | '24h' | '7d' | '30d' | 'all';
+type ExtensionContextDebugSince = '1h' | '24h' | '7d' | '30d' | 'all';
 export type ExtensionContextDebugKnowledgeMode =
   | 'dom_only'
   | 'vendor_backed'
@@ -24,13 +24,13 @@ export interface ExtensionContextDebugFilters {
   since: ExtensionContextDebugSince;
 }
 
-export interface ExtensionContextDebugEvent {
+interface ExtensionContextDebugEvent {
   id: string;
   createdAt: string;
   telemetry: ExtensionContextTelemetryPayload;
 }
 
-export interface ExtensionContextDebugSummary {
+interface ExtensionContextDebugSummary {
   total: number;
   distinctApps: number;
   distinctHosts: number;
@@ -67,7 +67,9 @@ function normalizeText(value: string | null | undefined): string {
   return (value ?? '').replace(/\s+/g, ' ').trim();
 }
 
-function isRecord(value: Json | undefined): value is Record<string, Json | undefined> {
+function isRecord(
+  value: Json | undefined,
+): value is Record<string, Json | undefined> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -199,7 +201,7 @@ export function parseExtensionContextDebugFilters(
   };
 }
 
-export function normalizeExtensionContextDebugEvent(
+function normalizeExtensionContextDebugEvent(
   row: EventRow,
 ): ExtensionContextDebugEvent | null {
   if (row.type !== 'extension.context.checked') return null;
@@ -276,7 +278,7 @@ export function normalizeExtensionContextDebugEvent(
   };
 }
 
-export function matchesExtensionContextDebugFilters(
+function matchesExtensionContextDebugFilters(
   event: ExtensionContextDebugEvent,
   filters: ExtensionContextDebugFilters,
 ): boolean {
@@ -334,7 +336,7 @@ export function matchesExtensionContextDebugFilters(
   return true;
 }
 
-export function summarizeExtensionContextDebugEvents(
+function summarizeExtensionContextDebugEvents(
   events: ExtensionContextDebugEvent[],
 ): ExtensionContextDebugSummary {
   const apps = new Set<string>();
@@ -386,16 +388,28 @@ export async function listExtensionContextDebugEvents(args: {
     );
   }
 
-  const normalized = (data ?? [])
-    .map((row) => normalizeExtensionContextDebugEvent(row))
-    .filter((event): event is ExtensionContextDebugEvent => event !== null)
-    .filter((event) => event.telemetry.orgId === orgId);
+  const normalized = (data ?? []).flatMap((__item, __index, __array) => {
+    const __mapped = normalizeExtensionContextDebugEvent(__item);
+    return __mapped !== null && __mapped.telemetry.orgId === orgId
+      ? [__mapped]
+      : [];
+  });
 
   const availableApps = Array.from(
-    new Set(normalized.map((event) => event.telemetry.app).filter(Boolean)),
+    new Set(
+      normalized.flatMap((__item, __index, __array) => {
+        const __mapped = __item.telemetry.app;
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   ).sort();
   const availableHosts = Array.from(
-    new Set(normalized.map((event) => event.telemetry.urlHost).filter(Boolean)),
+    new Set(
+      normalized.flatMap((__item, __index, __array) => {
+        const __mapped = __item.telemetry.urlHost;
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   ).sort();
 
   const events = normalized

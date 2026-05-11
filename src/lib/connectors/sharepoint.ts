@@ -26,6 +26,7 @@ import {
   type TokenSet,
   type StoredCredentials,
 } from '@/lib/services/token-manager';
+import { mapBatchesSequentially } from '@/lib/utils/async';
 
 import {
   Connector,
@@ -52,7 +53,8 @@ const GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0';
 const MICROSOFT_MIME_TYPES = {
   WORD: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   EXCEL: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  POWERPOINT: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  POWERPOINT:
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   PDF: 'application/pdf',
   MARKDOWN: 'text/markdown',
   HTML: 'text/html',
@@ -178,11 +180,13 @@ export class SharePointConnector implements Connector, PublishableConnector {
     if (this.config.useOneDrive) {
       this.type = ConnectorType.ONEDRIVE;
       this.name = 'OneDrive';
-      this.description = 'Sync and publish documents to Microsoft OneDrive personal or business';
+      this.description =
+        'Sync and publish documents to Microsoft OneDrive personal or business';
     } else {
       this.type = ConnectorType.SHAREPOINT;
       this.name = 'SharePoint';
-      this.description = 'Sync and publish documents to Microsoft SharePoint document libraries';
+      this.description =
+        'Sync and publish documents to Microsoft SharePoint document libraries';
     }
 
     if (credentials.accessToken) {
@@ -201,7 +205,9 @@ export class SharePointConnector implements Connector, PublishableConnector {
     try {
       // If we have an auth code, exchange it for tokens
       if (credentials.code) {
-        const tokens = await this.exchangeCodeForTokens(credentials.code as string);
+        const tokens = await this.exchangeCodeForTokens(
+          credentials.code as string,
+        );
 
         this.credentials = {
           accessToken: tokens.accessToken,
@@ -271,7 +277,8 @@ export class SharePointConnector implements Connector, PublishableConnector {
 
       return {
         success: false,
-        message: error instanceof Error ? error.message : 'Connection test failed',
+        message:
+          error instanceof Error ? error.message : 'Connection test failed',
       };
     }
   }
@@ -282,11 +289,6 @@ export class SharePointConnector implements Connector, PublishableConnector {
   async sync(options?: SyncOptions): Promise<SyncResult> {
     await this.ensureValidToken();
 
-    const errors: SyncError[] = [];
-    let filesProcessed = 0;
-    let filesUpdated = 0;
-    let filesFailed = 0;
-
     try {
       const files = await this.listAllFiles(options);
 
@@ -294,37 +296,74 @@ export class SharePointConnector implements Connector, PublishableConnector {
 
       // Process files in batches
       const batchSize = 10;
-      for (let i = 0; i < files.length; i += batchSize) {
-        const batch = files.slice(i, i + batchSize);
+      const syncResults = await mapBatchesSequentially(
+        files,
+        batchSize,
+        (batch) =>
+          Promise.all(
+            batch.map(async (file) => {
+              try {
+                // Skip folders
+                if (file.folder) {
+                  return {
+                    filesProcessed: 1,
+                    filesUpdated: 0,
+                    filesFailed: 0,
+                    errors: [] as SyncError[],
+                  };
+                }
 
-        await Promise.all(
-          batch.map(async (file) => {
-            try {
-              filesProcessed++;
+                // Check file size
+                const size = file.size || 0;
+                if (size > (this.config.maxFileSizeBytes || 50 * 1024 * 1024)) {
+                  throw new Error(`File too large: ${size} bytes`);
+                }
 
-              // Skip folders
-              if (file.folder) return;
-
-              // Check file size
-              const size = file.size || 0;
-              if (size > (this.config.maxFileSizeBytes || 50 * 1024 * 1024)) {
-                throw new Error(`File too large: ${size} bytes`);
+                return {
+                  filesProcessed: 1,
+                  filesUpdated: 1,
+                  filesFailed: 0,
+                  errors: [] as SyncError[],
+                };
+              } catch (error) {
+                console.error(
+                  `[SharePoint] Failed to process file ${file.id}:`,
+                  error,
+                );
+                return {
+                  filesProcessed: 1,
+                  filesUpdated: 0,
+                  filesFailed: 1,
+                  errors: [
+                    {
+                      fileId: file.id,
+                      fileName: file.name,
+                      error:
+                        error instanceof Error
+                          ? error.message
+                          : 'Unknown error',
+                      retryable: true,
+                    },
+                  ],
+                };
               }
+            }),
+          ),
+      );
 
-              filesUpdated++;
-            } catch (error) {
-              console.error(`[SharePoint] Failed to process file ${file.id}:`, error);
-              filesFailed++;
-              errors.push({
-                fileId: file.id,
-                fileName: file.name,
-                error: error instanceof Error ? error.message : 'Unknown error',
-                retryable: true,
-              });
-            }
-          })
-        );
-      }
+      const filesProcessed = syncResults.reduce(
+        (total, result) => total + result.filesProcessed,
+        0,
+      );
+      const filesUpdated = syncResults.reduce(
+        (total, result) => total + result.filesUpdated,
+        0,
+      );
+      const filesFailed = syncResults.reduce(
+        (total, result) => total + result.filesFailed,
+        0,
+      );
+      const errors = syncResults.flatMap((result) => result.errors);
 
       return {
         success: filesFailed === 0,
@@ -349,9 +388,9 @@ export class SharePointConnector implements Connector, PublishableConnector {
     try {
       const items = await this.listAllFiles(undefined, options?.limit);
 
-      return items
-        .filter((item) => !item.folder) // Filter out folders
-        .map((item) => this.mapDriveItemToConnectorFile(item));
+      return items.flatMap((__item, __index, __array) =>
+        !__item.folder ? [this.mapDriveItemToConnectorFile(__item)] : [],
+      );
     } catch (error) {
       console.error('[SharePoint] List files failed:', error);
       throw error;
@@ -369,7 +408,8 @@ export class SharePointConnector implements Connector, PublishableConnector {
       const drivePath = this.getDrivePath();
       const metadataUrl = `${GRAPH_API_BASE}${drivePath}/items/${fileId}`;
 
-      const metadataResponse = await this.graphRequest<GraphDriveItem>(metadataUrl);
+      const metadataResponse =
+        await this.graphRequest<GraphDriveItem>(metadataUrl);
 
       if (!metadataResponse.file) {
         throw new Error('Item is not a file');
@@ -418,7 +458,9 @@ export class SharePointConnector implements Connector, PublishableConnector {
   /**
    * Refresh expired credentials
    */
-  async refreshCredentials(credentials: ConnectorCredentials): Promise<ConnectorCredentials> {
+  async refreshCredentials(
+    credentials: ConnectorCredentials,
+  ): Promise<ConnectorCredentials> {
     try {
       if (!credentials.refreshToken) {
         throw new Error('No refresh token available');
@@ -432,7 +474,11 @@ export class SharePointConnector implements Connector, PublishableConnector {
         throw new Error('Microsoft OAuth credentials not configured');
       }
 
-      const refreshFn = createMicrosoftRefreshFunction(clientId, clientSecret, tenantId);
+      const refreshFn = createMicrosoftRefreshFunction(
+        clientId,
+        clientSecret,
+        tenantId,
+      );
       const newTokens = await refreshFn(credentials.refreshToken);
 
       this.credentials = {
@@ -465,8 +511,8 @@ export class SharePointConnector implements Connector, PublishableConnector {
     // Check if any write scope is present
     const hasWriteScope = scopes.some((scope) =>
       WRITE_SCOPES.some((writeScope) =>
-        scope.toLowerCase().includes(writeScope.toLowerCase())
-      )
+        scope.toLowerCase().includes(writeScope.toLowerCase()),
+      ),
     );
 
     return hasWriteScope;
@@ -490,16 +536,22 @@ export class SharePointConnector implements Connector, PublishableConnector {
 
       // Add filters
       const params = new URLSearchParams();
-      params.append('$filter', "folder ne null"); // Only folders
-      params.append('$top', String(options.pageSize || this.config.pageSize || 100));
+      params.append('$filter', 'folder ne null'); // Only folders
+      params.append(
+        '$top',
+        String(options.pageSize || this.config.pageSize || 100),
+      );
       params.append('$orderby', 'name');
-      params.append('$select', 'id,name,folder,parentReference,webUrl,lastModifiedDateTime');
+      params.append(
+        '$select',
+        'id,name,folder,parentReference,webUrl,lastModifiedDateTime',
+      );
 
       if (options.search) {
         // Use search endpoint for searching
         url = `${GRAPH_API_BASE}${drivePath}/root/search(q='${encodeURIComponent(options.search)}')`;
         params.delete('$filter');
-        params.append('$filter', "folder ne null");
+        params.append('$filter', 'folder ne null');
       }
 
       if (options.pageToken) {
@@ -508,11 +560,13 @@ export class SharePointConnector implements Connector, PublishableConnector {
         url = `${url}?${params.toString()}`;
       }
 
-      const response = await this.graphRequest<GraphListResponse<GraphDriveItem>>(url);
+      const response =
+        await this.graphRequest<GraphListResponse<GraphDriveItem>>(url);
 
-      const folders: FolderInfo[] = response.value
-        .filter((item) => item.folder)
-        .map((item) => this.mapDriveItemToFolderInfo(item));
+      const folders: FolderInfo[] = response.value.flatMap(
+        (__item, __index, __array) =>
+          __item.folder ? [this.mapDriveItemToFolderInfo(__item)] : [],
+      );
 
       return {
         folders,
@@ -528,7 +582,9 @@ export class SharePointConnector implements Connector, PublishableConnector {
   /**
    * Create a new folder
    */
-  async createFolder(options: CreateFolderRequest): Promise<CreateFolderResponse> {
+  async createFolder(
+    options: CreateFolderRequest,
+  ): Promise<CreateFolderResponse> {
     await this.ensureValidToken();
 
     try {
@@ -564,7 +620,9 @@ export class SharePointConnector implements Connector, PublishableConnector {
   /**
    * Publish a document to SharePoint/OneDrive
    */
-  async publishDocument(options: ConnectorPublishOptions): Promise<ConnectorPublishResult> {
+  async publishDocument(
+    options: ConnectorPublishOptions,
+  ): Promise<ConnectorPublishResult> {
     await this.ensureValidToken();
 
     try {
@@ -602,7 +660,9 @@ export class SharePointConnector implements Connector, PublishableConnector {
           body: contentBuffer as unknown as globalThis.BodyInit,
         });
 
-        console.log(`[SharePoint] Document published: ${response.name} (${response.id})`);
+        console.log(
+          `[SharePoint] Document published: ${response.name} (${response.id})`,
+        );
 
         return {
           externalId: response.id,
@@ -734,20 +794,25 @@ export class SharePointConnector implements Connector, PublishableConnector {
         throw new Error('Microsoft OAuth credentials not configured');
       }
 
-      const refreshFn = createMicrosoftRefreshFunction(clientId, clientSecret, tenantId);
+      const refreshFn = createMicrosoftRefreshFunction(
+        clientId,
+        clientSecret,
+        tenantId,
+      );
 
       this.accessToken = await TokenManager.ensureValidToken(
         this.config.connectorId,
         this.credentials as StoredCredentials,
-        refreshFn
+        refreshFn,
       );
     } else {
       // Check if token is expired
-      const expiresAt = this.credentials.expiresAt instanceof Date
-        ? this.credentials.expiresAt
-        : this.credentials.expiresAt
-          ? new Date(this.credentials.expiresAt)
-          : new Date(0);
+      const expiresAt =
+        this.credentials.expiresAt instanceof Date
+          ? this.credentials.expiresAt
+          : this.credentials.expiresAt
+            ? new Date(this.credentials.expiresAt)
+            : new Date(0);
 
       if (TokenManager.isTokenExpiringSoon(expiresAt)) {
         const newCredentials = await this.refreshCredentials(this.credentials);
@@ -767,7 +832,7 @@ export class SharePointConnector implements Connector, PublishableConnector {
    */
   private async graphRequest<T>(
     url: string,
-    options: globalThis.RequestInit = {}
+    options: globalThis.RequestInit = {},
   ): Promise<T> {
     if (!this.accessToken) {
       throw new Error('Not authenticated');
@@ -926,7 +991,7 @@ export class SharePointConnector implements Connector, PublishableConnector {
    */
   private async listAllFiles(
     syncOptions?: SyncOptions,
-    limit?: number
+    limit?: number,
   ): Promise<GraphDriveItem[]> {
     const items: GraphDriveItem[] = [];
     const drivePath = this.getDrivePath();
@@ -935,7 +1000,10 @@ export class SharePointConnector implements Connector, PublishableConnector {
     // Build query parameters
     const params = new URLSearchParams();
     params.append('$top', String(this.config.pageSize || 100));
-    params.append('$select', 'id,name,size,file,folder,parentReference,webUrl,createdDateTime,lastModifiedDateTime,@microsoft.graph.downloadUrl');
+    params.append(
+      '$select',
+      'id,name,size,file,folder,parentReference,webUrl,createdDateTime,lastModifiedDateTime,@microsoft.graph.downloadUrl',
+    );
 
     // Add date filter if provided
     if (syncOptions?.since) {
@@ -945,21 +1013,25 @@ export class SharePointConnector implements Connector, PublishableConnector {
 
     url = `${url}?${params.toString()}`;
 
-    // Paginate through results
-    while (url) {
-      const response = await this.graphRequest<GraphListResponse<GraphDriveItem>>(url);
+    const fetchPage = async (
+      pageUrl: string,
+      collected: GraphDriveItem[] = [],
+    ): Promise<GraphDriveItem[]> => {
+      const response =
+        await this.graphRequest<GraphListResponse<GraphDriveItem>>(pageUrl);
 
-      items.push(...response.value);
+      const nextItems = collected.concat(response.value);
 
       // Check if we've reached the limit
-      if (limit && items.length >= limit) {
-        return items.slice(0, limit);
+      if (limit && nextItems.length >= limit) {
+        return nextItems.slice(0, limit);
       }
 
-      url = response['@odata.nextLink'] || '';
-    }
+      const nextUrl = response['@odata.nextLink'] || '';
+      return nextUrl ? fetchPage(nextUrl, nextItems) : nextItems;
+    };
 
-    return items;
+    return fetchPage(url);
   }
 
   /**
@@ -968,7 +1040,7 @@ export class SharePointConnector implements Connector, PublishableConnector {
   private async uploadLargeFile(
     options: ConnectorPublishOptions,
     fileName: string,
-    content: Buffer
+    content: Buffer,
   ): Promise<ConnectorPublishResult> {
     const drivePath = this.getDrivePath();
 
@@ -993,10 +1065,12 @@ export class SharePointConnector implements Connector, PublishableConnector {
     // Upload in chunks (max 60MB per request, using 4MB chunks)
     const chunkSize = 4 * 1024 * 1024; // 4MB
     const totalSize = content.length;
-    let uploadedBytes = 0;
-    let response: GraphDriveItem | null = null;
+    const uploadChunk = async (
+      uploadedBytes: number,
+      response: GraphDriveItem | null,
+    ): Promise<GraphDriveItem | null> => {
+      if (uploadedBytes >= totalSize) return response;
 
-    while (uploadedBytes < totalSize) {
       const chunkEnd = Math.min(uploadedBytes + chunkSize, totalSize);
       const chunk = content.slice(uploadedBytes, chunkEnd);
 
@@ -1010,23 +1084,30 @@ export class SharePointConnector implements Connector, PublishableConnector {
       });
 
       if (!uploadResponse.ok && uploadResponse.status !== 202) {
-        throw new Error(`Upload failed at byte ${uploadedBytes}: ${uploadResponse.statusText}`);
+        throw new Error(
+          `Upload failed at byte ${uploadedBytes}: ${uploadResponse.statusText}`,
+        );
       }
 
       // Last chunk returns the created item
+      let nextResponse = response;
       if (uploadResponse.status === 200 || uploadResponse.status === 201) {
-        response = await uploadResponse.json();
+        nextResponse = await uploadResponse.json();
       }
 
-      uploadedBytes = chunkEnd;
-      console.log(`[SharePoint] Uploaded ${uploadedBytes}/${totalSize} bytes`);
-    }
+      console.log(`[SharePoint] Uploaded ${chunkEnd}/${totalSize} bytes`);
+      return uploadChunk(chunkEnd, nextResponse);
+    };
+
+    const response = await uploadChunk(0, null);
 
     if (!response) {
       throw new Error('Upload completed but no response received');
     }
 
-    console.log(`[SharePoint] Large file uploaded: ${response.name} (${response.id})`);
+    console.log(
+      `[SharePoint] Large file uploaded: ${response.name} (${response.id})`,
+    );
 
     return {
       externalId: response.id,
@@ -1108,5 +1189,3 @@ export class SharePointConnector implements Connector, PublishableConnector {
 // =====================================================
 // EXPORTS
 // =====================================================
-
-export default SharePointConnector;

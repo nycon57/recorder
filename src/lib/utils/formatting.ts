@@ -2,6 +2,34 @@
  * Shared formatting utilities for consistent data display across the application
  */
 
+const USD_CURRENCY_FORMATTER = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+});
+
+const STABLE_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
+
+const STABLE_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: 'UTC',
+});
+
+const STABLE_TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+  second: '2-digit',
+});
+
 /**
  * Formats bytes into a human-readable string with appropriate units
  * @param bytes - The number of bytes to format
@@ -41,11 +69,7 @@ export function calculatePercentage(value: number, total: number): number {
  * @returns A formatted currency string (e.g., "$1,234.56")
  */
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  }).format(amount);
+  return USD_CURRENCY_FORMATTER.format(amount);
 }
 
 /**
@@ -75,11 +99,41 @@ export function formatDate(dateString: string): string {
     return '';
   }
 
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+  return STABLE_DATE_FORMATTER.format(date);
+}
+
+export function formatStableDate(
+  dateString: string | null | undefined,
+): string {
+  if (!dateString) return '';
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return STABLE_DATE_FORMATTER.format(date);
+}
+
+export function formatStableDateTime(
+  dateString: string | null | undefined,
+): string {
+  if (!dateString) return '';
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return STABLE_DATE_TIME_FORMATTER.format(date);
+}
+
+export function formatStableTime(date = new Date()): string {
+  return STABLE_TIME_FORMATTER.format(date);
+}
+
+export function formatDateInputValue(date = new Date()): string {
+  return date.toISOString().split('T')[0] ?? '';
+}
+
+export function getCurrentMonthNumber(date = new Date()): number {
+  return date.getMonth() + 1;
 }
 
 /**
@@ -89,7 +143,10 @@ export function formatDate(dateString: string): string {
  */
 export function getRelativeTime(dateString: string): string {
   // Handle null/undefined/empty input
-  if (!dateString || (typeof dateString === 'string' && dateString.trim() === '')) {
+  if (
+    !dateString ||
+    (typeof dateString === 'string' && dateString.trim() === '')
+  ) {
     return '';
   }
 
@@ -112,13 +169,17 @@ export function getRelativeTime(dateString: string): string {
   const diffInMinutes = Math.floor(absDiffInSeconds / 60);
   if (diffInMinutes < 60) {
     const unit = diffInMinutes === 1 ? 'minute' : 'minutes';
-    return isFuture ? `in ${diffInMinutes} ${unit}` : `${diffInMinutes} ${unit} ago`;
+    return isFuture
+      ? `in ${diffInMinutes} ${unit}`
+      : `${diffInMinutes} ${unit} ago`;
   }
 
   const diffInHours = Math.floor(diffInMinutes / 60);
   if (diffInHours < 24) {
     const unit = diffInHours === 1 ? 'hour' : 'hours';
-    return isFuture ? `in ${diffInHours} ${unit}` : `${diffInHours} ${unit} ago`;
+    return isFuture
+      ? `in ${diffInHours} ${unit}`
+      : `${diffInHours} ${unit} ago`;
   }
 
   const diffInDays = Math.floor(diffInHours / 24);
@@ -130,7 +191,9 @@ export function getRelativeTime(dateString: string): string {
   const diffInMonths = Math.floor(diffInDays / 30);
   if (diffInMonths < 12) {
     const unit = diffInMonths === 1 ? 'month' : 'months';
-    return isFuture ? `in ${diffInMonths} ${unit}` : `${diffInMonths} ${unit} ago`;
+    return isFuture
+      ? `in ${diffInMonths} ${unit}`
+      : `${diffInMonths} ${unit} ago`;
   }
 
   const diffInYears = Math.floor(diffInMonths / 12);

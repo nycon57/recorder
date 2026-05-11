@@ -26,7 +26,7 @@ const DEFAULT_AUTH_TIMEOUT_MS = 2 * 60 * 1000;
 const DEFAULT_AUTH_POLL_INTERVAL_MS = 1200;
 const DEFAULT_AUTH_STATE_TTL_MS = 5 * 60 * 1000;
 
-export interface SignInLaunchResult {
+interface SignInLaunchResult {
   mode: 'popup-window' | 'tab';
   url: string;
   windowId?: number;
@@ -214,7 +214,7 @@ async function createAuthPopupWindow(): Promise<SignInLaunchResult> {
  * preserve the user's current tab context. Falls back to a new tab if the
  * popup window fails (policy/browser constraints).
  */
-export async function initiateSignIn(): Promise<SignInLaunchResult> {
+async function initiateSignIn(): Promise<SignInLaunchResult> {
   try {
     return await createAuthPopupWindow();
   } catch {
@@ -248,7 +248,9 @@ export async function initiateSignInAndWait(
   const launch = await initiateSignIn();
   const startedAt = Date.now();
 
-  while (Date.now() - startedAt <= timeoutMs) {
+  const pollForSession = async (): Promise<SessionState | null> => {
+    if (Date.now() - startedAt > timeoutMs) return null;
+
     const session = await refreshSession();
     if (isAuthenticated(session)) {
       if (
@@ -266,11 +268,15 @@ export async function initiateSignInAndWait(
         .get(launch.windowId)
         .then(() => true)
         .catch(() => false);
-      if (!popupStillOpen) break;
+      if (!popupStillOpen) return null;
     }
 
     await wait(pollIntervalMs);
-  }
+    return pollForSession();
+  };
+
+  const refreshed = await pollForSession();
+  if (refreshed) return refreshed;
 
   const stored = await getStoredSession();
   if (isAuthenticated(stored)) {

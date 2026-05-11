@@ -2,7 +2,13 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, AlertCircle, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Loader2,
+  AlertCircle,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent } from '@/app/components/ui/card';
@@ -22,7 +28,13 @@ import EditRecordingModal from '@/app/components/EditRecordingModal';
 import ProcessingPipeline from '@/app/components/ProcessingPipeline';
 import ReprocessStreamModal from '@/app/components/ReprocessStreamModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import type { ContentType, FileType, Json, RecordingStatus, Tag } from '@/lib/types/database';
+import type {
+  ContentType,
+  FileType,
+  Json,
+  RecordingStatus,
+  Tag,
+} from '@/lib/types/database';
 import type { KnowledgeStatus } from '@/lib/types/knowledge-status';
 
 import ContentSidebar from '../viewers/ContentSidebar';
@@ -87,6 +99,42 @@ interface Recording {
   file_size: number | null;
 }
 
+type ReprocessStep = 'transcribe' | 'document' | 'embeddings' | 'all';
+
+interface AudioDetailViewState {
+  isEditModalOpen: boolean;
+  tags: Tag[];
+  isReprocessModalOpen: boolean;
+  reprocessStep: ReprocessStep;
+  showMoveToTrashDialog: boolean;
+  showPermanentDeleteDialog: boolean;
+  showKeyboardShortcuts: boolean;
+  isPublishModalOpen: boolean;
+}
+
+const createInitialAudioDetailViewState = (
+  initialTags: Array<InitialTag | null>,
+): AudioDetailViewState => ({
+  isEditModalOpen: false,
+  tags: initialTags.flatMap((tag): Tag[] =>
+    tag ? [{ ...tag, color: tag.color ?? '#64748b' }] : [],
+  ),
+  isReprocessModalOpen: false,
+  reprocessStep: 'all',
+  showMoveToTrashDialog: false,
+  showPermanentDeleteDialog: false,
+  showKeyboardShortcuts: false,
+  isPublishModalOpen: false,
+});
+
+const audioDetailViewReducer = (
+  state: AudioDetailViewState,
+  patch: Partial<AudioDetailViewState>,
+): AudioDetailViewState => ({
+  ...state,
+  ...patch,
+});
+
 export interface AudioDetailViewProps {
   recording: Recording;
   transcript: Transcript | null;
@@ -101,7 +149,13 @@ export interface AudioDetailViewProps {
   initialTimestamp?: number;
 }
 
-export default function AudioDetailView({
+export default function AudioDetailView(
+  props: Parameters<typeof useAudioDetailViewImplementation>[0],
+) {
+  return useAudioDetailViewImplementation(props);
+}
+
+function useAudioDetailViewImplementation({
   recording,
   transcript,
   document,
@@ -109,22 +163,25 @@ export default function AudioDetailView({
   initialTags,
   initialTimestamp,
 }: AudioDetailViewProps) {
-  const router = useRouter();
+  const { back, push, refresh } = useRouter();
 
-  const [isEditModalOpen, setIsEditModalOpen] = React.useState(false);
-  const [tags, setTags] = React.useState<Tag[]>(() =>
-    initialTags
-      .filter((tag): tag is InitialTag => Boolean(tag))
-      .map((tag) => ({ ...tag, color: tag.color ?? '#64748b' }))
+  const [
+    {
+      isEditModalOpen,
+      tags,
+      isReprocessModalOpen,
+      reprocessStep,
+      showMoveToTrashDialog,
+      showPermanentDeleteDialog,
+      showKeyboardShortcuts,
+      isPublishModalOpen,
+    },
+    updateViewState,
+  ] = React.useReducer(
+    audioDetailViewReducer,
+    initialTags,
+    createInitialAudioDetailViewState,
   );
-  const [isReprocessModalOpen, setIsReprocessModalOpen] = React.useState(false);
-  const [reprocessStep, setReprocessStep] = React.useState<
-    'transcribe' | 'document' | 'embeddings' | 'all'
-  >('all');
-  const [showMoveToTrashDialog, setShowMoveToTrashDialog] = React.useState(false);
-  const [showPermanentDeleteDialog, setShowPermanentDeleteDialog] = React.useState(false);
-  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false);
-  const [isPublishModalOpen, setIsPublishModalOpen] = React.useState(false);
   const audioRef = React.useRef<React.ElementRef<'audio'> | null>(null);
 
   const isTrashed = !!recording.deleted_at;
@@ -200,14 +257,17 @@ export default function AudioDetailView({
     },
     onSeekBackward: () => {
       if (audioRef.current) {
-        audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 5);
+        audioRef.current.currentTime = Math.max(
+          0,
+          audioRef.current.currentTime - 5,
+        );
       }
     },
     onSeekForward: () => {
       if (audioRef.current) {
         audioRef.current.currentTime = Math.min(
           audioRef.current.duration || 0,
-          audioRef.current.currentTime + 5
+          audioRef.current.currentTime + 5,
         );
       }
     },
@@ -227,13 +287,14 @@ export default function AudioDetailView({
       }
     },
     onDownload: handleDownload,
-    onEdit: () => setIsEditModalOpen(true),
+    onEdit: () => updateViewState({ isEditModalOpen: true }),
     onReprocess: () => handleReprocess('all'),
-    onShowShortcuts: () => setShowKeyboardShortcuts((prev) => !prev),
+    onShowShortcuts: () =>
+      updateViewState({ showKeyboardShortcuts: !showKeyboardShortcuts }),
   });
 
   const handleReprocess = (step: string) => {
-    let apiStep: 'transcribe' | 'document' | 'embeddings' | 'all' = 'all';
+    let apiStep: ReprocessStep = 'all';
     if (step === 'transcribe') {
       apiStep = 'transcribe';
     } else if (step === 'document') {
@@ -242,14 +303,16 @@ export default function AudioDetailView({
       apiStep = 'embeddings';
     }
 
-    setReprocessStep(apiStep);
-    setIsReprocessModalOpen(true);
+    updateViewState({
+      reprocessStep: apiStep,
+      isReprocessModalOpen: true,
+    });
   };
 
   const handleReprocessModalClose = (wasSuccessful?: boolean) => {
-    setIsReprocessModalOpen(false);
+    updateViewState({ isReprocessModalOpen: false });
     if (wasSuccessful) {
-      router.refresh();
+      refresh();
     }
   };
 
@@ -261,7 +324,7 @@ export default function AudioDetailView({
 
       if (response.ok) {
         toast({ description: 'Item restored successfully' });
-        router.refresh();
+        refresh();
       } else {
         toast({
           variant: 'destructive',
@@ -285,7 +348,7 @@ export default function AudioDetailView({
 
       if (response.ok) {
         toast({ description: 'Item moved to trash' });
-        router.push('/library');
+        push('/library');
       } else {
         toast({
           variant: 'destructive',
@@ -299,19 +362,22 @@ export default function AudioDetailView({
         description: 'Failed to move item to trash',
       });
     } finally {
-      setShowMoveToTrashDialog(false);
+      updateViewState({ showMoveToTrashDialog: false });
     }
   };
 
   const handlePermanentDelete = async () => {
     try {
-      const response = await fetch(`/api/recordings/${recording.id}?permanent=true`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `/api/recordings/${recording.id}?permanent=true`,
+        {
+          method: 'DELETE',
+        },
+      );
 
       if (response.ok) {
         toast({ description: 'Item permanently deleted' });
-        router.push('/library?status=trash');
+        push('/library?status=trash');
       } else {
         toast({
           variant: 'destructive',
@@ -340,7 +406,7 @@ export default function AudioDetailView({
       }
 
       toast({ description: 'Title updated successfully' });
-      router.refresh();
+      refresh();
     } catch (error) {
       console.error('Update title failed:', error);
       throw error;
@@ -360,7 +426,7 @@ export default function AudioDetailView({
       }
 
       toast({ description: 'Description updated successfully' });
-      router.refresh();
+      refresh();
     } catch (error) {
       console.error('Update description failed:', error);
       throw error;
@@ -430,9 +496,9 @@ export default function AudioDetailView({
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto p-4">
           <div className="flex items-center gap-4 flex-wrap">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <Button variant="ghost" size="icon" onClick={() => back()}>
               <ArrowLeft className="size-5" />
             </Button>
 
@@ -450,7 +516,7 @@ export default function AudioDetailView({
                   <InlineEditableField
                     value={recording.description || ''}
                     onSave={handleUpdateDescription}
-                    placeholder="Add a description..."
+                    placeholder="Add a description…"
                     type="textarea"
                     displayAs="description"
                     maxLength={500}
@@ -460,7 +526,9 @@ export default function AudioDetailView({
                   <div className="mt-3">
                     <InlineTagsEditor
                       tags={tags}
-                      onTagsChange={setTags}
+                      onTagsChange={(nextTags) =>
+                        updateViewState({ tags: nextTags })
+                      }
                       onAddTag={handleAddTag}
                       onRemoveTag={handleRemoveTag}
                     />
@@ -468,7 +536,7 @@ export default function AudioDetailView({
                 </>
               ) : (
                 <>
-                  <h1 className="text-2xl font-bold truncate">
+                  <h1 className="text-2xl font-semibold truncate">
                     {recording.title || 'Untitled Audio'}
                   </h1>
                   {recording.description && (
@@ -485,14 +553,16 @@ export default function AudioDetailView({
             {isTrashed && (
               <div className="flex items-center gap-2">
                 <Button onClick={handleRestore} variant="outline">
-                  <RotateCcw className="w-4 h-4 mr-2" />
+                  <RotateCcw className="size-4 mr-2" />
                   Restore Item
                 </Button>
                 <Button
-                  onClick={() => setShowPermanentDeleteDialog(true)}
+                  onClick={() =>
+                    updateViewState({ showPermanentDeleteDialog: true })
+                  }
                   variant="destructive"
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
+                  <Trash2 className="size-4 mr-2" />
                   Delete Forever
                 </Button>
               </div>
@@ -506,18 +576,22 @@ export default function AudioDetailView({
         {/* Trash Warning Banner */}
         {isTrashed && recording.deleted_at && (
           <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="size-4" />
             <AlertTitle>This item is in the trash</AlertTitle>
             <AlertDescription>
-              This content was moved to trash on {formatDate(recording.deleted_at)}.
-              You can restore it or permanently delete it.
+              This content was moved to trash on{' '}
+              {formatDate(recording.deleted_at)}. You can restore it or
+              permanently delete it.
             </AlertDescription>
           </Alert>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
-          <div className="lg:col-span-2 space-y-6" style={isTrashed ? { opacity: 0.7 } : undefined}>
+          <div
+            className="lg:col-span-2 space-y-6"
+            style={isTrashed ? { opacity: 0.7 } : undefined}
+          >
             {/* Audio Player */}
             {recording.videoUrl ? (
               <AudioPlayer
@@ -533,7 +607,7 @@ export default function AudioDetailView({
                 <CardContent className="py-24 flex flex-col items-center justify-center">
                   <Loader2 className="size-8 animate-spin text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">
-                    Audio is being processed...
+                    Audio is being processed…
                   </p>
                 </CardContent>
               </Card>
@@ -548,14 +622,15 @@ export default function AudioDetailView({
               />
             ) : (
               <Card>
-                <CardContent className="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                <CardContent className="py-12 flex flex-col items-center justify-center text-center gap-y-4">
                   <Loader2 className="size-8 animate-spin text-muted-foreground" />
                   <div>
                     <p className="font-medium text-foreground mb-1">
                       Transcription in progress
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      We&apos;re transcribing your audio using AI. This usually takes 1-2 minutes.
+                      We&apos;re transcribing your audio using AI. This usually
+                      takes 1-2 minutes.
                     </p>
                   </div>
                 </CardContent>
@@ -580,15 +655,23 @@ export default function AudioDetailView({
                 deletedAt={recording.deleted_at}
                 tags={tags}
                 document={document}
-                onEdit={() => setIsEditModalOpen(true)}
-                onDelete={() => isTrashed ? setShowPermanentDeleteDialog(true) : setShowMoveToTrashDialog(true)}
+                onEdit={() => updateViewState({ isEditModalOpen: true })}
+                onDelete={() =>
+                  isTrashed
+                    ? updateViewState({ showPermanentDeleteDialog: true })
+                    : updateViewState({ showMoveToTrashDialog: true })
+                }
                 onDownload={handleDownload}
-                onPublish={() => setIsPublishModalOpen(true)}
+                onPublish={() => updateViewState({ isPublishModalOpen: true })}
               />
 
               {/* Processing Pipeline */}
               <ProcessingPipeline
-                recording={recording as React.ComponentProps<typeof ProcessingPipeline>['recording']}
+                recording={
+                  recording as React.ComponentProps<
+                    typeof ProcessingPipeline
+                  >['recording']
+                }
                 hasTranscript={!!transcript}
                 hasDocument={!!document}
                 onReprocess={handleReprocess}
@@ -601,10 +684,10 @@ export default function AudioDetailView({
       {/* Modals */}
       <EditRecordingModal
         open={isEditModalOpen}
-        onOpenChange={setIsEditModalOpen}
+        onOpenChange={(isOpen) => updateViewState({ isEditModalOpen: isOpen })}
         recording={recording}
         initialTags={tags}
-        onTagsChange={setTags}
+        onTagsChange={(nextTags) => updateViewState({ tags: nextTags })}
       />
 
       <ReprocessStreamModal
@@ -616,13 +699,19 @@ export default function AudioDetailView({
       />
 
       {/* Move to Trash Confirmation Dialog */}
-      <AlertDialog open={showMoveToTrashDialog} onOpenChange={setShowMoveToTrashDialog}>
+      <AlertDialog
+        open={showMoveToTrashDialog}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showMoveToTrashDialog: isOpen })
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to move &quot;{recording.title || 'this item'}&quot; to trash?
-              You can restore it later from the trash.
+              Are you sure you want to move &quot;
+              {recording.title || 'this item'}&quot; to trash? You can restore
+              it later from the trash.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -638,17 +727,24 @@ export default function AudioDetailView({
       </AlertDialog>
 
       {/* Permanent Delete Confirmation Dialog */}
-      <AlertDialog open={showPermanentDeleteDialog} onOpenChange={setShowPermanentDeleteDialog}>
+      <AlertDialog
+        open={showPermanentDeleteDialog}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showPermanentDeleteDialog: isOpen })
+        }
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Permanently Delete?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>
-                  Are you sure you want to permanently delete &quot;{recording.title || 'this item'}&quot;?
+                  Are you sure you want to permanently delete &quot;
+                  {recording.title || 'this item'}&quot;?
                 </p>
                 <p className="font-semibold text-destructive">
-                  This action cannot be undone. All associated data will be permanently removed:
+                  This action cannot be undone. All associated data will be
+                  permanently removed:
                 </p>
                 <ul className="list-disc list-inside space-y-1">
                   <li>Original file</li>
@@ -674,7 +770,9 @@ export default function AudioDetailView({
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog
         open={showKeyboardShortcuts}
-        onOpenChange={setShowKeyboardShortcuts}
+        onOpenChange={(isOpen) =>
+          updateViewState({ showKeyboardShortcuts: isOpen })
+        }
         contentType={recording.content_type as ContentType | null}
       />
 
@@ -684,10 +782,10 @@ export default function AudioDetailView({
         documentId={document?.id || ''}
         contentTitle={recording.title || 'Untitled'}
         isOpen={isPublishModalOpen}
-        onClose={() => setIsPublishModalOpen(false)}
+        onClose={() => updateViewState({ isPublishModalOpen: false })}
         onPublishComplete={() => {
           toast({ description: 'Document published successfully!' });
-          router.refresh();
+          refresh();
         }}
       />
     </div>

@@ -2,8 +2,14 @@
 
 import * as React from 'react';
 import Image from 'next/image';
-import { motion, AnimatePresence } from 'motion/react';
-import { FileText, Image as ImageIcon, Expand, Pencil, Trash2 } from 'lucide-react';
+import { AnimatePresence, m } from 'motion/react';
+import {
+  FileText,
+  Image as ImageIcon,
+  Expand,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 
 import { cn } from '@/lib/utils/cn';
 import { Button } from '@/app/components/ui/button';
@@ -27,6 +33,32 @@ interface ThumbnailHeroProps {
   onThumbnailChange?: () => void;
 }
 
+interface ThumbnailHeroState {
+  imageLoaded: boolean;
+  imageError: boolean;
+  isHovered: boolean;
+  lightboxOpen: boolean;
+  editModalOpen: boolean;
+  editModalInitialTab: 'crop' | 'replace' | 'delete';
+}
+
+const initialThumbnailHeroState: ThumbnailHeroState = {
+  imageLoaded: false,
+  imageError: false,
+  isHovered: false,
+  lightboxOpen: false,
+  editModalOpen: false,
+  editModalInitialTab: 'crop',
+};
+
+const thumbnailHeroReducer = (
+  state: ThumbnailHeroState,
+  patch: Partial<ThumbnailHeroState>,
+): ThumbnailHeroState => ({
+  ...state,
+  ...patch,
+});
+
 /**
  * ThumbnailHero - Premium hero image display for content detail views
  *
@@ -47,17 +79,21 @@ export default function ThumbnailHero({
   recordingId,
   onThumbnailChange,
 }: ThumbnailHeroProps) {
-  const [imageLoaded, setImageLoaded] = React.useState(false);
-  const [imageError, setImageError] = React.useState(false);
-  const [isHovered, setIsHovered] = React.useState(false);
-
-  // Modal states
-  const [lightboxOpen, setLightboxOpen] = React.useState(false);
-  const [editModalOpen, setEditModalOpen] = React.useState(false);
-  const [editModalInitialTab, setEditModalInitialTab] = React.useState<'crop' | 'replace' | 'delete'>('crop');
+  const [
+    {
+      imageLoaded,
+      imageError,
+      isHovered,
+      lightboxOpen,
+      editModalOpen,
+      editModalInitialTab,
+    },
+    updateThumbnailState,
+  ] = React.useReducer(thumbnailHeroReducer, initialThumbnailHeroState);
 
   const showFallback = !thumbnailUrl || imageError;
-  const showHoverActions = editable && thumbnailUrl && !imageError && recordingId;
+  const showHoverActions =
+    editable && thumbnailUrl && !imageError && recordingId;
 
   // Get appropriate icon for fallback
   const FallbackIcon = contentType === 'document' ? FileText : ImageIcon;
@@ -68,7 +104,7 @@ export default function ThumbnailHero({
 
   return (
     <>
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
@@ -80,10 +116,10 @@ export default function ThumbnailHero({
           'bg-gradient-to-br from-[#042222] via-[#03624c]/20 to-[#042222]',
           // Subtle border
           'ring-1 ring-white/5',
-          className
+          className,
         )}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseEnter={() => updateThumbnailState({ isHovered: true })}
+        onMouseLeave={() => updateThumbnailState({ isHovered: false })}
       >
         {/* Background texture layer */}
         <div
@@ -99,23 +135,26 @@ export default function ThumbnailHero({
           <div className="absolute inset-0 flex items-center justify-center">
             {/* Ambient glow */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-32 h-32 rounded-full bg-accent/5 blur-3xl" />
+              <div className="size-32 rounded-full bg-accent/5 blur-3xl" />
             </div>
 
             {/* Icon container */}
-            <motion.div
+            <m.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.1, duration: 0.3 }}
               className="relative z-10 flex flex-col items-center gap-3"
             >
               <div className="p-4 rounded-2xl bg-white/5 ring-1 ring-white/10 backdrop-blur-sm">
-                <FallbackIcon className="w-8 h-8 text-muted-foreground/60" strokeWidth={1.5} />
+                <FallbackIcon
+                  className="size-8 text-muted-foreground/60"
+                  strokeWidth={1.5}
+                />
               </div>
               <span className="text-xs font-medium text-muted-foreground/40 tracking-wide uppercase">
                 {contentType || 'Document'}
               </span>
-            </motion.div>
+            </m.div>
           </div>
         ) : (
           // Image state
@@ -125,17 +164,17 @@ export default function ThumbnailHero({
               <div className="absolute inset-0">
                 <div
                   className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/5 to-transparent"
-                  style={{ animationDuration: '1.5s' }}
+                  style={{ animationDuration: '800ms' }}
                 />
               </div>
             )}
 
             {/* Main image */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0, scale: 1.02 }}
               animate={{
                 opacity: imageLoaded ? 1 : 0,
-                scale: imageLoaded ? 1 : 1.02
+                scale: imageLoaded ? 1 : 1.02,
               }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
               className="absolute inset-0"
@@ -145,8 +184,8 @@ export default function ThumbnailHero({
                 alt={title || 'Content thumbnail'}
                 fill
                 className="object-cover"
-                onLoad={() => setImageLoaded(true)}
-                onError={() => setImageError(true)}
+                onLoad={() => updateThumbnailState({ imageLoaded: true })}
+                onError={() => updateThumbnailState({ imageError: true })}
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 66vw, 800px"
                 priority
               />
@@ -157,7 +196,7 @@ export default function ThumbnailHero({
 
               {/* Top vignette */}
               <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-background/40 to-transparent" />
-            </motion.div>
+            </m.div>
 
             {/* Hover aurora effect */}
             <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none">
@@ -167,7 +206,7 @@ export default function ThumbnailHero({
             {/* Hover actions overlay */}
             <AnimatePresence>
               {showHoverActions && isHovered && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -180,11 +219,11 @@ export default function ThumbnailHero({
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setLightboxOpen(true);
+                      updateThumbnailState({ lightboxOpen: true });
                     }}
                     className="gap-2 bg-white/90 hover:bg-white text-black hover:shadow-[0_0_15px_rgba(0,223,130,0.3)] transition-shadow"
                   >
-                    <Expand className="w-4 h-4" />
+                    <Expand className="size-4" />
                     View
                   </Button>
 
@@ -194,12 +233,14 @@ export default function ThumbnailHero({
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setEditModalInitialTab('crop');
-                      setEditModalOpen(true);
+                      updateThumbnailState({
+                        editModalInitialTab: 'crop',
+                        editModalOpen: true,
+                      });
                     }}
                     className="gap-2 bg-white/90 hover:bg-white text-black hover:shadow-[0_0_15px_rgba(0,223,130,0.3)] transition-shadow"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="size-4" />
                     Edit
                   </Button>
 
@@ -209,40 +250,46 @@ export default function ThumbnailHero({
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setEditModalInitialTab('delete');
-                      setEditModalOpen(true);
+                      updateThumbnailState({
+                        editModalInitialTab: 'delete',
+                        editModalOpen: true,
+                      });
                     }}
                     className="gap-2 bg-white/90 hover:bg-white text-black hover:shadow-[0_0_15px_rgba(255,100,100,0.3)] transition-shadow"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="size-4" />
                     Delete
                   </Button>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           </>
         )}
 
         {/* Corner accent decorations */}
-        <div className="absolute top-3 left-3 w-6 h-6 border-l border-t border-white/10 rounded-tl-lg" />
-        <div className="absolute top-3 right-3 w-6 h-6 border-r border-t border-white/10 rounded-tr-lg" />
-        <div className="absolute bottom-3 left-3 w-6 h-6 border-l border-b border-white/10 rounded-bl-lg" />
-        <div className="absolute bottom-3 right-3 w-6 h-6 border-r border-b border-white/10 rounded-br-lg" />
-      </motion.div>
+        <div className="absolute top-3 left-3 size-6 border-l border-t border-white/10 rounded-tl-lg" />
+        <div className="absolute top-3 right-3 size-6 border-r border-t border-white/10 rounded-tr-lg" />
+        <div className="absolute bottom-3 left-3 size-6 border-l border-b border-white/10 rounded-bl-lg" />
+        <div className="absolute bottom-3 right-3 size-6 border-r border-b border-white/10 rounded-br-lg" />
+      </m.div>
 
       {/* Modals */}
       {thumbnailUrl && recordingId && (
         <>
           <ThumbnailLightbox
             open={lightboxOpen}
-            onOpenChange={setLightboxOpen}
+            onOpenChange={(isOpen) =>
+              updateThumbnailState({ lightboxOpen: isOpen })
+            }
             thumbnailUrl={thumbnailUrl}
             title={title}
           />
 
           <ThumbnailEditModal
             open={editModalOpen}
-            onOpenChange={setEditModalOpen}
+            onOpenChange={(isOpen) =>
+              updateThumbnailState({ editModalOpen: isOpen })
+            }
             thumbnailUrl={thumbnailUrl}
             recordingId={recordingId}
             onThumbnailChange={handleThumbnailChange}

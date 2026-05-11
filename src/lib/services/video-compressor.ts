@@ -9,12 +9,8 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
+
 import type { ContentType, CompressionStats } from '@/lib/types/database';
-import {
-  selectCompressionConfig,
-  type CompressionConfig,
-  type CompressionPreferences,
-} from './compression-profile-selector';
 import {
   executeFFmpeg,
   getVideoMetadata,
@@ -27,6 +23,12 @@ import {
   estimateCompressionTime,
   type ProgressCallback,
 } from '@/lib/utils/ffmpeg-helpers';
+
+import {
+  selectCompressionConfig,
+  type CompressionConfig,
+  type CompressionPreferences,
+} from './compression-profile-selector';
 
 /**
  * Compression result with detailed statistics

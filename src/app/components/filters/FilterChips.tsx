@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';
+
 import type { FilterState } from './AdvancedFilters';
 
 interface FilterChipsProps {

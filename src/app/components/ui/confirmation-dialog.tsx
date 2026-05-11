@@ -29,7 +29,7 @@ import { Label } from '@/app/components/ui/label';
 /**
  * Warning configuration for destructive actions
  */
-export interface ConfirmationWarning {
+interface ConfirmationWarning {
   /** Warning title */
   title?: string;
   /** Warning description/message */
@@ -72,6 +72,63 @@ export interface ConfirmationDialogProps {
   useAlertDialog?: boolean;
 }
 
+const EMPTY_CONFIRMATION_WARNINGS: ConfirmationWarning[] = [];
+
+function ConfirmationWarnings({
+  warnings,
+}: {
+  warnings: ConfirmationWarning[];
+}) {
+  if (warnings.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {warnings.map((warning) => (
+        <Alert
+          key={JSON.stringify(warning)}
+          variant={warning.variant || 'default'}
+        >
+          <AlertTriangle className="size-4" />
+          {warning.title && <AlertTitle>{warning.title}</AlertTitle>}
+          <AlertDescription>{warning.message}</AlertDescription>
+        </Alert>
+      ))}
+    </div>
+  );
+}
+
+function TypedConfirmationInput({
+  requiredText,
+  typedText,
+  isLoading,
+  onTypedTextChange,
+}: {
+  requiredText: string | null;
+  typedText: string;
+  isLoading: boolean;
+  onTypedTextChange: (value: string) => void;
+}) {
+  if (!requiredText) return null;
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="confirm-text" className="text-sm font-medium">
+        Type <strong className="font-semibold">{requiredText}</strong> to
+        confirm:
+      </Label>
+      <Input
+        id="confirm-text"
+        type="text"
+        value={typedText}
+        onChange={(e) => onTypedTextChange(e.target.value)}
+        placeholder={requiredText}
+        disabled={isLoading}
+        autoComplete="off"
+      />
+    </div>
+  );
+}
+
 /**
  * ConfirmationDialog - Reusable confirmation dialog with typed confirmation support
  *
@@ -102,7 +159,7 @@ export function ConfirmationDialog({
   isLoading = false,
   variant = 'default',
   requireTypedConfirmation = false,
-  warnings = [],
+  warnings = EMPTY_CONFIRMATION_WARNINGS,
   useAlertDialog = false,
 }: ConfirmationDialogProps) {
   const [typedText, setTypedText] = React.useState('');
@@ -137,45 +194,6 @@ export function ConfirmationDialog({
     await onConfirm();
   }, [isDisabled, onConfirm]);
 
-  // Render warnings section
-  const renderWarnings = () => {
-    if (warnings.length === 0) return null;
-
-    return (
-      <div className="space-y-2">
-        {warnings.map((warning, index) => (
-          <Alert key={index} variant={warning.variant || 'default'}>
-            <AlertTriangle className="h-4 w-4" />
-            {warning.title && <AlertTitle>{warning.title}</AlertTitle>}
-            <AlertDescription>{warning.message}</AlertDescription>
-          </Alert>
-        ))}
-      </div>
-    );
-  };
-
-  // Render typed confirmation input
-  const renderTypedConfirmation = () => {
-    if (!requiredText) return null;
-
-    return (
-      <div className="space-y-2">
-        <Label htmlFor="confirm-text" className="text-sm font-medium">
-          Type <strong className="font-semibold">{requiredText}</strong> to confirm:
-        </Label>
-        <Input
-          id="confirm-text"
-          type="text"
-          value={typedText}
-          onChange={(e) => setTypedText(e.target.value)}
-          placeholder={requiredText}
-          disabled={isLoading}
-          autoComplete="off"
-        />
-      </div>
-    );
-  };
-
   // Use AlertDialog for more semantic confirmation dialogs
   if (useAlertDialog) {
     return (
@@ -188,17 +206,28 @@ export function ConfirmationDialog({
             )}
           </AlertDialogHeader>
 
-          {renderWarnings()}
-          {renderTypedConfirmation()}
+          <ConfirmationWarnings warnings={warnings} />
+          <TypedConfirmationInput
+            requiredText={requiredText}
+            typedText={typedText}
+            isLoading={isLoading}
+            onTypedTextChange={setTypedText}
+          />
 
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>{cancelText}</AlertDialogCancel>
+            <AlertDialogCancel disabled={isLoading}>
+              {cancelText}
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirm}
               disabled={isDisabled}
-              className={variant === 'destructive' ? 'bg-destructive hover:bg-destructive/90' : ''}
+              className={
+                variant === 'destructive'
+                  ? 'bg-destructive hover:bg-destructive/90'
+                  : ''
+              }
             >
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
               {confirmText}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -216,11 +245,20 @@ export function ConfirmationDialog({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
 
-        {renderWarnings()}
-        {renderTypedConfirmation()}
+        <ConfirmationWarnings warnings={warnings} />
+        <TypedConfirmationInput
+          requiredText={requiredText}
+          typedText={typedText}
+          isLoading={isLoading}
+          onTypedTextChange={setTypedText}
+        />
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isLoading}
+          >
             {cancelText}
           </Button>
           <Button
@@ -228,7 +266,7 @@ export function ConfirmationDialog({
             onClick={handleConfirm}
             disabled={isDisabled}
           >
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
             {confirmText}
           </Button>
         </DialogFooter>

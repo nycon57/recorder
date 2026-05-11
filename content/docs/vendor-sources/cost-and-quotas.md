@@ -1,11 +1,9 @@
 ---
-slug: vendor-sources/cost-and-quotas
 title: Cost and quotas
 description: Crawl cost model, monitoring signals, and quota response procedures for vendor source syncs.
 audience: system-admin
 section: vendor-sources
 order: 40
-updatedAt: "2026-04-20"
 related:
   - vendor-sources/sync-lifecycle
   - vendor-sources/governance

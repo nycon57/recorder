@@ -4,7 +4,7 @@
  * Responsibilities:
  *   - Widget toggle via extension icon click
  *   - Offscreen document lifecycle (one per extension)
- *   - Signed URL fetch for agent sessions (attaches website cookies)
+ *   - Voice session fetch for agent sessions (attaches website cookies)
  *   - Message routing between content script ↔ offscreen document
  *   - Screenshot capture via chrome.tabs.captureVisibleTab
  *   - Recording (tab capture + R2 upload)
@@ -15,10 +15,13 @@
 
 import type {
   ExtensionVoiceAnswerResponse,
+  ExtensionVoiceRuntime,
+  ExtensionVoiceSessionPayload,
   LiveContextPack,
   PageContext,
 } from '@tribora/shared';
 import {
+  parseExtensionVoiceRuntime,
   sanitizePageContextForModel,
   sanitizePageContextForNetwork,
   sanitizePageContextLocation,
@@ -120,7 +123,7 @@ async function ensureOffscreen(): Promise<void> {
         chrome.offscreen.Reason.AUDIO_PLAYBACK,
       ],
       justification:
-        'Maintain a persistent ElevenLabs voice session across page navigations.',
+        'Maintain a persistent Tribora voice session across page navigations.',
     })
     .finally(() => {
       offscreenCreating = null;
@@ -142,9 +145,35 @@ async function closeOffscreen(): Promise<void> {
   }
 }
 
-// ─── Signed URL fetch ─────────────────────────────────────────────────────────
+// ─── Voice session fetch ──────────────────────────────────────────────────────
 
-async function fetchSignedUrl(): Promise<string> {
+const BUILD_TIME_VOICE_RUNTIME = parseExtensionVoiceRuntime(
+  (import.meta.env as Record<string, string>).VITE_TRIBORA_VOICE_RUNTIME,
+);
+
+function isVoiceSessionPayload(
+  value: unknown,
+): value is ExtensionVoiceSessionPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  const payload = value as Partial<ExtensionVoiceSessionPayload>;
+  if (payload.runtime === 'elevenlabs') {
+    return (
+      typeof payload.signedUrl === 'string' && payload.signedUrl.length > 0
+    );
+  }
+  if (payload.runtime === 'openai-realtime') {
+    return (
+      typeof payload.clientSecret === 'string' &&
+      payload.clientSecret.length > 0 &&
+      typeof payload.model === 'string' &&
+      typeof payload.voice === 'string' &&
+      typeof payload.reasoningEffort === 'string'
+    );
+  }
+  return false;
+}
+
+async function fetchVoiceSession(): Promise<ExtensionVoiceSessionPayload> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -163,18 +192,25 @@ async function fetchSignedUrl(): Promise<string> {
     headers['Authorization'] = `Bearer ${session.token}`;
   }
 
+  const body = BUILD_TIME_VOICE_RUNTIME
+    ? JSON.stringify({ voiceRuntime: BUILD_TIME_VOICE_RUNTIME })
+    : undefined;
+
   const response = await fetch(`${API_BASE_URL}/api/extension/agent-session`, {
     method: 'POST',
     headers,
+    body,
   });
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
 
-  const data = (await response.json()) as { signedUrl?: string };
-  if (!data.signedUrl) throw new Error('No signedUrl in response');
-  return data.signedUrl;
+  const data = (await response.json()) as unknown;
+  if (!isVoiceSessionPayload(data)) {
+    throw new Error('Invalid voice session response');
+  }
+  return data;
 }
 
 // ─── Extension state + session bootstrap ─────────────────────────────────────
@@ -183,6 +219,12 @@ let pendingSessionStartTabId: number | null = null;
 let pendingMicPermissionPageTabId: number | null = null;
 let activeDebugSession: ActiveDebugSessionState | null = null;
 let activeTelemetrySession: ActiveTelemetrySessionState | null = null;
+let activeVoiceRuntime: ExtensionVoiceRuntime = 'elevenlabs';
+let activeVoiceModel: string | null = null;
+let activeVoiceReasoningEffort: string | null = null;
+let activeVoiceSessionStartRequestedAtMs: number | null = null;
+let activeVoiceFirstResponseObserved = false;
+let activeVoiceToolCallCount = 0;
 let debugEventQueue: Promise<void> = Promise.resolve();
 let telemetryEventQueue: Promise<void> = Promise.resolve();
 const pendingDebugToolCalls = new Map<
@@ -367,7 +409,17 @@ function queueProductTelemetryEvent(
 ): void {
   if (!activeTelemetrySession) return;
 
-  const payload = buildTelemetryEventInput(activeTelemetrySession, event);
+  const metadata =
+    typeof event.metadata === 'object' && event.metadata !== null
+      ? event.metadata
+      : {};
+  const payload = buildTelemetryEventInput(activeTelemetrySession, {
+    ...event,
+    metadata: {
+      ...getVoiceRuntimeTelemetryMetadata(),
+      ...metadata,
+    },
+  });
   telemetryEventQueue = telemetryEventQueue
     .catch(() => undefined)
     .then(async () => {
@@ -382,6 +434,40 @@ function queueProductTelemetryEvent(
         (err as Error).message,
       );
     });
+}
+
+function getVoiceRuntimeTelemetryMetadata(
+  extra: Record<string, string | number | boolean | null | undefined> = {},
+): Record<string, string | number | boolean | null | undefined> {
+  return {
+    voiceRuntime: activeVoiceRuntime,
+    model: activeVoiceModel,
+    reasoningEffort: activeVoiceReasoningEffort,
+    toolCallCount: activeVoiceToolCallCount,
+    ...extra,
+  };
+}
+
+function setActiveVoiceRuntimeFromSession(
+  session: ExtensionVoiceSessionPayload,
+): void {
+  activeVoiceRuntime = session.runtime;
+  activeVoiceModel =
+    session.runtime === 'openai-realtime' ? session.model : null;
+  activeVoiceReasoningEffort =
+    session.runtime === 'openai-realtime' ? session.reasoningEffort : null;
+  activeVoiceSessionStartRequestedAtMs = Date.now();
+  activeVoiceFirstResponseObserved = false;
+  activeVoiceToolCallCount = 0;
+}
+
+function resetActiveVoiceRuntimeMetadata(): void {
+  activeVoiceRuntime = 'elevenlabs';
+  activeVoiceModel = null;
+  activeVoiceReasoningEffort = null;
+  activeVoiceSessionStartRequestedAtMs = null;
+  activeVoiceFirstResponseObserved = false;
+  activeVoiceToolCallCount = 0;
 }
 
 function queueDebugSessionEvent(
@@ -560,9 +646,11 @@ async function setExtensionEnabledForTab(
       // Ignore if the permission page is already gone.
     }
   }
-  await endAgentSession();
-  await closeOffscreen();
-  await stopPageContextCollectionEverywhere();
+  await Promise.all([
+    endAgentSession(),
+    closeOffscreen(),
+    stopPageContextCollectionEverywhere(),
+  ]);
   latestContexts.clear();
   contextUpdateSeq.clear();
   contextFingerprints.clear();
@@ -711,7 +799,14 @@ async function waitForTargetReady(
 ): Promise<'ready' | 'loading' | 'unavailable'> {
   const deadline = Date.now() + TOOL_TARGET_LOADING_GRACE_MS;
 
-  while (Date.now() <= deadline) {
+  const waitForNextPoll = () =>
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, TOOL_TARGET_LOADING_POLL_MS);
+    });
+
+  const poll = async (): Promise<'ready' | 'loading' | 'unavailable'> => {
+    if (Date.now() > deadline) return 'loading';
+
     try {
       const tab = await chrome.tabs.get(tabId);
       if (!isSupportedPageTargetUrl(tab.url)) return 'unavailable';
@@ -722,12 +817,11 @@ async function waitForTargetReady(
       return 'unavailable';
     }
 
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, TOOL_TARGET_LOADING_POLL_MS);
-    });
-  }
+    await waitForNextPoll();
+    return poll();
+  };
 
-  return 'loading';
+  return poll();
 }
 
 function isSupportedPageTargetUrl(url?: string | null): boolean {
@@ -1021,6 +1115,7 @@ async function startAgentSession(
         tabId,
         windowId: sourceTab.windowId ?? null,
         route: 'agent_session',
+        voiceRuntime: BUILD_TIME_VOICE_RUNTIME ?? 'server_default',
       },
       ...getTelemetryContextFields(tabId),
     });
@@ -1035,7 +1130,8 @@ async function startAgentSession(
     return { pendingPermission: true };
   }
 
-  const signedUrl = await fetchSignedUrl();
+  const voiceSession = await fetchVoiceSession();
+  setActiveVoiceRuntimeFromSession(voiceSession);
   await ensureOffscreen();
   voiceSessionActive = true;
   await setActiveVoiceTarget(tabId, 'session_start');
@@ -1044,7 +1140,7 @@ async function startAgentSession(
   const response = (await chrome.runtime.sendMessage({
     target: 'offscreen',
     kind: 'START_SESSION',
-    payload: { signedUrl, tabId },
+    payload: { session: voiceSession, tabId },
   })) as { ok: boolean; error?: string } | undefined;
 
   if (!response?.ok) {
@@ -1078,9 +1174,11 @@ async function startAgentSession(
         tabId,
         route: 'agent_session',
         windowId: sourceTab.windowId ?? null,
+        ...getVoiceRuntimeTelemetryMetadata(),
       },
       ...getTelemetryContextFields(tabId),
     });
+    resetActiveVoiceRuntimeMetadata();
     throw new Error(response?.error ?? 'Offscreen failed to start session');
   }
 
@@ -1105,10 +1203,12 @@ async function endAgentSession(): Promise<void> {
       eventType: 'session_ended',
       turnId: null,
       outcome: 'ended',
+      metadata: getVoiceRuntimeTelemetryMetadata(),
       ...getTelemetryContextFields(activeTelemetrySession.tabId),
     });
   }
   activeTelemetrySession = null;
+  resetActiveVoiceRuntimeMetadata();
   await clearVoiceTargetState();
 }
 
@@ -1265,10 +1365,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (kind === 'connected') {
       voiceSessionActive = true;
       void persistVoiceTargetState();
+      const payloadRecord =
+        typeof payload === 'object' && payload !== null
+          ? (payload as Record<string, unknown>)
+          : {};
+      const payloadRuntime = parseExtensionVoiceRuntime(
+        payloadRecord.voiceRuntime,
+      );
+      if (payloadRuntime) activeVoiceRuntime = payloadRuntime;
+      if (typeof payloadRecord.model === 'string') {
+        activeVoiceModel = payloadRecord.model;
+      }
+      if (typeof payloadRecord.reasoningEffort === 'string') {
+        activeVoiceReasoningEffort = payloadRecord.reasoningEffort;
+      }
+      const startupLatencyMs =
+        typeof payloadRecord.startupLatencyMs === 'number'
+          ? payloadRecord.startupLatencyMs
+          : activeVoiceSessionStartRequestedAtMs
+            ? Date.now() - activeVoiceSessionStartRequestedAtMs
+            : null;
       const conversationId =
-        typeof (payload as { conversationId?: unknown })?.conversationId ===
-        'string'
-          ? ((payload as { conversationId?: string }).conversationId ?? null)
+        typeof payloadRecord.conversationId === 'string'
+          ? (payloadRecord.conversationId ?? null)
           : null;
       if (conversationId && activeDebugSession) {
         activeDebugSession.conversationId = conversationId;
@@ -1292,6 +1411,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           turnId: null,
           conversationId: activeTelemetrySession.conversationId,
           outcome: 'connected',
+          latencyMs: startupLatencyMs,
+          metadata: getVoiceRuntimeTelemetryMetadata({
+            startupLatencyMs,
+          }),
           ...getTelemetryContextFields(activeTelemetrySession.tabId),
         });
       }
@@ -1348,13 +1471,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           source === 'user' &&
           !transcriptConfidence.lowConfidence
             ? advanceDebugTurn(activeDebugSession)
-            : activeDebugSession?.currentTurnId ?? null;
+            : (activeDebugSession?.currentTurnId ?? null);
         const telemetryTurnId =
           activeTelemetrySession &&
           source === 'user' &&
           !transcriptConfidence.lowConfidence
             ? advanceTelemetryTurn(activeTelemetrySession)
-            : activeTelemetrySession?.currentTurnId ?? null;
+            : (activeTelemetrySession?.currentTurnId ?? null);
 
         if (activeTelemetrySession) {
           if (
@@ -1416,8 +1539,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         if (source === 'assistant' && (turnId || telemetryTurnId)) {
+          const firstResponseLatencyMs =
+            !activeVoiceFirstResponseObserved &&
+            activeVoiceSessionStartRequestedAtMs !== null
+              ? Date.now() - activeVoiceSessionStartRequestedAtMs
+              : null;
+          if (firstResponseLatencyMs !== null) {
+            activeVoiceFirstResponseObserved = true;
+          }
           const guardTurnId = turnId ?? telemetryTurnId ?? '';
-          const assistantOutcome = turnGuards.recordAssistantMessage(guardTurnId);
+          const assistantOutcome =
+            turnGuards.recordAssistantMessage(guardTurnId);
           if (activeTelemetrySession) {
             queueProductTelemetryEvent({
               eventType: 'assistant_answer_outcome',
@@ -1427,6 +1559,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               outcome: assistantOutcome.duplicateWithoutMaterialChange
                 ? 'duplicate_without_material_change'
                 : 'observed',
+              latencyMs: firstResponseLatencyMs,
+              metadata: {
+                firstResponseLatencyMs,
+              },
               ...getTelemetryContextFields(activeTelemetrySession.tabId),
             });
             queueProductTelemetryEvent({
@@ -1520,19 +1656,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
     if (kind === 'disconnected' && activeTelemetrySession) {
+      const disconnectReason =
+        typeof (payload as { reason?: unknown })?.reason === 'string'
+          ? (payload as { reason?: string }).reason
+          : null;
       queueProductTelemetryEvent({
         eventType: 'session_ended',
         turnId: null,
         outcome: 'disconnected',
-        metadata: {
-          reason:
-            typeof (payload as { reason?: unknown })?.reason === 'string'
-              ? (payload as { reason?: string }).reason
-              : null,
-        },
+        metadata: getVoiceRuntimeTelemetryMetadata({
+          reason: disconnectReason,
+          disconnectReason,
+        }),
         ...getTelemetryContextFields(activeTelemetrySession.tabId),
       });
       activeTelemetrySession = null;
+      resetActiveVoiceRuntimeMetadata();
     }
 
     if (activeTargetTabId !== null) {
@@ -1565,6 +1704,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         liveContextHashes.delete(activeTargetTabId);
       }
       void clearVoiceTargetState();
+      resetActiveVoiceRuntimeMetadata();
     }
     sendResponse({ ok: true });
     return false;
@@ -1576,6 +1716,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       name: string;
       args: unknown;
     };
+    activeVoiceToolCallCount += 1;
     void routeToolCall(callId, name, args);
     sendResponse({ ok: true });
     return false;
@@ -1765,7 +1906,8 @@ async function handleAnswerWithKnowledgeTool(
   const question = getVoiceAnswerQuestion(args);
   if (!question) {
     await replyToolResult(callId, {
-      result: 'I need a specific question before I can search the knowledge base.',
+      result:
+        'I need a specific question before I can search the knowledge base.',
     });
     return;
   }
@@ -1935,7 +2077,8 @@ async function handleAnswerWithKnowledgeTool(
     );
   } catch (err) {
     await replyToolResult(callId, {
-      result: 'I had trouble retrieving the knowledge answer. Please try again.',
+      result:
+        'I had trouble retrieving the knowledge answer. Please try again.',
     });
     console.warn(`${BG} Voice answer failed:`, (err as Error).message);
   }
@@ -2364,7 +2507,8 @@ async function replyToolResult(
           stale: Boolean(stale),
           bindingEpoch: route.routeMeta.bindingEpoch,
           pageInstancePresent: Boolean(
-            options.resultMeta?.pageInstanceId ?? route.routeMeta.pageInstanceId,
+            options.resultMeta?.pageInstanceId ??
+              route.routeMeta.pageInstanceId,
           ),
           contentInstancePresent: Boolean(
             options.resultMeta?.contentInstanceId ??
@@ -2549,7 +2693,8 @@ export default defineBackground(() => {
     }
     if (message?.type === 'RECORDING_STOP') {
       void (async () => {
-        let uploadPromiseToClear: Promise<{ recordingId: string }> | null = null;
+        let uploadPromiseToClear: Promise<{ recordingId: string }> | null =
+          null;
         try {
           if (activeUploadPromise) {
             uploadPromiseToClear = activeUploadPromise;

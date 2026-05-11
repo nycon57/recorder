@@ -10,15 +10,17 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { vendorSourceUpdateSchema } from '@/lib/schemas/vendor-source';
 
 export const PATCH = apiHandler(
-  async (request: NextRequest, context: { params: { id: string } }) => {
-    const session = await requireSystemAdmin();
-    const { id } = await Promise.resolve(context.params);
+  async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
+    const { id } = await context.params;
 
     if (!id || typeof id !== 'string') {
       return errors.badRequest('Missing source id');
     }
 
-    const rawBody = await request.json().catch(() => null);
+    const [session, rawBody] = await Promise.all([
+      requireSystemAdmin(),
+      request.json().catch(() => null),
+    ]);
     const parsed = vendorSourceUpdateSchema.safeParse(rawBody);
 
     if (!parsed.success) {

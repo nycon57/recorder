@@ -7,7 +7,13 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, {
+  createContext,
+  use,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
 import { nanoid } from 'nanoid';
 
 import type {
@@ -33,7 +39,9 @@ const initialState: ConversationState = {
  */
 const ConversationContext = createContext<ConversationContextType | null>(null);
 
-function getSourceKey(metadata: MessageMetadata | undefined): string | undefined {
+function getSourceKey(
+  metadata: MessageMetadata | undefined,
+): string | undefined {
   const sourceKey = metadata?.custom?.sourceKey;
   return typeof sourceKey === 'string' ? sourceKey : undefined;
 }
@@ -50,7 +58,15 @@ interface ConversationProviderProps {
  *
  * Provides conversation state and actions to the entire assistant app.
  */
-export function ConversationProvider({ children }: ConversationProviderProps) {
+export function ConversationProvider(
+  props: Parameters<typeof useConversationProviderImplementation>[0],
+) {
+  return useConversationProviderImplementation(props);
+}
+
+function useConversationProviderImplementation({
+  children,
+}: ConversationProviderProps) {
   const [state, setState] = useState<ConversationState>(initialState);
 
   /**
@@ -80,7 +96,9 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
    */
   const deleteConversation = useCallback((conversationId: string) => {
     setState((prev) => {
-      const conversations = prev.conversations.filter((c) => c.id !== conversationId);
+      const conversations = prev.conversations.filter(
+        (c) => c.id !== conversationId,
+      );
       const isCurrentDeleted = prev.currentConversationId === conversationId;
 
       return {
@@ -111,13 +129,11 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       setState((prev) => ({
         ...prev,
         conversations: prev.conversations.map((c) =>
-          c.id === conversationId
-            ? { ...c, title, updatedAt: new Date() }
-            : c
+          c.id === conversationId ? { ...c, title, updatedAt: new Date() } : c,
         ),
       }));
     },
-    []
+    [],
   );
 
   /**
@@ -221,7 +237,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
         return newState;
       });
     },
-    []
+    [],
   );
 
   /**
@@ -247,44 +263,47 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
   /**
    * Branch conversation from a specific message
    */
-  const branchConversation = useCallback((messageId: string): Conversation | null => {
-    let branchedConv: Conversation | null = null;
+  const branchConversation = useCallback(
+    (messageId: string): Conversation | null => {
+      let branchedConv: Conversation | null = null;
 
-    setState((prev) => {
-      const currentConv = prev.conversations.find(
-        (c) => c.id === prev.currentConversationId
-      );
+      setState((prev) => {
+        const currentConv = prev.conversations.find(
+          (c) => c.id === prev.currentConversationId,
+        );
 
-      if (!currentConv) return prev;
+        if (!currentConv) return prev;
 
-      // Find message index
-      const messageIndex = currentConv.messages.findIndex(
-        (m) => m.id === messageId
-      );
+        // Find message index
+        const messageIndex = currentConv.messages.findIndex(
+          (m) => m.id === messageId,
+        );
 
-      if (messageIndex === -1) return prev;
+        if (messageIndex === -1) return prev;
 
-      // Create new conversation with messages up to the branch point
-      branchedConv = {
-        id: nanoid(),
-        title: `${currentConv.title} (branch)`,
-        messages: currentConv.messages.slice(0, messageIndex + 1),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        metadata: {
-          parentId: currentConv.id,
-        },
-      };
+        // Create new conversation with messages up to the branch point
+        branchedConv = {
+          id: nanoid(),
+          title: `${currentConv.title} (branch)`,
+          messages: currentConv.messages.slice(0, messageIndex + 1),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            parentId: currentConv.id,
+          },
+        };
 
-      return {
-        ...prev,
-        conversations: [...prev.conversations, branchedConv],
-        currentConversationId: branchedConv.id,
-      };
-    });
+        return {
+          ...prev,
+          conversations: [...prev.conversations, branchedConv],
+          currentConversationId: branchedConv.id,
+        };
+      });
 
-    return branchedConv;
-  }, []);
+      return branchedConv;
+    },
+    [],
+  );
 
   /**
    * Set search query
@@ -356,7 +375,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       toggleSidebar,
       getCurrentConversation,
       clearAll,
-    ]
+    ],
   );
 
   return (
@@ -372,11 +391,11 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
  * Access conversation state and actions from any component.
  */
 export function useConversations(): ConversationContextType {
-  const context = useContext(ConversationContext);
+  const context = use(ConversationContext);
 
   if (!context) {
     throw new Error(
-      'useConversations must be used within a ConversationProvider'
+      'useConversations must be used within a ConversationProvider',
     );
   }
 

@@ -6,6 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
@@ -53,7 +54,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // Sort each group by impact (high first) then effort (low first)
   const sortByPriority = (items: Recommendation[]): Recommendation[] => {
     // Create a copy to avoid mutating the input
-    return [...items].sort((a, b) => {
+    return items.toSorted((a, b) => {
       const impactOrder: Record<Impact, number> = { high: 0, medium: 1, low: 2 };
       const defaultImpact = 2; // Treat unknown impact as lowest priority
 

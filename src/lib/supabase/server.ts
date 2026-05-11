@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+
 import {
   asLightweightSupabaseClient,
   type LightweightSupabaseClient,
@@ -31,6 +32,3 @@ export async function createClient(): Promise<LightweightSupabaseClient> {
     )
   );
 }
-
-// Alias for compatibility with existing imports
-export const createSupabaseClient = createClient;

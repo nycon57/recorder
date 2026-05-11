@@ -3,8 +3,13 @@ import { randomBytes } from 'crypto';
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { apiHandler, requireAdmin, successResponse, parseBody } from '@/lib/utils/api';
-import { createSupabaseClient } from '@/lib/supabase/server';
+import {
+  apiHandler,
+  requireAdmin,
+  successResponse,
+  parseBody,
+} from '@/lib/utils/api';
+import { createClient } from '@/lib/supabase/server';
 import { createWebhookSchema } from '@/lib/validations/api';
 
 type WebhookDeliverySummary = {
@@ -14,20 +19,23 @@ type WebhookDeliverySummary = {
 
 // GET /api/organizations/webhooks - List webhooks
 export const GET = apiHandler(async () => {
-  const { orgId } = await requireAdmin();
-
-  const supabase = await createSupabaseClient();
+  const [{ orgId }, supabase] = await Promise.all([
+    requireAdmin(),
+    createClient(),
+  ]);
 
   // Get webhooks with delivery statistics
   const { data: webhooks, error } = await supabase
     .from('org_webhooks')
-    .select(`
+    .select(
+      `
       *,
       webhook_deliveries:webhook_deliveries(
         status,
         created_at
       )
-    `)
+    `,
+    )
     .eq('org_id', orgId)
     .order('created_at', { ascending: false });
 
@@ -37,16 +45,16 @@ export const GET = apiHandler(async () => {
   const formattedWebhooks = webhooks.map((webhook) => {
     const deliveries =
       'webhook_deliveries' in webhook
-        ? (webhook.webhook_deliveries as WebhookDeliverySummary[] | null) ?? []
+        ? ((webhook.webhook_deliveries as WebhookDeliverySummary[] | null) ??
+          [])
         : [];
     const totalDeliveries = deliveries.length;
     const successfulDeliveries = deliveries.filter(
-      (delivery) => delivery.status === 'success'
+      (delivery) => delivery.status === 'success',
     ).length;
     const failedDeliveries = totalDeliveries - successfulDeliveries;
-    const successRate = totalDeliveries > 0
-      ? (successfulDeliveries / totalDeliveries) * 100
-      : 0;
+    const successRate =
+      totalDeliveries > 0 ? (successfulDeliveries / totalDeliveries) * 100 : 0;
 
     // Get last triggered time
     const lastDelivery = deliveries[0];
@@ -88,10 +96,14 @@ export const GET = apiHandler(async () => {
 
 // POST /api/organizations/webhooks - Create webhook
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireAdmin();
-
-  const bodyData = await parseBody<z.infer<typeof createWebhookSchema>>(request, createWebhookSchema);
-  const supabase = await createSupabaseClient();
+  const [{ orgId, userId }, bodyData, supabase] = await Promise.all([
+    requireAdmin(),
+    parseBody<z.infer<typeof createWebhookSchema>>(
+      request,
+      createWebhookSchema,
+    ),
+    createClient(),
+  ]);
 
   // Validate URL is HTTPS
   if (!bodyData.url.startsWith('https://')) {

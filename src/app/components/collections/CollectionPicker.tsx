@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from '@/app/components/ui/popover';
 import { cn } from '@/lib/utils';
+
 import type { Collection } from './CollectionTree';
 
 interface CollectionPickerProps {
@@ -28,6 +29,44 @@ interface CollectionPickerProps {
   disabled?: boolean;
   className?: string;
 }
+
+const flattenWithPath = (
+  items: Collection[],
+  path: string[] = []
+): Array<{ collection: Collection; path: string[] }> => {
+  const result: Array<{ collection: Collection; path: string[] }> = [];
+
+  items.forEach((item) => {
+    const currentPath = [...path, item.name];
+    result.push({ collection: item, path: currentPath });
+
+    if (item.children && item.children.length > 0) {
+      result.push(...flattenWithPath(item.children, currentPath));
+    }
+  });
+
+  return result;
+};
+
+const buildTree = (items: Collection[]): Collection[] => {
+  const map = new Map<string, Collection>();
+  const roots: Collection[] = [];
+
+  items.forEach((item) => {
+    map.set(item.id, { ...item, children: [] });
+  });
+
+  items.forEach((item) => {
+    const node = map.get(item.id)!;
+    if (item.parent_id && map.has(item.parent_id)) {
+      map.get(item.parent_id)!.children!.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  return roots;
+};
 
 /**
  * CollectionPicker Component
@@ -59,46 +98,6 @@ export function CollectionPicker({
 
   const selectedCollection = collections.find((c) => c.id === selectedId);
 
-  // Flatten tree with path for display
-  const flattenWithPath = (
-    items: Collection[],
-    path: string[] = []
-  ): Array<{ collection: Collection; path: string[] }> => {
-    const result: Array<{ collection: Collection; path: string[] }> = [];
-
-    items.forEach((item) => {
-      const currentPath = [...path, item.name];
-      result.push({ collection: item, path: currentPath });
-
-      if (item.children && item.children.length > 0) {
-        result.push(...flattenWithPath(item.children, currentPath));
-      }
-    });
-
-    return result;
-  };
-
-  // Build tree structure
-  const buildTree = (items: Collection[]): Collection[] => {
-    const map = new Map<string, Collection>();
-    const roots: Collection[] = [];
-
-    items.forEach((item) => {
-      map.set(item.id, { ...item, children: [] });
-    });
-
-    items.forEach((item) => {
-      const node = map.get(item.id)!;
-      if (item.parent_id && map.has(item.parent_id)) {
-        map.get(item.parent_id)!.children!.push(node);
-      } else {
-        roots.push(node);
-      }
-    });
-
-    return roots;
-  };
-
   const tree = React.useMemo(() => buildTree(collections), [collections]);
   const flatItems = React.useMemo(() => flattenWithPath(tree), [tree]);
 
@@ -109,6 +108,7 @@ export function CollectionPicker({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-controls="collection-picker-list"
           className={cn('w-full justify-between', className)}
           disabled={disabled}
         >
@@ -124,7 +124,7 @@ export function CollectionPicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[300px] p-0" align="start">
-        <Command>
+        <Command id="collection-picker-list">
           <CommandInput placeholder="Search collections..." />
           <CommandList>
             <CommandEmpty>No collections found</CommandEmpty>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import {
   FileTextIcon,
   FileEditIcon,
@@ -55,32 +55,75 @@ type SubmitStatus = 'idle' | 'submitting' | 'success' | 'error';
  * />
  * ```
  */
-export default function CreateNoteModal({
+export default function CreateNoteModal(
+  props: Parameters<typeof useCreateNoteModalImplementation>[0],
+) {
+  return useCreateNoteModalImplementation(props);
+}
+
+function useCreateNoteModalImplementation({
   isOpen,
   onClose,
   onNoteCreated,
 }: CreateNoteModalProps) {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [format, setFormat] = useState<ContentFormat>('plain');
-  const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<SubmitStatus>('idle');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [autoCloseTimeout, setAutoCloseTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{
-    title?: string;
-    content?: string;
-    description?: string;
-  }>({});
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        title: string;
+        content: string;
+        format: ContentFormat;
+        description: string;
+        status: SubmitStatus;
+        errorMessage: string | null;
+        fieldErrors: {
+          title?: string;
+          content?: string;
+          description?: string;
+        };
+      },
+      patch: Partial<{
+        title: string;
+        content: string;
+        format: ContentFormat;
+        description: string;
+        status: SubmitStatus;
+        errorMessage: string | null;
+        fieldErrors: {
+          title?: string;
+          content?: string;
+          description?: string;
+        };
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      title: '',
+      content: '',
+      format: 'plain' as ContentFormat,
+      description: '',
+      status: 'idle' as SubmitStatus,
+      errorMessage: null,
+      fieldErrors: {},
+    },
+  );
+  const {
+    title,
+    content,
+    format,
+    description,
+    status,
+    errorMessage,
+    fieldErrors,
+  } = state;
+  const autoCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Clear timeout on unmount or before setting a new one
   useEffect(() => {
     return () => {
-      if (autoCloseTimeout) {
-        clearTimeout(autoCloseTimeout);
+      if (autoCloseTimeoutRef.current) {
+        clearTimeout(autoCloseTimeoutRef.current);
       }
     };
-  }, [autoCloseTimeout]);
+  }, []);
 
   /**
    * Validate form inputs with field-level errors
@@ -107,7 +150,7 @@ export default function CreateNoteModal({
       errors.description = 'Description must be 2000 characters or less';
     }
 
-    setFieldErrors(errors);
+    dispatch({ fieldErrors: errors });
     return Object.keys(errors).length === 0;
   }, [title, content, description]);
 
@@ -122,9 +165,7 @@ export default function CreateNoteModal({
       return;
     }
 
-    setStatus('submitting');
-    setErrorMessage(null);
-    setFieldErrors({});
+    dispatch({ status: 'submitting', errorMessage: null, fieldErrors: {} });
 
     try {
       const response = await fetch('/api/library/text', {
@@ -148,9 +189,10 @@ export default function CreateNoteModal({
       const { data } = await response.json();
       const noteId = data.id;
 
-      setStatus('success');
+      dispatch({ status: 'success' });
       toast.success('Note created successfully!', {
-        description: 'Your note is being processed and will appear in your library shortly.',
+        description:
+          'Your note is being processed and will appear in your library shortly.',
       });
 
       // Call completion handler
@@ -161,13 +203,13 @@ export default function CreateNoteModal({
       // Reset form and close after brief delay
       const timeoutId = setTimeout(() => {
         handleClose();
-        setAutoCloseTimeout(null);
+        autoCloseTimeoutRef.current = null;
       }, 1500);
-      setAutoCloseTimeout(timeoutId);
+      autoCloseTimeoutRef.current = timeoutId;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create note';
-      setStatus('error');
-      setErrorMessage(message);
+      const message =
+        error instanceof Error ? error.message : 'Failed to create note';
+      dispatch({ status: 'error', errorMessage: message });
       toast.error('Failed to create note', {
         description: message,
       });
@@ -180,18 +222,20 @@ export default function CreateNoteModal({
   const handleClose = () => {
     if (status !== 'submitting') {
       // Clear any pending timeouts
-      if (autoCloseTimeout) {
-        clearTimeout(autoCloseTimeout);
-        setAutoCloseTimeout(null);
+      if (autoCloseTimeoutRef.current) {
+        clearTimeout(autoCloseTimeoutRef.current);
+        autoCloseTimeoutRef.current = null;
       }
       // Reset form
-      setTitle('');
-      setContent('');
-      setFormat('plain');
-      setDescription('');
-      setStatus('idle');
-      setErrorMessage(null);
-      setFieldErrors({});
+      dispatch({
+        title: '',
+        content: '',
+        format: 'plain',
+        description: '',
+        status: 'idle',
+        errorMessage: null,
+        fieldErrors: {},
+      });
       onClose();
     }
   };
@@ -214,15 +258,18 @@ export default function CreateNoteModal({
             Create Note
           </DialogTitle>
           <DialogDescription>
-            Create a new text note to add to your knowledge library.
-            Notes can be plain text or markdown.
+            Create a new text note to add to your knowledge library. Notes can
+            be plain text or markdown.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Title Input */}
           <div className="space-y-2">
-            <label htmlFor="note-title" className="text-sm font-medium text-foreground">
+            <label
+              htmlFor="note-title"
+              className="text-sm font-medium text-foreground"
+            >
               Title <span className="text-destructive">*</span>
             </label>
             <Input
@@ -230,15 +277,16 @@ export default function CreateNoteModal({
               placeholder="Enter note title"
               value={title}
               onChange={(e) => {
-                setTitle(e.target.value);
-                if (fieldErrors.title) {
-                  setFieldErrors((prev) => ({ ...prev, title: undefined }));
-                }
+                dispatch({
+                  title: e.target.value,
+                  fieldErrors: fieldErrors.title
+                    ? { ...fieldErrors, title: undefined }
+                    : fieldErrors,
+                });
               }}
               disabled={isSubmitting}
               maxLength={200}
               className={`w-full ${fieldErrors.title ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-              autoFocus
               aria-invalid={!!fieldErrors.title}
               aria-describedby={fieldErrors.title ? 'title-error' : undefined}
             />
@@ -247,7 +295,11 @@ export default function CreateNoteModal({
                 {title.length}/200 characters
               </p>
               {fieldErrors.title && (
-                <p id="title-error" className="text-xs text-destructive" role="alert">
+                <p
+                  id="title-error"
+                  className="text-xs text-destructive"
+                  role="alert"
+                >
                   {fieldErrors.title}
                 </p>
               )}
@@ -256,12 +308,17 @@ export default function CreateNoteModal({
 
           {/* Format Selector */}
           <div className="space-y-2">
-            <label htmlFor="note-format" className="text-sm font-medium text-foreground">
+            <label
+              htmlFor="note-format"
+              className="text-sm font-medium text-foreground"
+            >
               Format
             </label>
             <Select
               value={format}
-              onValueChange={(value) => setFormat(value as ContentFormat)}
+              onValueChange={(value) =>
+                dispatch({ format: value as ContentFormat })
+              }
               disabled={isSubmitting}
             >
               <SelectTrigger id="note-format" className="w-full">
@@ -291,35 +348,46 @@ export default function CreateNoteModal({
 
           {/* Content Textarea */}
           <div className="space-y-2">
-            <label htmlFor="note-content" className="text-sm font-medium text-foreground">
+            <label
+              htmlFor="note-content"
+              className="text-sm font-medium text-foreground"
+            >
               Content <span className="text-destructive">*</span>
             </label>
             <Textarea
               id="note-content"
               placeholder={
                 format === 'markdown'
-                  ? '# My Note\n\nWrite your content here using **markdown** syntax...'
-                  : 'Write your note content here...'
+                  ? '# My Note\n\nWrite your content here using **markdown** syntax…'
+                  : 'Write your note content here…'
               }
               value={content}
               onChange={(e) => {
-                setContent(e.target.value);
-                if (fieldErrors.content) {
-                  setFieldErrors((prev) => ({ ...prev, content: undefined }));
-                }
+                dispatch({
+                  content: e.target.value,
+                  fieldErrors: fieldErrors.content
+                    ? { ...fieldErrors, content: undefined }
+                    : fieldErrors,
+                });
               }}
               disabled={isSubmitting}
               rows={10}
               className={`w-full font-mono text-sm resize-y min-h-[150px] sm:min-h-[200px] ${fieldErrors.content ? 'border-destructive focus-visible:ring-destructive' : ''}`}
               aria-invalid={!!fieldErrors.content}
-              aria-describedby={fieldErrors.content ? 'content-error' : undefined}
+              aria-describedby={
+                fieldErrors.content ? 'content-error' : undefined
+              }
             />
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
                 {(content.length / 1000).toFixed(1)}KB / 500KB
               </p>
               {fieldErrors.content && (
-                <p id="content-error" className="text-xs text-destructive" role="alert">
+                <p
+                  id="content-error"
+                  className="text-xs text-destructive"
+                  role="alert"
+                >
                   {fieldErrors.content}
                 </p>
               )}
@@ -328,32 +396,44 @@ export default function CreateNoteModal({
 
           {/* Description Input (Optional) */}
           <div className="space-y-2">
-            <label htmlFor="note-description" className="text-sm font-medium text-foreground">
-              Description <span className="text-muted-foreground">(optional)</span>
+            <label
+              htmlFor="note-description"
+              className="text-sm font-medium text-foreground"
+            >
+              Description{' '}
+              <span className="text-muted-foreground">(optional)</span>
             </label>
             <Textarea
               id="note-description"
               placeholder="Add a brief description or summary (optional)"
               value={description}
               onChange={(e) => {
-                setDescription(e.target.value);
-                if (fieldErrors.description) {
-                  setFieldErrors((prev) => ({ ...prev, description: undefined }));
-                }
+                dispatch({
+                  description: e.target.value,
+                  fieldErrors: fieldErrors.description
+                    ? { ...fieldErrors, description: undefined }
+                    : fieldErrors,
+                });
               }}
               disabled={isSubmitting}
               rows={2}
               maxLength={2000}
               className={`w-full resize-y ${fieldErrors.description ? 'border-destructive focus-visible:ring-destructive' : ''}`}
               aria-invalid={!!fieldErrors.description}
-              aria-describedby={fieldErrors.description ? 'description-error' : undefined}
+              aria-describedby={
+                fieldErrors.description ? 'description-error' : undefined
+              }
             />
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
                 {description.length}/2000 characters
               </p>
               {fieldErrors.description && (
-                <p id="description-error" className="text-xs text-destructive" role="alert">
+                <p
+                  id="description-error"
+                  className="text-xs text-destructive"
+                  role="alert"
+                >
                   {fieldErrors.description}
                 </p>
               )}
@@ -366,12 +446,8 @@ export default function CreateNoteModal({
           <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
             <XCircleIcon className="size-5 text-destructive flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-destructive">
-                Error
-              </p>
-              <p className="text-xs text-destructive/80 mt-1">
-                {errorMessage}
-              </p>
+              <p className="text-sm font-medium text-destructive">Error</p>
+              <p className="text-xs text-destructive/80 mt-1">{errorMessage}</p>
             </div>
           </div>
         )}
@@ -409,7 +485,7 @@ export default function CreateNoteModal({
             {isSubmitting ? (
               <>
                 <Loader2Icon className="size-4 animate-spin" />
-                Creating...
+                Creating…
               </>
             ) : (
               <>

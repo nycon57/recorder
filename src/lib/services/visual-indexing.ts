@@ -8,11 +8,16 @@ import { promises as fs } from 'fs';
 
 import { GoogleGenAI } from '@google/genai';
 
-import { getGoogleAI , GOOGLE_CONFIG } from '@/lib/google/client';
+import { getGoogleAI, GOOGLE_CONFIG } from '@/lib/google/client';
 import { createClient } from '@/lib/supabase/admin';
-import { sanitizeVisualDescription, detectPII, logPIIDetection } from '@/lib/utils/security';
+import { mapBatchesSequentially } from '@/lib/utils/async';
+import {
+  sanitizeVisualDescription,
+  detectPII,
+  logPIIDetection,
+} from '@/lib/utils/security';
 
-export interface VisualDescription {
+interface VisualDescription {
   frameId: string;
   description: string;
   sceneType: 'ui' | 'code' | 'terminal' | 'browser' | 'editor' | 'other';
@@ -22,16 +27,16 @@ export interface VisualDescription {
 
 function getMetadataObject(metadata: unknown): Record<string, unknown> {
   return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-    ? metadata as Record<string, unknown>
+    ? (metadata as Record<string, unknown>)
     : {};
 }
 
 /**
  * Generate visual description for a frame
  */
-export async function describeFrame(
+async function describeFrame(
   imagePath: string,
-  frameContext?: string
+  frameContext?: string,
 ): Promise<VisualDescription> {
   const genAI = getGoogleAI();
   const model = genAI.getGenerativeModel({
@@ -146,7 +151,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
  */
 export async function indexRecordingFrames(
   recordingId: string,
-  orgId: string
+  orgId: string,
 ): Promise<void> {
   const supabase = createClient();
 
@@ -169,14 +174,15 @@ export async function indexRecordingFrames(
   // Process in parallel batches
   const batchSize = 5;
 
-  for (let i = 0; i < frames.length; i += batchSize) {
-    const batch = frames.slice(i, i + batchSize);
-
-    await Promise.all(
+  await mapBatchesSequentially(frames, batchSize, (batch) =>
+    Promise.all(
       batch.map(async (frame) => {
         try {
           if (!frame.frame_url) {
-            console.warn('[Visual Indexing] Frame missing storage path:', frame.id);
+            console.warn(
+              '[Visual Indexing] Frame missing storage path:',
+              frame.id,
+            );
             return;
           }
 
@@ -222,11 +228,14 @@ export async function indexRecordingFrames(
 
           console.log(`[Visual Indexing] Processed frame ${frame.id}`);
         } catch (error) {
-          console.error(`[Visual Indexing] Error processing frame ${frame.id}:`, error);
+          console.error(
+            `[Visual Indexing] Error processing frame ${frame.id}:`,
+            error,
+          );
         }
-      })
-    );
-  }
+      }),
+    ),
+  );
 
   console.log('[Visual Indexing] Complete for recording:', recordingId);
 }

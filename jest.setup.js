@@ -1,11 +1,31 @@
 /* eslint-env jest */
 
 // Learn more: https://github.com/testing-library/jest-dom
+import { ReadableStream, TransformStream, WritableStream } from 'stream/web';
+import { TextDecoder, TextEncoder } from 'util';
+import { MessageChannel, MessagePort } from 'worker_threads';
+
 import '@testing-library/jest-dom';
+
+global.TextEncoder = global.TextEncoder || TextEncoder;
+global.TextDecoder = global.TextDecoder || TextDecoder;
+global.ReadableStream = global.ReadableStream || ReadableStream;
+global.TransformStream = global.TransformStream || TransformStream;
+global.WritableStream = global.WritableStream || WritableStream;
+global.setImmediate = global.setImmediate || ((callback, ...args) => setTimeout(callback, 0, ...args));
+global.clearImmediate = global.clearImmediate || ((handle) => clearTimeout(handle));
+global.MessageChannel = global.MessageChannel || MessageChannel;
+global.MessagePort = global.MessagePort || MessagePort;
+
+const { fetch, Headers, Request, Response } = require('undici');
+
+global.fetch = global.fetch || fetch;
+global.Headers = global.Headers || Headers;
+global.Request = global.Request || Request;
+global.Response = global.Response || Response;
 
 // Add OpenAI shims when the package is available in the current install.
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('openai/shims/node');
 } catch {
   // Some lightweight worktrees omit optional OpenAI shims; tests that do not

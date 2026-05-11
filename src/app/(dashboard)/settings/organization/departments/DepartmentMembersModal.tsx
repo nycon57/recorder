@@ -1,20 +1,17 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { useSession } from "@/lib/auth/auth-client";
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Users,
   UserPlus,
   UserMinus,
   MoreVertical,
   Search,
-  AlertCircle,
   Mail,
-  Shield,
-  Check,
   Loader2,
-} from "lucide-react";
-import { toast } from "sonner";
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 import {
   Dialog,
@@ -22,34 +19,38 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/app/components/ui/dialog";
-import { Button } from "@/app/components/ui/button";
-import { Input } from "@/app/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/app/components/ui/avatar";
-import { Badge } from "@/app/components/ui/badge";
-import { ScrollArea } from "@/app/components/ui/scroll-area";
-import { Skeleton } from "@/app/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/app/components/ui/alert";
+} from '@/app/components/ui/dialog';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from '@/app/components/ui/avatar';
+import { Badge } from '@/app/components/ui/badge';
+import { ScrollArea } from '@/app/components/ui/scroll-area';
+import { Skeleton } from '@/app/components/ui/skeleton';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/app/components/ui/dropdown-menu";
+} from '@/app/components/ui/dropdown-menu';
 import {
   Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
-} from "@/app/components/ui/command";
+} from '@/app/components/ui/command';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/app/components/ui/popover";
-import { Department, DepartmentMember } from "@/lib/validations/departments";
-import { cn } from "@/lib/utils/cn";
+} from '@/app/components/ui/popover';
+import { Department, DepartmentMember } from '@/lib/validations/departments';
+import { cn } from '@/lib/utils/cn';
+import { formatStableDate } from '@/lib/utils/formatting';
 
 interface DepartmentMembersModalProps {
   open: boolean;
@@ -66,115 +67,100 @@ interface User {
 }
 
 const roleColors = {
-  owner: "bg-primary/20 text-primary",
-  admin: "bg-accent/20 text-accent",
-  contributor: "bg-secondary/20 text-secondary",
-  reader: "bg-muted text-muted-foreground",
+  owner: 'bg-primary/20 text-primary',
+  admin: 'bg-accent/20 text-accent',
+  contributor: 'bg-secondary/20 text-secondary',
+  reader: 'bg-muted text-muted-foreground',
 };
 
-export function DepartmentMembersModal({
+export function DepartmentMembersModal(
+  props: Parameters<typeof useDepartmentMembersModalImplementation>[0],
+) {
+  return useDepartmentMembersModalImplementation(props);
+}
+
+function useDepartmentMembersModalImplementation({
   open,
   onOpenChange,
   department,
 }: DepartmentMembersModalProps) {
-  const { data: session } = useSession();
-  const [members, setMembers] = useState<DepartmentMember[]>([]);
-  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const [addUserOpen, setAddUserOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [addingUser, setAddingUser] = useState(false);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
 
-  // Fetch department members
-  const fetchMembers = async () => {
-    try {
+  const {
+    data: members = [],
+    isLoading: loading,
+    refetch: refetchMembers,
+  } = useQuery<DepartmentMember[]>({
+    queryKey: ['department-members', department.id],
+    enabled: open,
+    queryFn: async ({ signal }) => {
       const response = await fetch(
-        `/api/organizations/departments/${department.id}/members?includeDetails=true`
+        `/api/organizations/departments/${department.id}/members?includeDetails=true`,
+        { signal },
       );
 
       if (!response.ok) {
-        throw new Error("Failed to fetch members");
+        throw new Error('Failed to fetch members');
       }
 
       const data = await response.json();
-      setMembers(data.data || []);
-    } catch (error) {
-      console.error("Error fetching members:", error);
-      toast.error("Failed to load department members");
-    } finally {
-      setLoading(false);
-    }
-  };
+      return data.data || [];
+    },
+  });
 
-  // Fetch available users (org members not in this department)
-  const fetchAvailableUsers = async () => {
-    try {
-      const response = await fetch("/api/organizations/members");
+  const { data: organizationUsers = [] } = useQuery<User[]>({
+    queryKey: ['organization-members'],
+    enabled: open,
+    queryFn: async ({ signal }) => {
+      const response = await fetch('/api/organizations/members', { signal });
 
       if (!response.ok) {
-        throw new Error("Failed to fetch users");
+        throw new Error('Failed to fetch users');
       }
 
       const data = await response.json();
-      const allUsers = data.data || [];
+      return data.data || [];
+    },
+  });
 
-      // Filter out users already in the department
-      const memberIds = members.map((m) => m.userId);
-      const available = allUsers.filter((u: User) => !memberIds.includes(u.id));
-      setAvailableUsers(available);
-    } catch (error) {
-      console.error("Error fetching available users:", error);
-    }
-  };
-
-  useEffect(() => {
-    if (open) {
-      fetchMembers();
-    }
-  }, [open, department.id]);
-
-  useEffect(() => {
-    if (open && members.length >= 0) {
-      fetchAvailableUsers();
-    }
-  }, [open, members]);
+  const availableUsers = useMemo(() => {
+    const memberIds = new Set(members.map((member) => member.userId));
+    return organizationUsers.filter((user) => !memberIds.has(user.id));
+  }, [members, organizationUsers]);
 
   // Add user to department
-  const handleAddUser = async () => {
-    if (!selectedUserId) {
-      toast.error("Please select a user to add");
-      return;
-    }
-
+  const handleAddUser = async (userId: string) => {
     setAddingUser(true);
 
     try {
       const response = await fetch(
         `/api/organizations/departments/${department.id}/members`,
         {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ userId: selectedUserId }),
-        }
+          body: JSON.stringify({ userId }),
+        },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to add user");
+        throw new Error(data.error || 'Failed to add user');
       }
 
-      toast.success("User added to department");
-      setSelectedUserId(null);
+      toast.success('User added to department');
       setAddUserOpen(false);
-      fetchMembers();
+      void refetchMembers();
     } catch (error) {
-      console.error("Error adding user:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to add user");
+      console.error('Error adding user:', error);
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to add user',
+      );
     } finally {
       setAddingUser(false);
     }
@@ -188,21 +174,23 @@ export function DepartmentMembersModal({
       const response = await fetch(
         `/api/organizations/departments/${department.id}/members/${userId}`,
         {
-          method: "DELETE",
-        }
+          method: 'DELETE',
+        },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to remove user");
+        throw new Error(data.error || 'Failed to remove user');
       }
 
-      toast.success("User removed from department");
-      fetchMembers();
+      toast.success('User removed from department');
+      void refetchMembers();
     } catch (error) {
-      console.error("Error removing user:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to remove user");
+      console.error('Error removing user:', error);
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to remove user',
+      );
     } finally {
       setRemovingUserId(null);
     }
@@ -222,9 +210,9 @@ export function DepartmentMembersModal({
   const getInitials = (name: string | null, email: string) => {
     if (name) {
       return name
-        .split(" ")
+        .split(' ')
         .map((n) => n[0])
-        .join("")
+        .join('')
         .toUpperCase()
         .slice(0, 2);
     }
@@ -245,9 +233,9 @@ export function DepartmentMembersModal({
           {/* Actions Bar */}
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Search members..."
+                placeholder="Search members…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -259,12 +247,12 @@ export function DepartmentMembersModal({
                 <Button size="sm" disabled={addingUser}>
                   {addingUser ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Adding...
+                      <Loader2 className="size-4 mr-2 animate-spin" />
+                      Adding…
                     </>
                   ) : (
                     <>
-                      <UserPlus className="w-4 h-4 mr-2" />
+                      <UserPlus className="size-4 mr-2" />
                       Add Member
                     </>
                   )}
@@ -272,25 +260,17 @@ export function DepartmentMembersModal({
               </PopoverTrigger>
               <PopoverContent className="w-[300px] p-0" align="end">
                 <Command>
-                  <CommandInput placeholder="Search users..." />
+                  <CommandInput placeholder="Search users…" />
                   <CommandEmpty>No users found.</CommandEmpty>
                   <CommandGroup>
                     {availableUsers.map((user) => (
                       <CommandItem
                         key={user.id}
-                        onSelect={() => {
-                          setSelectedUserId(user.id);
-                          handleAddUser();
-                        }}
+                        onSelect={() => void handleAddUser(user.id)}
                       >
-                        <Check
-                          className={cn(
-                            "mr-2 h-4 w-4",
-                            selectedUserId === user.id ? "opacity-100" : "opacity-0"
-                          )}
-                        />
+                        <UserPlus className="mr-2 size-4 text-muted-foreground" />
                         <div className="flex items-center gap-2 flex-1">
-                          <Avatar className="w-6 h-6">
+                          <Avatar className="size-6">
                             <AvatarImage src={user.avatarUrl} />
                             <AvatarFallback className="text-xs">
                               {getInitials(user.name, user.email)}
@@ -319,23 +299,28 @@ export function DepartmentMembersModal({
           <ScrollArea className="h-[400px]">
             {loading ? (
               <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3">
-                    <Skeleton className="w-10 h-10 rounded-full" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-3 w-48" />
+                {['member-row-1', 'member-row-2', 'member-row-3'].map(
+                  (skeletonId) => (
+                    <div
+                      key={skeletonId}
+                      className="flex items-center gap-3 p-3"
+                    >
+                      <Skeleton className="size-10 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-48" />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ),
+                )}
               </div>
             ) : filteredMembers.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12">
-                <Users className="w-12 h-12 text-muted-foreground mb-4" />
+                <Users className="size-12 text-muted-foreground mb-4" />
                 <p className="text-sm text-muted-foreground text-center">
                   {searchQuery
-                    ? "No members found matching your search"
-                    : "No members in this department yet"}
+                    ? 'No members found matching your search'
+                    : 'No members in this department yet'}
                 </p>
               </div>
             ) : (
@@ -348,7 +333,10 @@ export function DepartmentMembersModal({
                     <Avatar>
                       <AvatarImage src={(member.user as any)?.avatarUrl} />
                       <AvatarFallback>
-                        {getInitials(member.user?.name || null, member.user?.email || "")}
+                        {getInitials(
+                          member.user?.name || null,
+                          member.user?.email || '',
+                        )}
                       </AvatarFallback>
                     </Avatar>
 
@@ -360,8 +348,11 @@ export function DepartmentMembersModal({
                         <Badge
                           variant="secondary"
                           className={cn(
-                            "text-xs",
-                            member.user?.role && roleColors[member.user.role as keyof typeof roleColors]
+                            'text-xs',
+                            member.user?.role &&
+                              roleColors[
+                                member.user.role as keyof typeof roleColors
+                              ],
                           )}
                         >
                           {member.user?.role}
@@ -369,18 +360,18 @@ export function DepartmentMembersModal({
                       </div>
                       {member.user?.name && (
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Mail className="w-3 h-3" />
+                          <Mail className="size-3" />
                           <span className="truncate">{member.user.email}</span>
                         </div>
                       )}
                       <p className="text-xs text-muted-foreground mt-1">
-                        Added {new Date(member.createdAt).toLocaleDateString()}
+                        Added {formatStableDate(member.createdAt)}
                       </p>
                     </div>
 
                     {removingUserId === member.userId ? (
-                      <div className="h-8 w-8 flex items-center justify-center">
-                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      <div className="size-8 flex items-center justify-center">
+                        <Loader2 className="size-4 animate-spin text-muted-foreground" />
                       </div>
                     ) : (
                       <DropdownMenu>
@@ -388,9 +379,9 @@ export function DepartmentMembersModal({
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 w-8 p-0"
+                            className="size-8 p-0"
                           >
-                            <MoreVertical className="w-4 h-4" />
+                            <MoreVertical className="size-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -398,7 +389,7 @@ export function DepartmentMembersModal({
                             onClick={() => handleRemoveUser(member.userId)}
                             className="text-destructive"
                           >
-                            <UserMinus className="w-4 h-4 mr-2" />
+                            <UserMinus className="size-4 mr-2" />
                             Remove from Department
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -414,11 +405,10 @@ export function DepartmentMembersModal({
           <div className="pt-4 border-t">
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>
-                {members.length} {members.length === 1 ? "member" : "members"} total
+                {members.length} {members.length === 1 ? 'member' : 'members'}{' '}
+                total
               </span>
-              <span>
-                {availableUsers.length} available to add
-              </span>
+              <span>{availableUsers.length} available to add</span>
             </div>
           </div>
         </div>

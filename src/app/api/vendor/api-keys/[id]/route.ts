@@ -26,19 +26,19 @@ export const runtime = 'nodejs';
 export const DELETE = apiHandler(
   async (
     _request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
   ) => {
-    const { orgId } = await requireAdmin();
     const { id: keyId } = await params;
 
     if (!keyId) {
       return errors.badRequest('Key ID is required');
     }
 
+    const { orgId } = await requireAdmin();
     await revokeApiKey(keyId, orgId);
 
     return successResponse({ revoked: true });
-  }
+  },
 );
 
 // ---------------------------------------------------------------------------
@@ -48,15 +48,15 @@ export const DELETE = apiHandler(
 export const POST = apiHandler(
   async (
     _request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
   ) => {
-    const { orgId } = await requireAdmin();
     const { id: keyId } = await params;
 
     if (!keyId) {
       return errors.badRequest('Key ID is required');
     }
 
+    const { orgId } = await requireAdmin();
     try {
       const { key, record } = await rotateApiKey(keyId, orgId);
 
@@ -71,7 +71,7 @@ export const POST = apiHandler(
           created_at: record.created_at,
         },
         undefined,
-        201
+        201,
       );
     } catch (err: unknown) {
       if (err instanceof Error && err.message === 'API key not found') {
@@ -79,5 +79,5 @@ export const POST = apiHandler(
       }
       throw err;
     }
-  }
+  },
 );

@@ -1,7 +1,7 @@
 import { createClient as createAdminClient } from '@/lib/supabase/admin';
 import type { Database, Json } from '@/lib/types/database';
 
-export type VendorSourceKind =
+type VendorSourceKind =
   | 'documentation'
   | 'developer_docs'
   | 'help_center'
@@ -16,13 +16,13 @@ export type VendorFetchStrategy =
   | 'official_mcp_snapshot'
   | 'sanctioned_crawl';
 
-export type VendorTermsReviewStatus =
+type VendorTermsReviewStatus =
   | 'pending'
   | 'approved'
   | 'restricted'
   | 'rejected';
 
-export type VendorSourceLifecycle = 'active' | 'paused' | 'retired';
+type VendorSourceLifecycle = 'active' | 'paused' | 'retired';
 
 export interface VendorSourceDraftInput {
   app: string;
@@ -87,14 +87,14 @@ export interface VendorSourceLookupInput {
   sourceUrl: string;
 }
 
-export interface VendorSourceLegalReviewInput {
+interface VendorSourceLegalReviewInput {
   reviewedAt?: string | null;
   reviewedBy?: string | null;
   referenceUrl?: string | null;
   notes?: string | null;
 }
 
-export interface NormalizedVendorSourceLegalReview {
+interface NormalizedVendorSourceLegalReview {
   reviewedAt: string;
   reviewedBy: string | null;
   referenceUrl: string | null;
@@ -119,7 +119,10 @@ export type VendorSourceUpdate =
 const DEFAULT_FRESHNESS_TARGET = '7 days';
 
 function normalizeHostname(hostname: string): string {
-  return hostname.trim().toLowerCase().replace(/^www\./, '');
+  return hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./, '');
 }
 
 function derivePublisherHostname(hostname: string): string {
@@ -135,7 +138,12 @@ function derivePublisherHostname(hostname: string): string {
 
 function normalizeBand(values: string[] | undefined): string[] {
   return Array.from(
-    new Set((values ?? []).map((value) => value.trim()).filter(Boolean))
+    new Set(
+      (values ?? []).flatMap((__item, __index, __array) => {
+        const __mapped = __item.trim();
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   ).sort((a, b) => a.localeCompare(b));
 }
 
@@ -157,7 +165,9 @@ function normalizeSourceUrl(sourceUrl: string): URL {
   return parsed;
 }
 
-function normalizeOptionalHttpsUrl(value: string | null | undefined): string | null {
+function normalizeOptionalHttpsUrl(
+  value: string | null | undefined,
+): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
 
@@ -193,12 +203,17 @@ function normalizeLegalReview(
   };
 }
 
-function isOfficialVendorHost(hostname: string, publisherHostname: string): boolean {
-  return hostname === publisherHostname || hostname.endsWith(`.${publisherHostname}`);
+function isOfficialVendorHost(
+  hostname: string,
+  publisherHostname: string,
+): boolean {
+  return (
+    hostname === publisherHostname || hostname.endsWith(`.${publisherHostname}`)
+  );
 }
 
 export function normalizeVendorSourceDraft(
-  input: VendorSourceDraftInput
+  input: VendorSourceDraftInput,
 ): NormalizedVendorSourceDraft {
   if (input.officialSource === false) {
     throw new Error('Shared vendor knowledge is official-source-only');
@@ -215,7 +230,7 @@ export function normalizeVendorSourceDraft(
 
   if (!isOfficialVendorHost(sourceHostname, publisherHostname)) {
     throw new Error(
-      `Vendor source must resolve to an official vendor host for ${publisherHostname}`
+      `Vendor source must resolve to an official vendor host for ${publisherHostname}`,
     );
   }
 
@@ -230,8 +245,7 @@ export function normalizeVendorSourceDraft(
     publisherHostname,
     officialSource: true,
     fetchStrategy: input.fetchStrategy,
-    freshnessTarget:
-      input.freshnessTarget?.trim() || DEFAULT_FRESHNESS_TARGET,
+    freshnessTarget: input.freshnessTarget?.trim() || DEFAULT_FRESHNESS_TARGET,
     versionBand: normalizeBand(input.versionBand),
     planBand: normalizeBand(input.planBand),
     applicability: input.applicability ?? {},
@@ -241,7 +255,9 @@ export function normalizeVendorSourceDraft(
   };
 }
 
-export function isVendorSourceActive(source: Pick<VendorSourceRow, 'lifecycle' | 'retired_at'>): boolean {
+function isVendorSourceActive(
+  source: Pick<VendorSourceRow, 'lifecycle' | 'retired_at'>,
+): boolean {
   return source.lifecycle === 'active' && !source.retired_at;
 }
 
@@ -284,7 +300,7 @@ export function getVendorSourceSyncBlockReason(
 }
 
 export function buildLegacyVendorSourceBackfill(
-  pages: LegacyVendorWikiPage[]
+  pages: LegacyVendorWikiPage[],
 ): VendorSourceBackfillResult {
   const grouped = new Map<string, LegacyVendorWikiPage[]>();
   const unresolvedLegacyPageIds: string[] = [];
@@ -311,12 +327,19 @@ export function buildLegacyVendorSourceBackfill(
       app: first.app,
       sourceKind: 'documentation',
       sourceUrl: first.source_url!,
-      publisherHostname: derivePublisherHostname(new URL(first.source_url!).hostname),
+      publisherHostname: derivePublisherHostname(
+        new URL(first.source_url!).hostname,
+      ),
       fetchStrategy: 'sanctioned_crawl',
       applicability: {
         legacyPageIds: group.map((page) => page.id),
         legacyScreens: Array.from(
-          new Set(group.map((page) => page.screen).filter(Boolean))
+          new Set(
+            group.flatMap((__item, __index, __array) => {
+              const __mapped = __item.screen;
+              return __mapped ? [__mapped] : [];
+            }),
+          ),
         ).sort((a, b) => a.localeCompare(b)),
       },
     });
@@ -355,7 +378,7 @@ export function buildVendorSourceFailurePatch({
 }
 
 export function hashVendorSourcePages(
-  pages: Array<{ screen: string; contentHash: string }>
+  pages: Array<{ screen: string; contentHash: string }>,
 ): string | null {
   if (pages.length === 0) {
     return null;
@@ -369,7 +392,7 @@ export function hashVendorSourcePages(
 
 function toInsertRow(
   source: NormalizedVendorSourceDraft,
-  timestamp: string
+  timestamp: string,
 ): VendorSourceInsert {
   return {
     app: source.app,
@@ -393,26 +416,28 @@ function toInsertRow(
 }
 
 export function createVendorSourceRegistryService(
-  supabase = createAdminClient()
+  supabase = createAdminClient(),
 ) {
   return {
     async upsertSource(
-      input: VendorSourceDraftInput
+      input: VendorSourceDraftInput,
     ): Promise<VendorSourceRow> {
       const normalized = normalizeVendorSourceDraft(input);
       const timestamp = new Date().toISOString();
       const row = toInsertRow(normalized, timestamp);
 
-      const { data, error } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_doc_sources') as any)
+      const { data, error } = await (
+        supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .from('vendor_doc_sources') as any
+      )
         .upsert(row, { onConflict: 'app,source_url' })
         .select('*')
         .single();
 
       if (error || !data) {
         throw new Error(
-          `[vendor-source-registry] Failed to upsert source ${normalized.app} ${normalized.sourceUrl}: ${error?.message ?? 'missing row'}`
+          `[vendor-source-registry] Failed to upsert source ${normalized.app} ${normalized.sourceUrl}: ${error?.message ?? 'missing row'}`,
         );
       }
 
@@ -425,16 +450,18 @@ export function createVendorSourceRegistryService(
       sourceUrl,
     }: VendorSourceLookupInput): Promise<VendorSourceRow | null> {
       if (sourceId) {
-        const { data, error } = await (supabase
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .from('vendor_doc_sources') as any)
+        const { data, error } = await (
+          supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .from('vendor_doc_sources') as any
+        )
           .select('*')
           .eq('id', sourceId)
           .maybeSingle();
 
         if (error) {
           throw new Error(
-            `[vendor-source-registry] Failed to load source ${sourceId}: ${error.message}`
+            `[vendor-source-registry] Failed to load source ${sourceId}: ${error.message}`,
           );
         }
 
@@ -449,9 +476,11 @@ export function createVendorSourceRegistryService(
         fetchStrategy: 'sanctioned_crawl',
       });
 
-      const { data, error } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_doc_sources') as any)
+      const { data, error } = await (
+        supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .from('vendor_doc_sources') as any
+      )
         .select('*')
         .eq('app', normalized.app)
         .eq('source_url', normalized.sourceUrl)
@@ -459,7 +488,7 @@ export function createVendorSourceRegistryService(
 
       if (error) {
         throw new Error(
-          `[vendor-source-registry] Failed to find source for ${normalized.app}: ${error.message}`
+          `[vendor-source-registry] Failed to find source for ${normalized.app}: ${error.message}`,
         );
       }
 
@@ -473,53 +502,59 @@ export function createVendorSourceRegistryService(
         updated_at: attemptedAt,
       };
 
-      const { error } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_doc_sources') as any)
+      const { error } = await (
+        supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .from('vendor_doc_sources') as any
+      )
         .update(patch)
         .eq('id', sourceId);
 
       if (error) {
         throw new Error(
-          `[vendor-source-registry] Failed to record attempt for ${sourceId}: ${error.message}`
+          `[vendor-source-registry] Failed to record attempt for ${sourceId}: ${error.message}`,
         );
       }
     },
 
     async recordSuccess(
       sourceId: string,
-      input: VendorSourceSuccessPatchInput
+      input: VendorSourceSuccessPatchInput,
     ): Promise<void> {
       const patch: VendorSourceUpdate = buildVendorSourceSuccessPatch(input);
 
-      const { error } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_doc_sources') as any)
+      const { error } = await (
+        supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .from('vendor_doc_sources') as any
+      )
         .update(patch)
         .eq('id', sourceId);
 
       if (error) {
         throw new Error(
-          `[vendor-source-registry] Failed to record success for ${sourceId}: ${error.message}`
+          `[vendor-source-registry] Failed to record success for ${sourceId}: ${error.message}`,
         );
       }
     },
 
     async recordFailure(
       sourceId: string,
-      input: VendorSourceFailurePatchInput
+      input: VendorSourceFailurePatchInput,
     ): Promise<void> {
       const patch: VendorSourceUpdate = buildVendorSourceFailurePatch(input);
 
-      const { error } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_doc_sources') as any)
+      const { error } = await (
+        supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .from('vendor_doc_sources') as any
+      )
         .update(patch)
         .eq('id', sourceId);
 
       if (error) {
         throw new Error(
-          `[vendor-source-registry] Failed to record failure for ${sourceId}: ${error.message}`
+          `[vendor-source-registry] Failed to record failure for ${sourceId}: ${error.message}`,
         );
       }
     },
@@ -554,25 +589,26 @@ export function createVendorSourceRegistryService(
 
       if (sourceError) {
         throw new Error(
-          `[vendor-source-registry] Failed to retire source ${input.sourceId}: ${sourceError.message}`
+          `[vendor-source-registry] Failed to retire source ${input.sourceId}: ${sourceError.message}`,
         );
       }
     },
 
     async buildLegacyBackfill(): Promise<VendorSourceBackfillResult> {
-      const { data, error } = await (supabase
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .from('vendor_wiki_pages') as any)
-        .select('id, app, screen, source_url, updated_at');
+      const { data, error } = await (
+        supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .from('vendor_wiki_pages') as any
+      ).select('id, app, screen, source_url, updated_at');
 
       if (error) {
         throw new Error(
-          `[vendor-source-registry] Failed to inspect legacy vendor pages: ${error.message}`
+          `[vendor-source-registry] Failed to inspect legacy vendor pages: ${error.message}`,
         );
       }
 
       return buildLegacyVendorSourceBackfill(
-        (data ?? []) as LegacyVendorWikiPage[]
+        (data ?? []) as LegacyVendorWikiPage[],
       );
     },
   };

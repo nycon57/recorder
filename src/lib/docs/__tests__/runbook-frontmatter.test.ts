@@ -13,9 +13,10 @@
  * TRIB-152
  */
 
-import { describe, expect, test } from '@jest/globals';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
+
+import { describe, expect, test } from '@jest/globals';
 import matter from 'gray-matter';
 import { z } from 'zod';
 
@@ -25,7 +26,6 @@ import { z } from 'zod';
 const slugRegex = /^[a-z0-9][a-z0-9/-]*$/;
 
 const AuthoredFrontmatterSchema = z.object({
-  slug: z.string().regex(slugRegex, 'Slug must match ^[a-z0-9][a-z0-9/-]*$'),
   title: z.string().min(1),
   description: z.string().min(1),
   audience: z.enum(['public', 'org-admin', 'system-admin']),
@@ -44,7 +44,8 @@ const AuthoredFrontmatterSchema = z.object({
     'security',
   ]),
   order: z.number().int().optional(),
-  updatedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'updatedAt must be YYYY-MM-DD'),
+  slug: z.never().optional(),
+  updatedAt: z.never().optional(),
   related: z.array(z.string().regex(slugRegex)).optional(),
   tags: z.array(z.string()).optional(),
 });
@@ -72,7 +73,18 @@ function collectMarkdownFiles(dir: string): string[] {
   return files;
 }
 
-const markdownFiles = collectMarkdownFiles(DOCS_ROOT);
+function deriveSlug(filePath: string): string {
+  return filePath
+    .replace(DOCS_ROOT + '/', '')
+    .replace(/\.md$/, '')
+    .replace(/\/index$/, '');
+}
+
+const markdownFiles = collectMarkdownFiles(DOCS_ROOT).filter((filePath) =>
+  ['platform-runbooks/', 'vendor-sources/'].some((prefix) =>
+    deriveSlug(filePath).startsWith(prefix),
+  ),
+);
 
 // ---- Tests -----------------------------------------------------------------
 
@@ -91,11 +103,7 @@ describe('content/docs runbook frontmatter', () => {
   ];
 
   test.each(expectedSlugs)('expected runbook exists: %s', (slug) => {
-    const hasSlug = markdownFiles.some((f) => {
-      const raw = readFileSync(f, 'utf-8');
-      const { data } = matter(raw);
-      return data.slug === slug;
-    });
+    const hasSlug = markdownFiles.some((f) => deriveSlug(f) === slug);
     expect(hasSlug).toBe(true);
   });
 
@@ -127,11 +135,7 @@ describe('content/docs runbook frontmatter', () => {
 
     test('slug matches directory structure', () => {
       // slug: vendor-sources/sync-lifecycle should be in content/docs/vendor-sources/sync-lifecycle.md
-      const slug = String(frontmatter.slug ?? '');
-      const relativePath = filePath
-        .replace(DOCS_ROOT + '/', '')
-        .replace(/\.md$/, '');
-      expect(relativePath).toBe(slug);
+      expect(deriveSlug(filePath)).toMatch(slugRegex);
     });
   });
 });

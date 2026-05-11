@@ -1,7 +1,7 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
 import {
   VideoIcon,
   FileVideoIcon,
@@ -16,6 +16,7 @@ import { Card, CardContent } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import type { ContentType } from '@/lib/types/database';
+import { formatStableDateTime } from '@/lib/utils/formatting';
 import {
   CONTENT_TYPE_LABELS,
   CONTENT_TYPE_COLORS,
@@ -98,10 +99,13 @@ export function RecentItems({ items, isLoading = false }: RecentItemsProps) {
                   className={`relative h-32 ${colors.bg} flex items-center justify-center`}
                 >
                   {item.thumbnail_url ? (
-                    <img
+                    <Image
                       src={item.thumbnail_url}
                       alt={item.title || 'Thumbnail'}
-                      className="w-full h-full object-cover"
+                      fill
+                      sizes="(min-width: 768px) 33vw, 100vw"
+                      className="object-cover"
+                      unoptimized
                     />
                   ) : (
                     <Icon className={`size-12 ${colors.text}`} />
@@ -125,11 +129,7 @@ export function RecentItems({ items, isLoading = false }: RecentItemsProps) {
                   <div className="space-y-1.5 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1.5">
                       <Clock className="size-3" />
-                      <span>
-                        {formatDistanceToNow(new Date(item.created_at), {
-                          addSuffix: true,
-                        })}
-                      </span>
+                      <span>{formatStableDateTime(item.created_at)}</span>
                     </div>
 
                     {item.file_size && (

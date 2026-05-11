@@ -1,7 +1,7 @@
 import type { ContentType, FileType } from '@/lib/types/content';
 import { generateStoragePath } from '@/lib/validations/library';
 
-export const RECORDING_STORAGE_BUCKETS = ['content', 'recordings'] as const;
+const RECORDING_STORAGE_BUCKETS = ['content', 'recordings'] as const;
 
 export type RecordingStorageBucket = (typeof RECORDING_STORAGE_BUCKETS)[number];
 
@@ -72,7 +72,7 @@ export type StoragePathValidation =
       details?: Record<string, string>;
     };
 
-export function isRecordingStorageBucket(
+function isRecordingStorageBucket(
   bucket: unknown,
 ): bucket is RecordingStorageBucket {
   return (
@@ -184,7 +184,7 @@ export function inferRecordingStorageBucket({
     : CURRENT_RECORDING_STORAGE_BUCKET;
 }
 
-export function buildDerivedAudioStoragePath({
+function buildDerivedAudioStoragePath({
   orgId,
   recordingId,
   sourceContentType,

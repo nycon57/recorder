@@ -1,11 +1,11 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
+import { m, useReducedMotion } from 'motion/react';
 
 import { signIn } from '@/lib/auth/auth-client';
 import {
@@ -26,9 +26,13 @@ import {
  * - Custom Better Auth sign-in form
  * - Respects reduced motion preferences
  */
-export default function SignInPage() {
+function SignInPageContent() {
+  return useSignInPageContentImplementation();
+}
+
+function useSignInPageContentImplementation() {
   const shouldReduceMotion = useReducedMotion();
-  const router = useRouter();
+  const { push } = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,7 +48,7 @@ export default function SignInPage() {
       setError(error.message || 'Sign in failed');
       setLoading(false);
     } else {
-      router.push(getExtensionAuthPath(searchParams));
+      push(getExtensionAuthPath(searchParams));
     }
   };
 
@@ -71,7 +75,7 @@ export default function SignInPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
       {/* Back to Home - Top Left */}
-      <motion.div
+      <m.div
         initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
@@ -84,10 +88,10 @@ export default function SignInPage() {
           <ArrowLeft className="size-4 transition-transform duration-200 group-hover:-translate-x-1" />
           <span>Back to home</span>
         </Link>
-      </motion.div>
+      </m.div>
 
       {/* Main Content Card */}
-      <motion.div
+      <m.div
         initial={
           shouldReduceMotion
             ? { opacity: 1 }
@@ -102,15 +106,15 @@ export default function SignInPage() {
           className="relative rounded-2xl p-8 md:p-10"
           style={{
             background: 'rgba(4, 34, 34, 0.6)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             border: '1px solid rgba(0, 223, 130, 0.1)',
             boxShadow:
-              '0 0 60px rgba(0, 223, 130, 0.08), inset 0 1px 0 rgba(255,255,255,0.05)',
+              '0 24px 80px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)',
           }}
         >
           {/* Logo */}
-          <motion.div
+          <m.div
             initial={
               shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }
             }
@@ -142,10 +146,10 @@ export default function SignInPage() {
                 Tribora
               </span>
             </Link>
-          </motion.div>
+          </m.div>
 
           {/* Header */}
-          <motion.div
+          <m.div
             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4, delay: 0.2 }}
@@ -155,11 +159,7 @@ export default function SignInPage() {
               className="text-3xl md:text-4xl font-light tracking-tight mb-3"
               style={{
                 fontFamily: 'var(--font-heading)',
-                background:
-                  'linear-gradient(135deg, #00df82 0%, #2cc295 50%, rgb(241,247,247) 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
+                color: 'rgb(241,247,247)',
               }}
             >
               Welcome back
@@ -167,10 +167,10 @@ export default function SignInPage() {
             <p className="text-base" style={{ color: 'rgb(170, 203, 196)' }}>
               Sign in to continue illuminating your knowledge
             </p>
-          </motion.div>
+          </m.div>
 
           {/* Sign In Form */}
-          <motion.div
+          <m.div
             initial={
               shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }
             }
@@ -241,12 +241,14 @@ export default function SignInPage() {
 
               <div>
                 <label
+                  htmlFor="sign-in-email"
                   className="block text-sm font-medium mb-2"
                   style={{ color: 'rgb(170, 203, 196)' }}
                 >
                   Email address
                 </label>
                 <input
+                  id="sign-in-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -259,12 +261,14 @@ export default function SignInPage() {
 
               <div>
                 <label
+                  htmlFor="sign-in-password"
                   className="block text-sm font-medium mb-2"
                   style={{ color: 'rgb(170, 203, 196)' }}
                 >
                   Password
                 </label>
                 <input
+                  id="sign-in-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -288,17 +292,17 @@ export default function SignInPage() {
                 {loading ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    Signing in...
+                    Signing in…
                   </>
                 ) : (
                   'Sign in'
                 )}
               </button>
             </form>
-          </motion.div>
+          </m.div>
 
           {/* Footer Link */}
-          <motion.div
+          <m.div
             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4, delay: 0.4 }}
@@ -319,11 +323,11 @@ export default function SignInPage() {
                 Sign up
               </Link>
             </p>
-          </motion.div>
+          </m.div>
         </div>
 
         {/* Trust Indicators */}
-        <motion.div
+        <m.div
           initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.5 }}
@@ -334,7 +338,7 @@ export default function SignInPage() {
             { label: 'GDPR Ready' },
             { label: '256-bit Encryption' },
           ].map((item, index) => (
-            <motion.div
+            <m.div
               key={item.label}
               initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -347,10 +351,18 @@ export default function SignInPage() {
                 style={{ color: 'rgba(0, 223, 130, 0.6)' }}
               />
               <span>{item.label}</span>
-            </motion.div>
+            </m.div>
           ))}
-        </motion.div>
-      </motion.div>
+        </m.div>
+      </m.div>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInPageContent />
+    </Suspense>
   );
 }

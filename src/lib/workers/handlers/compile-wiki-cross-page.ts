@@ -83,7 +83,7 @@ function getGenAIClient(): GoogleGenAI {
 
 async function callGemini(
   prompt: string,
-  opts: { temperature?: number; maxOutputTokens?: number } = {}
+  opts: { temperature?: number; maxOutputTokens?: number } = {},
 ): Promise<string> {
   const genai = getGenAIClient();
   const result = await genai.models.generateContent({
@@ -118,7 +118,7 @@ export interface RunCrossPageContradictionInputs {
  * `wiki_relationships`. Wraps every failure in a warn log — never throws.
  */
 export async function runCrossPageContradictionDetection(
-  inputs: RunCrossPageContradictionInputs
+  inputs: RunCrossPageContradictionInputs,
 ): Promise<void> {
   try {
     await detectAndWriteCrossPageContradictions(inputs);
@@ -126,15 +126,16 @@ export async function runCrossPageContradictionDetection(
     console.warn(
       `[compile-wiki] Step 5 cross-page contradiction detection failed for page ${inputs.pageId} ` +
         `(org=${inputs.orgId}, recording=${inputs.recordingId}): ` +
-        `${error instanceof Error ? error.message : String(error)}`
+        `${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
 
 async function detectAndWriteCrossPageContradictions(
-  inputs: RunCrossPageContradictionInputs
+  inputs: RunCrossPageContradictionInputs,
 ): Promise<void> {
-  const { supabase, orgId, pageId, app, screen, topic, content, recordingId } = inputs;
+  const { supabase, orgId, pageId, app, screen, topic, content, recordingId } =
+    inputs;
 
   // Cross-page detection only runs when we have a concrete app+screen pair.
   // Null on either axis means "no UI grouping" — matching everything with
@@ -160,7 +161,7 @@ async function detectAndWriteCrossPageContradictions(
 
   if (siblingsResponse.error) {
     throw new Error(
-      `Failed to load cross-page contradiction candidates: ${siblingsResponse.error.message}`
+      `Failed to load cross-page contradiction candidates: ${siblingsResponse.error.message}`,
     );
   }
 
@@ -172,32 +173,37 @@ async function detectAndWriteCrossPageContradictions(
   // ---- 2. LLM-diff each sibling against the current page -------------------
   const currentExcerpt = sanitizeVisualDescription(content, MAX_CONTENT_CHARS);
 
-  const rows: WikiRelationshipInsert[] = [];
+  const rows = (
+    await Promise.all(
+      siblings.map(async (sibling): Promise<WikiRelationshipInsert | null> => {
+        const siblingExcerpt = sanitizeVisualDescription(
+          sibling.content,
+          MAX_CONTENT_CHARS,
+        );
 
-  for (const sibling of siblings) {
-    const siblingExcerpt = sanitizeVisualDescription(sibling.content, MAX_CONTENT_CHARS);
+        const verdict = await detectPairwiseContradiction({
+          currentTopic: topic,
+          currentContent: currentExcerpt,
+          siblingTopic: sibling.topic ?? '(unknown)',
+          siblingContent: siblingExcerpt,
+          recordingId,
+        });
 
-    const verdict = await detectPairwiseContradiction({
-      currentTopic: topic,
-      currentContent: currentExcerpt,
-      siblingTopic: sibling.topic ?? '(unknown)',
-      siblingContent: siblingExcerpt,
-      recordingId,
-    });
+        if (!verdict || !verdict.contradicts) return null;
+        if (verdict.confidence < MIN_CONTRADICTION_CONFIDENCE) return null;
 
-    if (!verdict || !verdict.contradicts) continue;
-    if (verdict.confidence < MIN_CONTRADICTION_CONFIDENCE) continue;
-
-    rows.push({
-      org_id: orgId,
-      source_page_id: pageId,
-      target_page_id: sibling.id,
-      relationship_type: 'contradicts',
-      confidence: verdict.confidence,
-      source_type: 'inferred',
-      evidence: verdict.evidence,
-    });
-  }
+        return {
+          org_id: orgId,
+          source_page_id: pageId,
+          target_page_id: sibling.id,
+          relationship_type: 'contradicts',
+          confidence: verdict.confidence,
+          source_type: 'inferred',
+          evidence: verdict.evidence,
+        };
+      }),
+    )
+  ).filter((row): row is WikiRelationshipInsert => Boolean(row));
 
   if (rows.length === 0) {
     return;
@@ -213,13 +219,13 @@ async function detectAndWriteCrossPageContradictions(
 
   if (upsertError) {
     throw new Error(
-      `Failed to upsert cross-page contradiction rows: ${upsertError.message}`
+      `Failed to upsert cross-page contradiction rows: ${upsertError.message}`,
     );
   }
 
   console.log(
     `[compile-wiki] Step 5: wrote ${rows.length} cross-page contradiction edge(s) for page ${pageId} ` +
-      `(app=${app}, screen=${screen}, ${siblings.length} sibling(s) considered)`
+      `(app=${app}, screen=${screen}, ${siblings.length} sibling(s) considered)`,
   );
 }
 
@@ -274,7 +280,7 @@ Rules:
   } catch (error) {
     console.warn(
       `[compile-wiki] Step 5: pairwise LLM call failed for recording ${params.recordingId}:`,
-      error instanceof Error ? error.message : error
+      error instanceof Error ? error.message : error,
     );
     return null;
   }
@@ -284,13 +290,15 @@ Rules:
 
 function parsePairwiseVerdict(
   responseText: string,
-  recordingId: string
+  recordingId: string,
 ): PairwiseVerdict | null {
   if (!responseText) return null;
 
   let cleaned = responseText.trim();
   if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    cleaned = cleaned
+      .replace(/^```(?:json)?\s*\n?/, '')
+      .replace(/\n?```\s*$/, '');
   }
 
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
@@ -313,7 +321,7 @@ function parsePairwiseVerdict(
   } catch (error) {
     console.warn(
       `[compile-wiki] Step 5: failed to parse pairwise verdict JSON for ${recordingId}:`,
-      error instanceof Error ? error.message : error
+      error instanceof Error ? error.message : error,
     );
     return null;
   }

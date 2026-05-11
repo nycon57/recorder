@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
@@ -29,23 +29,56 @@ import { MemberDataTable } from '@/app/components/settings/organization/members/
 
 import type { OrganizationMember, MemberFiltersState } from './types';
 
+interface MembersPageState {
+  searchQuery: string;
+  filters: MemberFiltersState;
+  selectedMemberIds: string[];
+  showInviteModal: boolean;
+  selectedMember: OrganizationMember | null;
+  showFilters: boolean;
+  page: number;
+}
+
+type MembersPageAction =
+  | Partial<MembersPageState>
+  | ((state: MembersPageState) => MembersPageState);
+
+const initialMembersPageState: MembersPageState = {
+  searchQuery: '',
+  filters: { roles: [], departments: [], statuses: [] },
+  selectedMemberIds: [],
+  showInviteModal: false,
+  selectedMember: null,
+  showFilters: false,
+  page: 1,
+};
+
+const membersPageReducer = (
+  state: MembersPageState,
+  action: MembersPageAction,
+): MembersPageState =>
+  typeof action === 'function' ? action(state) : { ...state, ...action };
+
 export default function MembersPage() {
+  return useMembersPageImplementation();
+}
+
+function useMembersPageImplementation() {
   const queryClient = useQueryClient();
 
-  // State management
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState<MemberFiltersState>({
-    roles: [],
-    departments: [],
-    statuses: [],
-  });
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [selectedMember, setSelectedMember] =
-    useState<OrganizationMember | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [
+    {
+      searchQuery,
+      filters,
+      selectedMemberIds,
+      showInviteModal,
+      selectedMember,
+      showFilters,
+      page,
+    },
+    updateMembersState,
+  ] = useReducer(membersPageReducer, initialMembersPageState);
+  const pageSize = 50;
 
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -94,7 +127,7 @@ export default function MembersPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization-members'] });
-      setSelectedMemberIds([]);
+      updateMembersState({ selectedMemberIds: [] });
       toast.success('Members removed successfully');
     },
     onError: (error: unknown) => {
@@ -140,9 +173,11 @@ export default function MembersPage() {
 
   // Clear all filters
   const handleClearFilters = () => {
-    setSearchQuery('');
-    setFilters({ roles: [], departments: [], statuses: [] });
-    setPage(1);
+    updateMembersState({
+      searchQuery: '',
+      filters: { roles: [], departments: [], statuses: [] },
+      page: 1,
+    });
   };
 
   const hasActiveFilters =
@@ -157,7 +192,7 @@ export default function MembersPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="trbd-page-title flex items-center gap-3">
-            <Users2 className="h-8 w-8 text-primary" />
+            <Users2 className="size-8 text-primary" />
             Team Members
           </h1>
           <p className="text-muted-foreground mt-2">
@@ -167,8 +202,11 @@ export default function MembersPage() {
             Members &amp; roles guide
           </DocLink>
         </div>
-        <Button onClick={() => setShowInviteModal(true)} className="gap-2">
-          <UserPlus className="h-4 w-4" />
+        <Button
+          onClick={() => updateMembersState({ showInviteModal: true })}
+          className="gap-2"
+        >
+          <UserPlus className="size-4" />
           Invite Member
         </Button>
       </div>
@@ -202,21 +240,23 @@ export default function MembersPage() {
       {/* Search and Filters Bar */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             placeholder="Search by name or email..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) =>
+              updateMembersState({ searchQuery: e.target.value })
+            }
             className="pl-10"
           />
         </div>
 
         <Button
           variant={showFilters ? 'default' : 'outline'}
-          onClick={() => setShowFilters(!showFilters)}
+          onClick={() => updateMembersState({ showFilters: !showFilters })}
           className="gap-2"
         >
-          <Filter className="h-4 w-4" />
+          <Filter className="size-4" />
           Filters
           {hasActiveFilters && (
             <Badge variant="secondary" className="ml-1 px-1 min-w-5 h-5">
@@ -236,13 +276,13 @@ export default function MembersPage() {
             onClick={handleClearFilters}
             className="gap-2"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
             Clear
           </Button>
         )}
 
         <Button variant="outline" onClick={handleExportCSV} className="gap-2">
-          <Download className="h-4 w-4" />
+          <Download className="size-4" />
           Export
         </Button>
       </div>
@@ -252,9 +292,9 @@ export default function MembersPage() {
         <MemberFilters
           filters={filters}
           onFiltersChange={(nextFilters: MemberFiltersState) =>
-            setFilters(nextFilters)
+            updateMembersState({ filters: nextFilters })
           }
-          onClose={() => setShowFilters(false)}
+          onClose={() => updateMembersState({ showFilters: false })}
         />
       )}
 
@@ -272,7 +312,7 @@ export default function MembersPage() {
               deleteMembersMutation.mutate(selectedMemberIds);
             }
           }}
-          onClear={() => setSelectedMemberIds([])}
+          onClear={() => updateMembersState({ selectedMemberIds: [] })}
         />
       )}
 
@@ -282,8 +322,12 @@ export default function MembersPage() {
           members={members}
           isLoading={isLoading}
           selectedIds={selectedMemberIds}
-          onSelectionChange={setSelectedMemberIds}
-          onMemberClick={setSelectedMember}
+          onSelectionChange={(ids) =>
+            updateMembersState({ selectedMemberIds: ids })
+          }
+          onMemberClick={(member) =>
+            updateMembersState({ selectedMember: member })
+          }
         />
       </div>
 
@@ -298,10 +342,15 @@ export default function MembersPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() =>
+                updateMembersState((state) => ({
+                  ...state,
+                  page: Math.max(1, state.page - 1),
+                }))
+              }
               disabled={page === 1}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="size-4" />
             </Button>
             <div className="text-sm">
               Page {page} of {totalPages}
@@ -309,10 +358,15 @@ export default function MembersPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() =>
+                updateMembersState((state) => ({
+                  ...state,
+                  page: Math.min(totalPages, state.page + 1),
+                }))
+              }
               disabled={page === totalPages}
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="size-4" />
             </Button>
           </div>
         </div>
@@ -321,7 +375,7 @@ export default function MembersPage() {
       {/* Modals and Drawers */}
       <InviteMemberModal
         open={showInviteModal}
-        onClose={() => setShowInviteModal(false)}
+        onClose={() => updateMembersState({ showInviteModal: false })}
         departments={[]} // You would fetch these departments
       />
 
@@ -336,7 +390,7 @@ export default function MembersPage() {
             : null
         }
         open={!!selectedMember}
-        onClose={() => setSelectedMember(null)}
+        onClose={() => updateMembersState({ selectedMember: null })}
         onUpdate={() => {
           queryClient.invalidateQueries({ queryKey: ['organization-members'] });
         }}

@@ -16,7 +16,11 @@ import type { ExtractedFrame } from '@/lib/services/frame-extraction';
 import type { OCRResult } from '@/lib/services/ocr-service';
 import type { UITransition } from '@/lib/services/ui-state-detector';
 import type { Database, WorkflowStep } from '@/lib/types/database';
-import { detectPII, logPIIDetection, sanitizeVisualDescription } from '@/lib/utils/security';
+import {
+  detectPII,
+  logPIIDetection,
+  sanitizeVisualDescription,
+} from '@/lib/utils/security';
 
 import type { ProgressCallback } from '../job-processor';
 
@@ -105,18 +109,22 @@ function formatTimestamp(seconds: number): string {
  */
 export async function handleWorkflowExtraction(
   job: Job,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const payload = job.payload as unknown as WorkflowPayload;
   const { recordingId, orgId } = payload;
 
   if (!recordingId || !orgId) {
-    console.warn('[WorkflowExtraction] Missing recordingId or orgId in payload, skipping');
+    console.warn(
+      '[WorkflowExtraction] Missing recordingId or orgId in payload, skipping',
+    );
     return;
   }
 
   if (!(await isAgentEnabled(orgId, AGENT_TYPE))) {
-    console.log(`[WorkflowExtraction] Agent disabled for org ${orgId}, skipping`);
+    console.log(
+      `[WorkflowExtraction] Agent disabled for org ${orgId}, skipping`,
+    );
     return;
   }
 
@@ -128,14 +136,14 @@ export async function handleWorkflowExtraction(
       contentId: recordingId,
       inputSummary: `Extract workflow from recording ${recordingId}`,
     },
-    () => runExtractionPipeline(recordingId, orgId, progressCallback)
+    () => runExtractionPipeline(recordingId, orgId, progressCallback),
   );
 }
 
 async function runExtractionPipeline(
   recordingId: string,
   orgId: string,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
 ): Promise<void> {
   const supabase = createAdminClient();
 
@@ -149,17 +157,22 @@ async function runExtractionPipeline(
     .single();
 
   if (recordingError || !recording) {
-    throw new Error(`Recording ${recordingId} not found: ${recordingError?.message}`);
+    throw new Error(
+      `Recording ${recordingId} not found: ${recordingError?.message}`,
+    );
   }
 
-  const isLongRecording = (recording.duration_sec ?? 0) > LONG_RECORDING_THRESHOLD_SEC;
+  const isLongRecording =
+    (recording.duration_sec ?? 0) > LONG_RECORDING_THRESHOLD_SEC;
 
   progressCallback?.(10, 'Fetching frames and transcript...');
 
   const [framesResult, transcriptResult] = await Promise.all([
     supabase
       .from('video_frames')
-      .select('id, frame_time_sec, frame_url, visual_description, ocr_text, metadata')
+      .select(
+        'id, frame_time_sec, frame_url, visual_description, ocr_text, metadata',
+      )
       .eq('content_id', recordingId)
       .eq('org_id', orgId)
       .order('frame_time_sec', { ascending: true })
@@ -180,7 +193,7 @@ async function runExtractionPipeline(
 
   if (frameRows.length >= MAX_FRAMES_IN_MEMORY) {
     console.warn(
-      `[WorkflowExtraction] Recording ${recordingId} has ${MAX_FRAMES_IN_MEMORY}+ frames, using first ${MAX_FRAMES_IN_MEMORY}`
+      `[WorkflowExtraction] Recording ${recordingId} has ${MAX_FRAMES_IN_MEMORY}+ frames, using first ${MAX_FRAMES_IN_MEMORY}`,
     );
   }
 
@@ -189,16 +202,30 @@ async function runExtractionPipeline(
   const hasFrames = frameRows.length > 0;
 
   if (!hasFrames && !transcriptText) {
-    console.warn(`[WorkflowExtraction] No frames or transcript for ${recordingId}, skipping`);
+    console.warn(
+      `[WorkflowExtraction] No frames or transcript for ${recordingId}, skipping`,
+    );
     return;
   }
 
   // No frames -- fall back to text-only workflow from transcript
   if (!hasFrames) {
-    console.warn(`[WorkflowExtraction] No frames for ${recordingId}, falling back to text-only workflow`);
+    console.warn(
+      `[WorkflowExtraction] No frames for ${recordingId}, falling back to text-only workflow`,
+    );
     progressCallback?.(30, 'Generating text-only workflow from transcript...');
-    const steps = await synthesizeFromTranscriptOnly(transcriptText, isLongRecording);
-    await storeWorkflow(supabase, recordingId, orgId, recording.title, steps, 0.5);
+    const steps = await synthesizeFromTranscriptOnly(
+      transcriptText,
+      isLongRecording,
+    );
+    await storeWorkflow(
+      supabase,
+      recordingId,
+      orgId,
+      recording.title,
+      steps,
+      0.5,
+    );
     progressCallback?.(100, 'Text-only workflow extraction complete');
     await enqueueCompileWikiAfterWorkflow(supabase, { recordingId, orgId });
     return;
@@ -227,15 +254,27 @@ async function runExtractionPipeline(
   try {
     transitions = await detectUITransitions(frames, ocrResults);
   } catch (error) {
-    console.error(`[WorkflowExtraction] UI transition detection failed for ${recordingId}:`, error);
+    console.error(
+      `[WorkflowExtraction] UI transition detection failed for ${recordingId}:`,
+      error,
+    );
     // Continue with empty transitions -- Gemini will rely on frame descriptions + transcript
   }
 
-  console.log(`[WorkflowExtraction] Detected ${transitions.length} transitions for ${recordingId}`);
+  console.log(
+    `[WorkflowExtraction] Detected ${transitions.length} transitions for ${recordingId}`,
+  );
 
   progressCallback?.(40, 'Correlating transitions with transcript...');
-  const wordsJson = transcript?.words_json as Array<{ word: string; startTime: number; endTime: number }> | null;
-  const transitionsWithNarration = correlateWithTranscript(transitions, wordsJson);
+  const wordsJson = transcript?.words_json as Array<{
+    word: string;
+    startTime: number;
+    endTime: number;
+  }> | null;
+  const transitionsWithNarration = correlateWithTranscript(
+    transitions,
+    wordsJson,
+  );
 
   progressCallback?.(55, 'Synthesizing workflow steps...');
   const frameDescriptions = frameRows.map((row) => ({
@@ -249,11 +288,13 @@ async function runExtractionPipeline(
     transitionsWithNarration,
     frameDescriptions,
     transcriptText,
-    isLongRecording
+    isLongRecording,
   );
 
   if (steps.length === 0) {
-    console.warn(`[WorkflowExtraction] Gemini returned no valid steps for ${recordingId}`);
+    console.warn(
+      `[WorkflowExtraction] Gemini returned no valid steps for ${recordingId}`,
+    );
   }
 
   // Assign screenshot paths from nearest frames
@@ -267,11 +308,18 @@ async function runExtractionPipeline(
   const avgConfidence = calculateConfidence(transitions, !!transcriptText);
 
   progressCallback?.(85, 'Storing workflow...');
-  await storeWorkflow(supabase, recordingId, orgId, recording.title, steps, avgConfidence);
+  await storeWorkflow(
+    supabase,
+    recordingId,
+    orgId,
+    recording.title,
+    steps,
+    avgConfidence,
+  );
   progressCallback?.(100, 'Workflow extraction complete');
 
   console.log(
-    `[WorkflowExtraction] Extracted ${steps.length} steps for ${recordingId} (confidence: ${avgConfidence.toFixed(2)})`
+    `[WorkflowExtraction] Extracted ${steps.length} steps for ${recordingId} (confidence: ${avgConfidence.toFixed(2)})`,
   );
 
   // TRIB-33: Enqueue the compile_wiki job as the next step in the pipeline.
@@ -283,7 +331,7 @@ async function runExtractionPipeline(
   } catch (error) {
     console.error(
       `[WorkflowExtraction] Failed to enqueue compile_wiki for ${recordingId}:`,
-      error
+      error,
     );
     // Intentionally swallowed — workflow_extraction succeeded.
   }
@@ -300,7 +348,7 @@ async function runExtractionPipeline(
  */
 async function enqueueCompileWikiAfterWorkflow(
   supabase: ReturnType<typeof createAdminClient>,
-  args: { recordingId: string; orgId: string }
+  args: { recordingId: string; orgId: string },
 ): Promise<void> {
   try {
     await enqueueCompileWikiJob(supabase, {
@@ -311,7 +359,7 @@ async function enqueueCompileWikiAfterWorkflow(
   } catch (error) {
     console.error(
       `[WorkflowExtraction] Failed to enqueue compile_wiki for ${args.recordingId}:`,
-      error
+      error,
     );
   }
 }
@@ -323,7 +371,7 @@ async function enqueueCompileWikiAfterWorkflow(
  */
 function correlateWithTranscript(
   transitions: UITransition[],
-  wordsJson: Array<{ word: string; startTime: number; endTime: number }> | null
+  wordsJson: Array<{ word: string; startTime: number; endTime: number }> | null,
 ): TransitionWithNarration[] {
   if (!wordsJson || wordsJson.length === 0) {
     return transitions.map((t) => ({ ...t, narration: '' }));
@@ -335,9 +383,9 @@ function correlateWithTranscript(
     const start = transition.timestamp - WINDOW_SEC;
     const end = transition.timestamp + WINDOW_SEC;
 
-    const nearbyWords = wordsJson
-      .filter((w) => w.startTime >= start && w.startTime <= end)
-      .map((w) => w.word);
+    const nearbyWords = wordsJson.flatMap((__item, __index, __array) =>
+      __item.startTime >= start && __item.startTime <= end ? [__item.word] : [],
+    );
 
     return {
       ...transition,
@@ -359,7 +407,7 @@ async function synthesizeWorkflowSteps(
     frameUrl: string | null;
   }>,
   transcript: string,
-  isLongRecording: boolean
+  isLongRecording: boolean,
 ): Promise<WorkflowStep[]> {
   const allUserData = [
     ...transitions.map((t) => `${t.fromState} ${t.toState} ${t.narration}`),
@@ -375,7 +423,9 @@ async function synthesizeWorkflowSteps(
       const fromState = sanitizeVisualDescription(t.fromState, 500);
       const toState = sanitizeVisualDescription(t.toState, 500);
       const narration = sanitizeVisualDescription(t.narration || '', 500);
-      const uiEls = t.uiElements.map((el) => sanitizeVisualDescription(el, 200));
+      const uiEls = t.uiElements.map((el) =>
+        sanitizeVisualDescription(el, 200),
+      );
 
       return (
         `[${formatTimestamp(t.timestamp)}] ${t.transitionType}: ${fromState} → ${toState}` +
@@ -390,7 +440,10 @@ async function synthesizeWorkflowSteps(
     .map((f) => {
       const desc = sanitizeVisualDescription(f.description, 500);
       const ocr = sanitizeVisualDescription(f.ocrText || '', 200);
-      return `[${formatTimestamp(f.timeSec)}] ${desc}` + (ocr ? ` | Text on screen: ${ocr}` : '');
+      return (
+        `[${formatTimestamp(f.timeSec)}] ${desc}` +
+        (ocr ? ` | Text on screen: ${ocr}` : '')
+      );
     })
     .join('\n');
 
@@ -459,7 +512,7 @@ Return ONLY a JSON array:
  */
 async function synthesizeFromTranscriptOnly(
   transcriptText: string,
-  isLongRecording: boolean
+  isLongRecording: boolean,
 ): Promise<WorkflowStep[]> {
   checkAndLogPII(transcriptText, 'workflow-extraction-transcript-only');
 
@@ -495,7 +548,10 @@ Return ONLY the JSON array.`;
     }
     return limited;
   } catch (error) {
-    console.error('[WorkflowExtraction] Gemini transcript-only synthesis failed:', error);
+    console.error(
+      '[WorkflowExtraction] Gemini transcript-only synthesis failed:',
+      error,
+    );
     return [];
   }
 }
@@ -505,7 +561,9 @@ function parseWorkflowSteps(responseText: string): WorkflowStep[] {
   try {
     let cleaned = responseText.trim();
     if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      cleaned = cleaned
+        .replace(/^```(?:json)?\s*\n?/, '')
+        .replace(/\n?```\s*$/, '');
     }
 
     const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
@@ -514,25 +572,37 @@ function parseWorkflowSteps(responseText: string): WorkflowStep[] {
     const parsed = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(parsed)) return [];
 
-    return parsed
-      .filter((s: unknown): s is Record<string, unknown> => {
-        const item = s as Record<string, unknown>;
-        return typeof item?.title === 'string' && (item.title as string).length > 0;
-      })
-      .map((s, i): WorkflowStep => ({
-        stepNumber: typeof s.stepNumber === 'number' ? s.stepNumber : i + 1,
-        title: String(s.title).slice(0, 200),
-        description: String(s.description ?? '').slice(0, 500),
-        action: String(s.action ?? 'unknown').slice(0, 50),
-        screenshotPath: null,
-        timestamp: typeof s.timestamp === 'number' ? s.timestamp : 0,
-        duration: typeof s.duration === 'number' ? s.duration : 0,
-        uiElements: Array.isArray(s.uiElements)
-          ? (s.uiElements as unknown[]).slice(0, 20).map((el) => String(el).slice(0, 100))
-          : [],
-      }));
+    return parsed.flatMap((s: unknown, i): WorkflowStep[] => {
+      const item = s as Record<string, unknown>;
+      if (
+        typeof item?.title !== 'string' ||
+        (item.title as string).length === 0
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          stepNumber:
+            typeof item.stepNumber === 'number' ? item.stepNumber : i + 1,
+          title: String(item.title).slice(0, 200),
+          description: String(item.description ?? '').slice(0, 500),
+          action: String(item.action ?? 'unknown').slice(0, 50),
+          screenshotPath: null,
+          timestamp: typeof item.timestamp === 'number' ? item.timestamp : 0,
+          duration: typeof item.duration === 'number' ? item.duration : 0,
+          uiElements: Array.isArray(item.uiElements)
+            ? (item.uiElements as unknown[])
+                .slice(0, 20)
+                .map((el) => String(el).slice(0, 100))
+            : [],
+        },
+      ];
+    });
   } catch {
-    console.error('[WorkflowExtraction] Failed to parse workflow steps from Gemini response');
+    console.error(
+      '[WorkflowExtraction] Failed to parse workflow steps from Gemini response',
+    );
     return [];
   }
 }
@@ -540,7 +610,7 @@ function parseWorkflowSteps(responseText: string): WorkflowStep[] {
 /** Find the nearest frame row to a given timestamp. */
 function findNearestFrame<T extends { frame_time_sec: number }>(
   timestamp: number,
-  frameRows: T[]
+  frameRows: T[],
 ): T | null {
   if (frameRows.length === 0) return null;
 
@@ -559,7 +629,10 @@ function findNearestFrame<T extends { frame_time_sec: number }>(
 }
 
 /** Calculate overall workflow confidence. */
-function calculateConfidence(transitions: UITransition[], hasTranscript: boolean): number {
+function calculateConfidence(
+  transitions: UITransition[],
+  hasTranscript: boolean,
+): number {
   if (transitions.length === 0) {
     return hasTranscript ? 0.5 : 0.3;
   }
@@ -579,10 +652,12 @@ async function storeWorkflow(
   orgId: string,
   title: string | null,
   steps: WorkflowStep[],
-  confidence: number
+  confidence: number,
 ): Promise<void> {
   if (steps.length === 0) {
-    console.warn(`[WorkflowExtraction] No steps extracted for ${recordingId}, skipping storage`);
+    console.warn(
+      `[WorkflowExtraction] No steps extracted for ${recordingId}, skipping storage`,
+    );
     return;
   }
 
@@ -594,29 +669,30 @@ async function storeWorkflow(
     .in('status', ['draft', 'published']);
 
   if (outdateError) {
-    throw new Error(`Failed to mark existing workflows as outdated for ${recordingId} (org ${orgId}): ${outdateError.message}`);
+    throw new Error(
+      `Failed to mark existing workflows as outdated for ${recordingId} (org ${orgId}): ${outdateError.message}`,
+    );
   }
 
   const workflowTitle = title
     ? `Workflow: ${title}`
     : `Workflow for recording ${recordingId.slice(0, 8)}`;
 
-  const { error: insertError } = await supabase
-    .from('workflows')
-    .insert({
-      content_id: recordingId,
-      org_id: orgId,
-      title: workflowTitle,
-      description: `${steps.length}-step workflow extracted from screen recording`,
-      steps: steps as unknown as Database['public']['Tables']['workflows']['Insert']['steps'],
-      step_count: steps.length,
-      status: 'draft' as const,
-      confidence,
-      metadata: {
-        extractedAt: new Date().toISOString(),
-        agentType: AGENT_TYPE,
-      },
-    });
+  const { error: insertError } = await supabase.from('workflows').insert({
+    content_id: recordingId,
+    org_id: orgId,
+    title: workflowTitle,
+    description: `${steps.length}-step workflow extracted from screen recording`,
+    steps:
+      steps as unknown as Database['public']['Tables']['workflows']['Insert']['steps'],
+    step_count: steps.length,
+    status: 'draft' as const,
+    confidence,
+    metadata: {
+      extractedAt: new Date().toISOString(),
+      agentType: AGENT_TYPE,
+    },
+  });
 
   if (insertError) {
     throw new Error(`Failed to store workflow: ${insertError.message}`);

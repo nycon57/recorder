@@ -18,7 +18,10 @@ import { createHash } from 'crypto';
 import { Redis } from '@upstash/redis';
 
 import { hierarchicalSearch } from '@/lib/services/hierarchical-search';
-import { vectorSearch, type SearchResult } from '@/lib/services/vector-search-google';
+import {
+  vectorSearch,
+  type SearchResult,
+} from '@/lib/services/vector-search-google';
 import { rerankResults, isCohereConfigured } from '@/lib/services/reranking';
 import { agenticSearch } from '@/lib/services/agentic-retrieval';
 
@@ -109,7 +112,10 @@ let redisClient: Redis | null = null;
 function getRedisClient(): Redis | null {
   if (!redisClient) {
     // Only initialize if credentials are available
-    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    if (
+      process.env.UPSTASH_REDIS_REST_URL &&
+      process.env.UPSTASH_REDIS_REST_TOKEN
+    ) {
       redisClient = new Redis({
         url: process.env.UPSTASH_REDIS_REST_URL,
         token: process.env.UPSTASH_REDIS_REST_TOKEN,
@@ -124,7 +130,11 @@ function getRedisClient(): Redis | null {
 /**
  * Generate cache key from query and options
  */
-function generateCacheKey(query: string, orgId: string, options?: RAGOptions): string {
+function generateCacheKey(
+  query: string,
+  orgId: string,
+  options?: RAGOptions,
+): string {
   const normalizedOptions = {
     limit: options?.limit || 5,
     minRelevance: options?.minRelevance || 0.7,
@@ -164,7 +174,7 @@ function generateCacheKey(query: string, orgId: string, options?: RAGOptions): s
 export async function injectRAGContext(
   query: string,
   orgId: string,
-  options?: RAGOptions
+  options?: RAGOptions,
 ): Promise<RAGContext> {
   const startTime = Date.now();
   const {
@@ -231,7 +241,6 @@ export async function injectRAGContext(
       searchResults = agenticResult.finalResults.slice(0, limit);
       agenticIterations = agenticResult.iterations.length;
       rerankingApplied = agenticResult.rerankingApplied || false;
-
     } else if (useHierarchical) {
       // Use hierarchical search for better document diversity
       searchMode = 'hierarchical';
@@ -245,19 +254,24 @@ export async function injectRAGContext(
       // Convert hierarchical results to standard format
       // Add defensive check to ensure hierarchicalResults is an array
       if (!hierarchicalResults || !Array.isArray(hierarchicalResults)) {
-        console.error('[ChatRAG] hierarchicalResults is not an array:', typeof hierarchicalResults);
+        console.error(
+          '[ChatRAG] hierarchicalResults is not an array:',
+          typeof hierarchicalResults,
+        );
         searchResults = [];
       } else {
         searchResults = hierarchicalResults.map((r) => ({
           id: r.id,
           contentId: r.contentId,
           contentTitle: r.contentTitle,
-          contentType: r.metadata.source === 'document' ? 'document' : 'recording',
+          contentType:
+            r.metadata.source === 'document' ? 'document' : 'recording',
           chunkText: r.chunkText,
           similarity: r.similarity,
           metadata: {
             ...r.metadata,
-            contentType: r.metadata.source === 'document' ? 'document' : 'recording',
+            contentType:
+              r.metadata.source === 'document' ? 'document' : 'recording',
           },
           createdAt: r.createdAt,
         }));
@@ -265,11 +279,10 @@ export async function injectRAGContext(
         // Apply filters
         if (contentIds && contentIds.length > 0) {
           searchResults = searchResults.filter((r) =>
-            contentIds.includes(r.contentId)
+            contentIds.includes(r.contentId),
           );
         }
       }
-
     } else {
       // Standard vector search
       searchMode = 'vector';
@@ -285,7 +298,12 @@ export async function injectRAGContext(
     }
 
     // Apply reranking if requested and not already done
-    if (enableReranking && !rerankingApplied && isCohereConfigured() && searchResults.length > 0) {
+    if (
+      enableReranking &&
+      !rerankingApplied &&
+      isCohereConfigured() &&
+      searchResults.length > 0
+    ) {
       const rerankResult = await rerankResults(query, searchResults, {
         topN: limit,
         timeoutMs: 500,
@@ -297,10 +315,15 @@ export async function injectRAGContext(
     // Filter by relevance threshold
     // Add defensive check to ensure searchResults is an array
     if (!searchResults || !Array.isArray(searchResults)) {
-      console.error('[ChatRAG] searchResults is not an array before filter:', typeof searchResults);
+      console.error(
+        '[ChatRAG] searchResults is not an array before filter:',
+        typeof searchResults,
+      );
       searchResults = [];
     } else {
-      searchResults = searchResults.filter((r) => r.similarity !== null && r.similarity >= minRelevance);
+      searchResults = searchResults.filter(
+        (r) => r.similarity !== null && r.similarity >= minRelevance,
+      );
       // Limit results
       searchResults = searchResults.slice(0, limit);
     }
@@ -335,7 +358,6 @@ export async function injectRAGContext(
     }
 
     return ragContext;
-
   } catch (error) {
     console.error('[ChatRAG] Error injecting context:', error);
 
@@ -426,24 +448,31 @@ export function formatSourcesForPrompt(sources: SearchResult[]): string {
  * @param sources - Search results to extract citations from
  * @returns Array of formatted source citations
  */
-export function extractSourceCitations(sources: SearchResult[]): SourceCitation[] {
+export function extractSourceCitations(
+  sources: SearchResult[],
+): SourceCitation[] {
   // Add defensive check
   if (!sources || !Array.isArray(sources)) {
-    console.error('[ChatRAG] extractSourceCitations received non-array:', typeof sources);
+    console.error(
+      '[ChatRAG] extractSourceCitations received non-array:',
+      typeof sources,
+    );
     return [];
   }
 
   return sources.map((source) => {
     // Generate URL based on source type
-    const url = source.metadata.source === 'transcript'
-      ? `/recordings/${source.contentId}?t=${source.metadata.startTime || 0}`
-      : `/recordings/${source.contentId}/document`;
+    const url =
+      source.metadata.source === 'transcript'
+        ? `/recordings/${source.contentId}?t=${source.metadata.startTime || 0}`
+        : `/recordings/${source.contentId}/document`;
 
     // Create excerpt (truncate if too long)
     const maxExcerptLength = 200;
-    const excerpt = source.chunkText.length > maxExcerptLength
-      ? source.chunkText.substring(0, maxExcerptLength) + '...'
-      : source.chunkText;
+    const excerpt =
+      source.chunkText.length > maxExcerptLength
+        ? source.chunkText.substring(0, maxExcerptLength) + '...'
+        : source.chunkText;
 
     return {
       id: source.id,
@@ -477,7 +506,7 @@ export async function cacheSearchResults(
   query: string,
   orgId: string,
   context: RAGContext,
-  options?: RAGOptions
+  options?: RAGOptions,
 ): Promise<void> {
   const redis = getRedisClient();
   if (!redis) return;
@@ -493,7 +522,7 @@ export async function cacheSearchResults(
       JSON.stringify({
         ...context,
         cachedAt: new Date().toISOString(),
-      })
+      }),
     );
 
     // Also store in a query hash index for analytics
@@ -501,10 +530,10 @@ export async function cacheSearchResults(
       .update(query.toLowerCase().trim())
       .digest('hex');
 
-    await redis.zadd(
-      `rag:queries:${orgId}`,
-      { score: Date.now(), member: queryHash }
-    );
+    await redis.zadd(`rag:queries:${orgId}`, {
+      score: Date.now(),
+      member: queryHash,
+    });
 
     console.log('[ChatRAG] Cached search results:', {
       query: query.substring(0, 50),
@@ -512,7 +541,6 @@ export async function cacheSearchResults(
       cacheKey,
       ttl,
     });
-
   } catch (error) {
     console.error('[ChatRAG] Failed to cache results:', error);
     // Don't throw - caching is optional
@@ -530,7 +558,7 @@ export async function cacheSearchResults(
 export async function getCachedSearchResults(
   query: string,
   orgId: string,
-  options?: RAGOptions
+  options?: RAGOptions,
 ): Promise<RAGContext | null> {
   const redis = getRedisClient();
   if (!redis) return null;
@@ -563,7 +591,6 @@ export async function getCachedSearchResults(
     }
 
     return null;
-
   } catch (error) {
     console.error('[ChatRAG] Failed to get cached results:', error);
     return null;
@@ -588,7 +615,6 @@ export async function clearCacheForOrg(orgId: string): Promise<number> {
 
     console.log('[ChatRAG] Cleared cache for org:', { orgId, cleared });
     return cleared;
-
   } catch (error) {
     console.error('[ChatRAG] Failed to clear cache:', error);
     return 0;
@@ -626,8 +652,12 @@ export async function getCacheStats(orgId: string): Promise<{
     const recentQueries = await redis.zcount(key, oneHourAgo, '+inf');
 
     // Get oldest and newest
-    const oldest = await redis.zrange(key, 0, 0, { withScores: true }) as Array<{ score: number; member: string }>;
-    const newest = await redis.zrange(key, -1, -1, { withScores: true }) as Array<{ score: number; member: string }>;
+    const oldest = (await redis.zrange(key, 0, 0, {
+      withScores: true,
+    })) as Array<{ score: number; member: string }>;
+    const newest = (await redis.zrange(key, -1, -1, {
+      withScores: true,
+    })) as Array<{ score: number; member: string }>;
 
     return {
       totalQueries,
@@ -635,7 +665,6 @@ export async function getCacheStats(orgId: string): Promise<{
       oldestQuery: oldest?.[0]?.score ? new Date(oldest[0].score) : undefined,
       newestQuery: newest?.[0]?.score ? new Date(newest[0].score) : undefined,
     };
-
   } catch (error) {
     console.error('[ChatRAG] Failed to get cache stats:', error);
     return {
@@ -650,7 +679,7 @@ export async function getCacheStats(orgId: string): Promise<{
  */
 function getSourceFilter(
   includeTranscripts: boolean,
-  includeDocuments: boolean
+  includeDocuments: boolean,
 ): 'transcript' | 'document' | undefined {
   if (includeTranscripts && !includeDocuments) return 'transcript';
   if (!includeTranscripts && includeDocuments) return 'document';
@@ -684,25 +713,31 @@ function estimateTokenCount(text: string): number {
  */
 export async function prewarmCache(
   orgId: string,
-  commonQueries: string[]
+  commonQueries: string[],
 ): Promise<void> {
-  console.log('[ChatRAG] Pre-warming cache for', commonQueries.length, 'queries');
+  console.log(
+    '[ChatRAG] Pre-warming cache for',
+    commonQueries.length,
+    'queries',
+  );
 
-  for (const query of commonQueries) {
-    try {
-      // Check if already cached
-      const cached = await getCachedSearchResults(query, orgId);
-      if (!cached) {
-        // Generate and cache
-        await injectRAGContext(query, orgId, {
-          enableCache: true,
-          useHierarchical: true,
-        });
+  await Promise.all(
+    Array.from(commonQueries).map(async (query) => {
+      try {
+        // Check if already cached
+        const cached = await getCachedSearchResults(query, orgId);
+        if (!cached) {
+          // Generate and cache
+          await injectRAGContext(query, orgId, {
+            enableCache: true,
+            useHierarchical: true,
+          });
+        }
+      } catch (error) {
+        console.error('[ChatRAG] Failed to pre-warm query:', query, error);
       }
-    } catch (error) {
-      console.error('[ChatRAG] Failed to pre-warm query:', query, error);
-    }
-  }
+    }),
+  );
 
   console.log('[ChatRAG] Cache pre-warming complete');
 }

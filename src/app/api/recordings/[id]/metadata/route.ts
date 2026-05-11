@@ -57,9 +57,7 @@ function getIdempotencyKey(
   body: MetadataRequest,
 ): string | undefined {
   return (
-    body.idempotencyKey ||
-    request.headers.get('Idempotency-Key') ||
-    undefined
+    body.idempotencyKey || request.headers.get('Idempotency-Key') || undefined
   );
 }
 
@@ -376,9 +374,7 @@ export const POST = apiHandler(
         metadata: {
           ...recordingMetadata,
           ...submittedMetadata,
-          ...(idempotencyKey
-            ? { upload_idempotency_key: idempotencyKey }
-            : {}),
+          ...(idempotencyKey ? { upload_idempotency_key: idempotencyKey } : {}),
           metadata_submitted_at: new Date().toISOString(),
           thumbnail_uploaded: thumbnailUploaded || false,
         },
@@ -430,48 +426,52 @@ export const POST = apiHandler(
         });
 
         // For each tag, check if it exists or create it
-        const tagIds: string[] = [];
+        const tagIds = (
+          await Promise.all(
+            [...new Set(tags)].map(async (tagName) => {
+              // Check if tag exists
+              const { data: existingTag } = await supabase
+                .from('tags')
+                .select('id')
+                .eq('org_id', orgId)
+                .eq('name', tagName)
+                .maybeSingle();
 
-        for (const tagName of tags) {
-          // Check if tag exists
-          const { data: existingTag } = await supabase
-            .from('tags')
-            .select('id')
-            .eq('org_id', orgId)
-            .eq('name', tagName)
-            .maybeSingle();
+              if (existingTag) {
+                return existingTag.id;
+              }
 
-          if (existingTag) {
-            tagIds.push(existingTag.id);
-          } else {
-            // Create new tag
-            const { data: newTag, error: tagError } = await supabase
-              .from('tags')
-              .insert({
-                org_id: orgId,
-                name: tagName,
-                created_by: userId,
-              })
-              .select('id')
-              .single();
+              // Create new tag
+              const { data: newTag, error: tagError } = await supabase
+                .from('tags')
+                .insert({
+                  org_id: orgId,
+                  name: tagName,
+                  created_by: userId,
+                })
+                .select('id')
+                .single();
 
-            if (tagError) {
-              logger.error('Failed to create tag', {
-                context: { requestId, recordingId, tagName },
-                error: tagError as Error,
-              });
-              // Continue with other tags
-              continue;
-            }
+              if (tagError) {
+                logger.error('Failed to create tag', {
+                  context: { requestId, recordingId, tagName },
+                  error: tagError as Error,
+                });
+                // Continue with other tags
+                return null;
+              }
 
-            if (newTag) {
-              tagIds.push(newTag.id);
-              logger.info('Tag created', {
-                context: { requestId, tagName, tagId: newTag.id },
-              });
-            }
-          }
-        }
+              if (newTag) {
+                logger.info('Tag created', {
+                  context: { requestId, tagName, tagId: newTag.id },
+                });
+                return newTag.id;
+              }
+
+              return null;
+            }),
+          )
+        ).filter((tagId): tagId is string => Boolean(tagId));
 
         // Associate tags with recording
         if (tagIds.length > 0) {

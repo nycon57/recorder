@@ -20,7 +20,7 @@ import type { VendorApiKeyScope } from '@/lib/types/database';
 // Types
 // ---------------------------------------------------------------------------
 
-export interface ApiKeyAuthResult {
+interface ApiKeyAuthResult {
   orgId: string;
   configId: string;
   scopes: VendorApiKeyScope[];
@@ -28,7 +28,7 @@ export interface ApiKeyAuthResult {
   keyId: string;
 }
 
-export interface SessionAuthResult {
+interface SessionAuthResult {
   orgId: string;
   userId: string;
   role: string | null;

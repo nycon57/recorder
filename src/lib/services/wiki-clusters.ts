@@ -51,7 +51,7 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger({ service: 'wiki-clusters' });
 
-export interface ClusterSummary {
+interface ClusterSummary {
   id: string;
   name: string;
   memberCount: number;
@@ -111,9 +111,7 @@ const MAX_EDGES = 100_000;
  * the caller can surface them; the cron handler catches per-org errors
  * and continues with the next org.
  */
-export async function runClusterDetection(
-  orgId: string
-): Promise<ClusterResult> {
+async function runClusterDetection(orgId: string): Promise<ClusterResult> {
   const start = Date.now();
   const supabase = createAdminClient() as unknown as AnySupabase;
 
@@ -131,7 +129,7 @@ export async function runClusterDetection(
 
   if (pagesError) {
     throw new Error(
-      `Failed to fetch org_wiki_pages for ${orgId}: ${pagesError.message}`
+      `Failed to fetch org_wiki_pages for ${orgId}: ${pagesError.message}`,
     );
   }
 
@@ -178,7 +176,7 @@ export async function runClusterDetection(
 
   if (edgesError) {
     throw new Error(
-      `Failed to fetch wiki_relationships for ${orgId}: ${edgesError.message}`
+      `Failed to fetch wiki_relationships for ${orgId}: ${edgesError.message}`,
     );
   }
 
@@ -204,7 +202,7 @@ export async function runClusterDetection(
   // directions exist. We normalise the endpoint pair so the smaller id is
   // always "u" — this makes the merge deterministic.
   const graph = new Graph<{ topic: string }, { weight: number; count: number }>(
-    { type: 'undirected', multi: false, allowSelfLoops: false }
+    { type: 'undirected', multi: false, allowSelfLoops: false },
   );
 
   // Add every active page as a node — even isolated ones with zero edges.
@@ -380,14 +378,14 @@ export async function runClusterDetection(
 
   if (insertError) {
     throw new Error(
-      `Failed to insert wiki_clusters for ${orgId}: ${insertError.message}`
+      `Failed to insert wiki_clusters for ${orgId}: ${insertError.message}`,
     );
   }
 
   const inserted = (insertedRaw ?? []) as Array<{ id: string }>;
   if (inserted.length !== pendingClusters.length) {
     throw new Error(
-      `wiki_clusters insert count mismatch: expected ${pendingClusters.length}, got ${inserted.length}`
+      `wiki_clusters insert count mismatch: expected ${pendingClusters.length}, got ${inserted.length}`,
     );
   }
 
@@ -413,7 +411,7 @@ export async function runClusterDetection(
 
   if (clearError) {
     throw new Error(
-      `Failed to clear org_wiki_pages.cluster_id for ${orgId}: ${clearError.message}`
+      `Failed to clear org_wiki_pages.cluster_id for ${orgId}: ${clearError.message}`,
     );
   }
 
@@ -429,18 +427,19 @@ export async function runClusterDetection(
     list.push(pageId);
   }
 
-  for (const [clusterId, pageIds] of pagesByCluster.entries()) {
-    const { error: updateError } = await supabase
-      .from('org_wiki_pages')
-      .update({ cluster_id: clusterId } as never)
-      .in('id', pageIds);
-
-    if (updateError) {
-      throw new Error(
-        `Failed to assign cluster_id ${clusterId} to pages for ${orgId}: ${updateError.message}`
-      );
-    }
-  }
+  await Promise.all(
+    Array.from(pagesByCluster.entries()).map(async ([clusterId, pageIds]) => {
+      const { error: updateError } = await supabase
+        .from('org_wiki_pages')
+        .update({ cluster_id: clusterId } as never)
+        .in('id', pageIds);
+      if (updateError) {
+        throw new Error(
+          `Failed to assign cluster_id ${clusterId} to pages for ${orgId}: ${updateError.message}`,
+        );
+      }
+    }),
+  );
 
   const durationMs = Date.now() - start;
 
@@ -499,18 +498,20 @@ export async function runClusterDetectionAllOrgs(): Promise<{
   const results: ClusterResult[] = [];
   let orgsFailed = 0;
 
-  for (const orgId of orgIds) {
-    try {
-      const result = await runClusterDetection(orgId);
-      results.push(result);
-    } catch (error) {
-      orgsFailed++;
-      logger.error('Cluster detection failed for org', {
-        context: { orgId },
-        error: error instanceof Error ? error : new Error(String(error)),
-      });
-    }
-  }
+  await Promise.all(
+    Array.from(orgIds).map(async (orgId) => {
+      try {
+        const result = await runClusterDetection(orgId);
+        results.push(result);
+      } catch (error) {
+        orgsFailed++;
+        logger.error('Cluster detection failed for org', {
+          context: { orgId },
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
+      }
+    }),
+  );
 
   return {
     orgsProcessed: results.length,
@@ -539,7 +540,7 @@ function deriveClusterName(topic: string): string {
  */
 async function clearExistingClusters(
   supabase: AnySupabase,
-  orgId: string
+  orgId: string,
 ): Promise<void> {
   const { error } = await supabase
     .from('wiki_clusters')
@@ -548,7 +549,7 @@ async function clearExistingClusters(
 
   if (error) {
     throw new Error(
-      `Failed to clear wiki_clusters for ${orgId}: ${error.message}`
+      `Failed to clear wiki_clusters for ${orgId}: ${error.message}`,
     );
   }
 }
@@ -611,7 +612,12 @@ export async function resolveClusterContext(args: {
     cluster_id: string | null;
   }>;
   const clusterIds = Array.from(
-    new Set(baseRows.map((r) => r.cluster_id).filter((id): id is string => !!id))
+    new Set(
+      baseRows.flatMap((__item, __index, __array) => {
+        const __mapped = __item.cluster_id;
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   );
 
   if (clusterIds.length === 0) return [];

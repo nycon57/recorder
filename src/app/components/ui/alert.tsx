@@ -40,6 +40,7 @@ function Alert({
 
 function AlertTitle({
   className,
+  children,
   ...props
 }: React.ComponentProps<'h5'>) {
   return (
@@ -47,7 +48,9 @@ function AlertTitle({
       data-slot="alert-title"
       className={cn('mb-1 font-medium leading-none tracking-tight', className)}
       {...props}
-    />
+    >
+      {children}
+    </h5>
   );
 }
 

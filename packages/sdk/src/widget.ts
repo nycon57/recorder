@@ -327,8 +327,11 @@ export class Widget {
 
     // Auto-resize textarea
     this.input.addEventListener('input', () => {
-      this.input.style.height = 'auto';
-      this.input.style.height = `${Math.min(this.input.scrollHeight, 120)}px`;
+      this.input.style.setProperty('height', 'auto');
+      this.input.style.setProperty(
+        'height',
+        `${Math.min(this.input.scrollHeight, 120)}px`
+      );
     });
 
     // Close on Escape

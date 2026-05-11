@@ -316,4 +316,4 @@ export function FormDialog<
  * type SchemaType = InferSchema<typeof schema> // { name: string }
  * ```
  */
-export type InferSchema<T extends z.ZodType> = z.infer<T>
+type InferSchema<T extends z.ZodType> = z.infer<T>

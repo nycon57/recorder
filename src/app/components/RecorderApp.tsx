@@ -8,7 +8,7 @@
  * Estimated savings: ~200KB+ initial bundle reduction
  */
 
-import { useState, useEffect } from 'react';
+import { useEffect, useReducer } from 'react';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 
@@ -24,16 +24,19 @@ const RecorderInterface = dynamic(
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <Loader2 className="size-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading recording studio...</p>
+          <p className="text-muted-foreground">Loading recording studio…</p>
         </div>
       </div>
     ),
     ssr: false, // Recording requires browser APIs
-  }
+  },
 );
 
 export default function RecorderApp() {
-  const [isSupported, setIsSupported] = useState<boolean | null>(null);
+  const [isSupported, setIsSupported] = useReducer(
+    (_state: boolean | null, nextState: boolean) => nextState,
+    null,
+  );
 
   useEffect(() => {
     // Check browser support
@@ -59,9 +62,9 @@ export default function RecorderApp() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full size-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-muted-foreground">
-            Checking browser compatibility...
+            Checking browser compatibility…
           </p>
         </div>
       </div>

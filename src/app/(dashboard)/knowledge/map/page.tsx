@@ -1,10 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, useReducer, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { Brain, List, Network, Hash, AlertCircle, Info, Sparkles, Upload, Activity, Filter, ExternalLink, ArrowRight } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
+import {
+  Brain,
+  List,
+  Network,
+  Hash,
+  AlertCircle,
+  Info,
+  Sparkles,
+  Upload,
+  Activity,
+  Filter,
+  ExternalLink,
+  ArrowRight,
+} from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { AnimatePresence, m } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -64,7 +77,60 @@ import {
 } from '@/lib/utils/knowledge-status';
 
 type ViewMode = 'graph' | 'list';
-type SortOption = 'mention_count_desc' | 'last_seen_desc' | 'name_asc' | 'name_desc';
+type SortOption =
+  | 'mention_count_desc'
+  | 'last_seen_desc'
+  | 'name_asc'
+  | 'name_desc';
+
+type KnowledgeMapState = {
+  selectedConceptId: string | null;
+  selectedGraphNodeId: string | null;
+  focusedClusterNodeId: string | null;
+  selectedTypes: ConceptType[];
+  sortBy: SortOption;
+  graphSearch: string;
+  includeSuperseded: boolean;
+  selectedNodeKinds: CanvasNodeKindFilter[];
+  selectedEdgeKinds: CanvasEdgeKindFilter[];
+  graphNodes: KnowledgeGraphData['nodes'];
+  graphEdges: KnowledgeGraphData['edges'];
+  graphMeta: KnowledgeGraphPayload['meta'] | null;
+  concepts: Concept[];
+  knowledgeStatusCounts: KnowledgeStatusCounts | null;
+  loading: boolean;
+  error: string | null;
+};
+
+type KnowledgeMapAction =
+  | Partial<KnowledgeMapState>
+  | ((state: KnowledgeMapState) => KnowledgeMapState);
+
+const initialKnowledgeMapState: KnowledgeMapState = {
+  selectedConceptId: null,
+  selectedGraphNodeId: null,
+  focusedClusterNodeId: null,
+  selectedTypes: [],
+  sortBy: 'mention_count_desc',
+  graphSearch: '',
+  includeSuperseded: false,
+  selectedNodeKinds: [...CANVAS_NODE_KIND_FILTERS],
+  selectedEdgeKinds: [...CANVAS_EDGE_KIND_FILTERS],
+  graphNodes: [],
+  graphEdges: [],
+  graphMeta: null,
+  concepts: [],
+  knowledgeStatusCounts: null,
+  loading: true,
+  error: null,
+};
+
+function knowledgeMapReducer(
+  state: KnowledgeMapState,
+  action: KnowledgeMapAction,
+): KnowledgeMapState {
+  return typeof action === 'function' ? action(state) : { ...state, ...action };
+}
 
 const NODE_KIND_LABELS: Record<CanvasNodeKindFilter, string> = {
   org_page: 'Org pages',
@@ -124,54 +190,62 @@ const CLUSTER_HULL_COLORS = [
  * - Empty state when no concepts
  */
 function KnowledgePageContent() {
+  return useKnowledgePageContentImplementation();
+}
+
+function useKnowledgePageContentImplementation() {
+  const { push } = useRouter();
   const searchParams = useSearchParams();
-  const requestedView = searchParams.get('view');
-  const originPageId = searchParams.get('originPage');
+  const getSearchParam = searchParams.get.bind(searchParams);
+  const requestedView = getSearchParam('view');
+  const originPageId = getSearchParam('originPage');
 
   // View state
-  const [viewMode, setViewMode] = useState<ViewMode>(
-    requestedView === 'list' ? 'list' : 'graph'
+  const viewMode: ViewMode = requestedView === 'list' ? 'list' : 'graph';
+  const viewHref = useCallback(
+    (nextViewMode: ViewMode) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextViewMode === 'list') {
+        params.set('view', 'list');
+      } else {
+        params.delete('view');
+      }
+      const query = params.toString();
+      return query ? `/knowledge/map?${query}` : '/knowledge/map';
+    },
+    [searchParams],
   );
-  const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
-  const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
-  const [focusedClusterNodeId, setFocusedClusterNodeId] = useState<string | null>(
-    null
-  );
-
-  // Filter state
-  const [selectedTypes, setSelectedTypes] = useState<ConceptType[]>([]);
-  const [sortBy, setSortBy] = useState<SortOption>('mention_count_desc');
-  const [graphSearch, setGraphSearch] = useState('');
-  const [includeSuperseded, setIncludeSuperseded] = useState(false);
-  const [selectedNodeKinds, setSelectedNodeKinds] = useState<CanvasNodeKindFilter[]>(
-    [...CANVAS_NODE_KIND_FILTERS]
-  );
-  const [selectedEdgeKinds, setSelectedEdgeKinds] = useState<CanvasEdgeKindFilter[]>(
-    [...CANVAS_EDGE_KIND_FILTERS]
-  );
-
-  // Data state
-  const [graphNodes, setGraphNodes] = useState<KnowledgeGraphData['nodes']>([]);
-  const [graphEdges, setGraphEdges] = useState<KnowledgeGraphData['edges']>([]);
-  const [graphMeta, setGraphMeta] = useState<KnowledgeGraphPayload['meta'] | null>(
-    null
-  );
-  const [concepts, setConcepts] = useState<Concept[]>([]);
-  const [knowledgeStatusCounts, setKnowledgeStatusCounts] =
-    useState<KnowledgeStatusCounts | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [
+    {
+      selectedConceptId,
+      selectedGraphNodeId,
+      focusedClusterNodeId,
+      selectedTypes,
+      sortBy,
+      graphSearch,
+      includeSuperseded,
+      selectedNodeKinds,
+      selectedEdgeKinds,
+      graphNodes,
+      graphEdges,
+      graphMeta,
+      concepts,
+      knowledgeStatusCounts,
+      loading,
+      error,
+    },
+    updateKnowledgeMapState,
+  ] = useReducer(knowledgeMapReducer, initialKnowledgeMapState);
 
   // Stable fetch function that takes params explicitly to avoid stale closures
   const fetchGraphData = useCallback(
     async (
       sort: SortOption,
       includeSupersededRecords: boolean,
-      signal: AbortSignal
+      signal: AbortSignal,
     ) => {
       try {
-        setLoading(true);
-        setError(null);
+        updateKnowledgeMapState({ loading: true, error: null });
 
         // Build query params for operational page graph
         const graphParams = new URLSearchParams({
@@ -191,15 +265,20 @@ function KnowledgePageContent() {
         conceptParams.set('sort', sort);
         conceptParams.set('limit', '100');
 
-        const [graphResponse, conceptResponse, healthResponse] = await Promise.all([
-          fetch(`/api/knowledge/graph?${graphParams.toString()}`, { signal }),
-          fetch(`/api/knowledge/concepts?${conceptParams.toString()}`, { signal }),
-          fetch('/api/dashboard/knowledge-health', { signal }),
-        ]);
+        const [graphResponse, conceptResponse, healthResponse] =
+          await Promise.all([
+            fetch(`/api/knowledge/graph?${graphParams.toString()}`, { signal }),
+            fetch(`/api/knowledge/concepts?${conceptParams.toString()}`, {
+              signal,
+            }),
+            fetch('/api/dashboard/knowledge-health', { signal }),
+          ]);
 
         if (!graphResponse.ok) {
           const errorData = await graphResponse.json().catch(() => ({}));
-          throw new Error(errorData.error?.message || 'Failed to fetch knowledge graph');
+          throw new Error(
+            errorData.error?.message || 'Failed to fetch knowledge graph',
+          );
         }
 
         if (!conceptResponse.ok) {
@@ -210,9 +289,11 @@ function KnowledgePageContent() {
           throw new Error('Failed to fetch knowledge status');
         }
 
-        const graphResult = await graphResponse.json();
-        const conceptResult = await conceptResponse.json();
-        const healthResult = await healthResponse.json();
+        const [graphResult, conceptResult, healthResult] = await Promise.all([
+          graphResponse.json(),
+          conceptResponse.json(),
+          healthResponse.json(),
+        ]);
         const payload = (graphResult.data || {
           nodes: [],
           edges: [],
@@ -223,30 +304,40 @@ function KnowledgePageContent() {
         // Check if aborted before updating state
         if (signal.aborted) return;
 
-        setGraphNodes(canvasGraph.nodes);
-        setGraphEdges(canvasGraph.edges);
-        setGraphMeta(payload.meta ?? null);
+        updateKnowledgeMapState({
+          graphNodes: canvasGraph.nodes,
+          graphEdges: canvasGraph.edges,
+          graphMeta: payload.meta ?? null,
+        });
 
         // Check if aborted before updating state
         if (signal.aborted) return;
 
-        setConcepts(conceptResult.data?.concepts || []);
-        setKnowledgeStatusCounts(healthResult.data?.knowledgeStatus?.counts ?? null);
+        updateKnowledgeMapState({
+          concepts: conceptResult.data?.concepts || [],
+          knowledgeStatusCounts:
+            healthResult.data?.knowledgeStatus?.counts ?? null,
+        });
       } catch (err) {
         // Ignore abort errors
         if (err instanceof Error && err.name === 'AbortError') {
           return;
         }
         console.error('Error fetching graph data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load knowledge graph');
+        updateKnowledgeMapState({
+          error:
+            err instanceof Error
+              ? err.message
+              : 'Failed to load knowledge graph',
+        });
       } finally {
         // Only clear loading if not aborted
         if (!signal.aborted) {
-          setLoading(false);
+          updateKnowledgeMapState({ loading: false });
         }
       }
     },
-    [] // No dependencies - all values passed as params
+    [], // No dependencies - all values passed as params
   );
 
   // Fetch data when sortBy changes (including initial mount)
@@ -260,19 +351,17 @@ function KnowledgePageContent() {
     };
   }, [fetchGraphData, includeSuperseded, sortBy]);
 
-  // Graph nodes represent operational wiki pages, not concepts.
-  // Close concept detail panel when switching to graph mode.
-  useEffect(() => {
-    if (viewMode === 'graph' && selectedConceptId) {
-      setSelectedConceptId(null);
-    }
-  }, [viewMode, selectedConceptId]);
-
-  useEffect(() => {
-    if (viewMode !== 'graph' && selectedGraphNodeId) {
-      setSelectedGraphNodeId(null);
-    }
-  }, [selectedGraphNodeId, viewMode]);
+  const handleViewModeChange = useCallback(
+    (mode: ViewMode) => {
+      push(viewHref(mode));
+      if (mode === 'graph') {
+        updateKnowledgeMapState({ selectedConceptId: null });
+        return;
+      }
+      updateKnowledgeMapState({ selectedGraphNodeId: null });
+    },
+    [push, viewHref],
+  );
 
   const baseFilteredGraph = useMemo(
     () =>
@@ -285,20 +374,22 @@ function KnowledgePageContent() {
           nodeKinds: selectedNodeKinds,
           edgeKinds: selectedEdgeKinds,
           search: graphSearch,
-        }
+        },
       ),
-    [graphEdges, graphNodes, graphSearch, selectedEdgeKinds, selectedNodeKinds]
+    [graphEdges, graphNodes, graphSearch, selectedEdgeKinds, selectedNodeKinds],
   );
 
   const clusterHulls = useMemo(
     () => buildCanvasClusterHulls(baseFilteredGraph),
-    [baseFilteredGraph]
+    [baseFilteredGraph],
   );
 
   useEffect(() => {
     if (!focusedClusterNodeId) return;
-    if (!clusterHulls.some((hull) => hull.clusterNodeId === focusedClusterNodeId)) {
-      setFocusedClusterNodeId(null);
+    if (
+      !clusterHulls.some((hull) => hull.clusterNodeId === focusedClusterNodeId)
+    ) {
+      updateKnowledgeMapState({ focusedClusterNodeId: null });
     }
   }, [clusterHulls, focusedClusterNodeId]);
 
@@ -306,7 +397,7 @@ function KnowledgePageContent() {
     if (!focusedClusterNodeId) return baseFilteredGraph;
 
     const focusedHull = clusterHulls.find(
-      (hull) => hull.clusterNodeId === focusedClusterNodeId
+      (hull) => hull.clusterNodeId === focusedClusterNodeId,
     );
     if (!focusedHull) return baseFilteredGraph;
 
@@ -317,11 +408,11 @@ function KnowledgePageContent() {
     ]);
 
     const nodes = baseFilteredGraph.nodes.filter((node) =>
-      includedNodeIds.has(node.id)
+      includedNodeIds.has(node.id),
     );
     const nodeIds = new Set(nodes.map((node) => node.id));
     const edges = baseFilteredGraph.edges.filter(
-      (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)
+      (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target),
     );
 
     return {
@@ -329,21 +420,6 @@ function KnowledgePageContent() {
       edges,
     };
   }, [baseFilteredGraph, clusterHulls, focusedClusterNodeId]);
-
-  useEffect(() => {
-    if (!selectedGraphNodeId) return;
-    if (!filteredGraph.nodes.some((node) => node.id === selectedGraphNodeId)) {
-      setSelectedGraphNodeId(null);
-    }
-  }, [filteredGraph.nodes, selectedGraphNodeId]);
-
-  useEffect(() => {
-    setViewMode(
-      requestedView === 'graph' || requestedView === 'list'
-        ? requestedView
-        : 'graph'
-    );
-  }, [requestedView]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -378,70 +454,88 @@ function KnowledgePageContent() {
 
   // Handle concept click
   const handleConceptClick = useCallback((conceptId: string) => {
-    setSelectedConceptId(conceptId);
+    updateKnowledgeMapState({ selectedConceptId: conceptId });
   }, []);
 
   const handleClosePanel = useCallback(() => {
-    setSelectedConceptId(null);
+    updateKnowledgeMapState({ selectedConceptId: null });
   }, []);
 
   // Clear list filters
   const handleClearFilters = useCallback(() => {
-    setSelectedTypes([]);
+    updateKnowledgeMapState({ selectedTypes: [] });
   }, []);
 
   const handleGraphNodeClick = useCallback((nodeId: string) => {
-    setSelectedGraphNodeId(nodeId);
+    updateKnowledgeMapState({ selectedGraphNodeId: nodeId });
   }, []);
 
   const toggleNodeKind = useCallback((kind: CanvasNodeKindFilter) => {
-    setSelectedNodeKinds((current) => {
-      if (current.includes(kind)) {
-        if (current.length === 1) {
-          return current;
+    updateKnowledgeMapState((state) => {
+      if (state.selectedNodeKinds.includes(kind)) {
+        if (state.selectedNodeKinds.length === 1) {
+          return state;
         }
-        return current.filter((item) => item !== kind);
+        return {
+          ...state,
+          selectedNodeKinds: state.selectedNodeKinds.filter(
+            (item) => item !== kind,
+          ),
+        };
       }
-      return [...current, kind];
+      return {
+        ...state,
+        selectedNodeKinds: [...state.selectedNodeKinds, kind],
+      };
     });
   }, []);
 
   const toggleEdgeKind = useCallback((kind: CanvasEdgeKindFilter) => {
-    setSelectedEdgeKinds((current) => {
-      if (current.includes(kind)) {
-        if (current.length === 1) {
-          return current;
+    updateKnowledgeMapState((state) => {
+      if (state.selectedEdgeKinds.includes(kind)) {
+        if (state.selectedEdgeKinds.length === 1) {
+          return state;
         }
-        return current.filter((item) => item !== kind);
+        return {
+          ...state,
+          selectedEdgeKinds: state.selectedEdgeKinds.filter(
+            (item) => item !== kind,
+          ),
+        };
       }
-      return [...current, kind];
+      return {
+        ...state,
+        selectedEdgeKinds: [...state.selectedEdgeKinds, kind],
+      };
     });
   }, []);
 
   const handleResetGraphFilters = useCallback(() => {
-    setGraphSearch('');
-    setSelectedNodeKinds([...CANVAS_NODE_KIND_FILTERS]);
-    setSelectedEdgeKinds([...CANVAS_EDGE_KIND_FILTERS]);
-    setFocusedClusterNodeId(null);
+    updateKnowledgeMapState({
+      graphSearch: '',
+      selectedNodeKinds: [...CANVAS_NODE_KIND_FILTERS],
+      selectedEdgeKinds: [...CANVAS_EDGE_KIND_FILTERS],
+      focusedClusterNodeId: null,
+    });
   }, []);
 
   // Keyboard shortcuts
   useKeyboardShortcuts([
     {
       key: 'g',
-      handler: () => setViewMode('graph'),
+      handler: () => handleViewModeChange('graph'),
       description: 'Switch to graph view',
     },
     {
       key: 'l',
-      handler: () => setViewMode('list'),
+      handler: () => handleViewModeChange('list'),
       description: 'Switch to list view',
     },
     {
       key: 'Escape',
       handler: () => {
         if (viewMode === 'graph' && selectedGraphNodeId) {
-          setSelectedGraphNodeId(null);
+          updateKnowledgeMapState({ selectedGraphNodeId: null });
           return;
         }
         if (viewMode === 'list' && selectedConceptId) {
@@ -453,15 +547,16 @@ function KnowledgePageContent() {
     },
   ]);
 
-  const selectedGraphNode = useMemo(
-    () =>
+  const selectedGraphNode = useMemo(() => {
+    if (!selectedGraphNodeId) return null;
+    return (
       filteredGraph.nodes.find((node) => node.id === selectedGraphNodeId) ??
-      null,
-    [filteredGraph.nodes, selectedGraphNodeId]
-  );
+      null
+    );
+  }, [filteredGraph.nodes, selectedGraphNodeId]);
 
   const connectedGraphNodes = useMemo(() => {
-    if (!selectedGraphNodeId) return [];
+    if (!selectedGraphNode) return [];
 
     const connectionMap = new Map<
       string,
@@ -469,14 +564,14 @@ function KnowledgePageContent() {
     >();
 
     filteredGraph.edges.forEach((edge) => {
-      if (edge.source === selectedGraphNodeId) {
+      if (edge.source === selectedGraphNode.id) {
         connectionMap.set(edge.target, {
           edgeType: edge.relationshipType ?? edge.type,
           edgeKind: edge.edgeKind ?? 'org_relationship',
           strength: edge.strength,
         });
       }
-      if (edge.target === selectedGraphNodeId) {
+      if (edge.target === selectedGraphNode.id) {
         connectionMap.set(edge.source, {
           edgeType: edge.relationshipType ?? edge.type,
           edgeKind: edge.edgeKind ?? 'org_relationship',
@@ -486,15 +581,23 @@ function KnowledgePageContent() {
     });
 
     return filteredGraph.nodes
-      .filter((node) => connectionMap.has(node.id))
-      .map((node) => ({
-        node,
-        edgeType: connectionMap.get(node.id)?.edgeType ?? 'related',
-        edgeKind: connectionMap.get(node.id)?.edgeKind ?? 'org_relationship',
-        strength: connectionMap.get(node.id)?.strength ?? 0,
-      }))
+      .flatMap((__item, __index, __array) =>
+        connectionMap.has(__item.id)
+            ? [
+                {
+                  node: __item,
+                  edgeType:
+                    connectionMap.get(__item.id)?.edgeType ?? 'related',
+                  edgeKind:
+                    connectionMap.get(__item.id)?.edgeKind ??
+                    'org_relationship',
+                  strength: connectionMap.get(__item.id)?.strength ?? 0,
+                },
+              ]
+          : [],
+      )
       .sort((left, right) => right.node.mentionCount - left.node.mentionCount);
-  }, [filteredGraph.edges, filteredGraph.nodes, selectedGraphNodeId]);
+  }, [filteredGraph.edges, filteredGraph.nodes, selectedGraphNode]);
 
   const selectedGraphNodeKnowledgeHref = selectedGraphNode?.rawId
     ? `/dashboard/knowledge/pages/${selectedGraphNode.rawId}`
@@ -540,13 +643,14 @@ function KnowledgePageContent() {
     : null;
 
   const focusedHull = focusedClusterNodeId
-    ? clusterHulls.find((hull) => hull.clusterNodeId === focusedClusterNodeId) ?? null
+    ? (clusterHulls.find(
+        (hull) => hull.clusterNodeId === focusedClusterNodeId,
+      ) ?? null)
     : null;
 
   // Check if we have any data
-  const hasData = viewMode === 'graph'
-    ? filteredGraph.nodes.length > 0
-    : concepts.length > 0;
+  const hasData =
+    viewMode === 'graph' ? filteredGraph.nodes.length > 0 : concepts.length > 0;
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
@@ -558,25 +662,29 @@ function KnowledgePageContent() {
           <div className="space-y-2">
             <div className="flex items-center gap-3">
               <h1 className="text-heading-3 font-outfit tracking-tight flex items-center gap-3">
-                <Brain className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
+                <Brain className="size-7 sm:size-8 text-primary" />
                 Knowledge Graph
               </h1>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Info className="h-5 w-5 text-muted-foreground cursor-help" />
+                    <Info className="size-5 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[320px] p-4">
                     <div className="space-y-2">
-                      <p className="font-medium">How operational graph nodes are created</p>
-                      <p className="text-xs text-muted-foreground">
-                        Org wiki pages are compiled from your recordings/documents, vendor
-                        pages come from source documentation, and clusters are derived from
-                        page relationships.
+                      <p className="font-medium">
+                        How operational graph nodes are created
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        This graph shows relationships, cluster memberships, and vendor
-                        matches so you can inspect operational coverage in one canvas.
+                        Org wiki pages are compiled from your
+                        recordings/documents, vendor pages come from source
+                        documentation, and clusters are derived from page
+                        relationships.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        This graph shows relationships, cluster memberships, and
+                        vendor matches so you can inspect operational coverage
+                        in one canvas.
                       </p>
                     </div>
                   </TooltipContent>
@@ -590,52 +698,72 @@ function KnowledgePageContent() {
 
           {/* Right: Health link + View mode toggle */}
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            <Button asChild variant="outline" size="sm" className="min-h-[44px]">
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="min-h-[44px]"
+            >
               <Link href="/knowledge/health">
-                <Activity className="h-4 w-4 mr-2" aria-hidden="true" />
+                <Activity className="size-4 mr-2" aria-hidden="true" />
                 Health
               </Link>
             </Button>
-          <div className="flex items-center border rounded-lg p-1 bg-muted/20 w-full sm:w-auto" role="group" aria-label="View mode selection">
-            <Button
-              variant={viewMode === 'graph' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('graph')}
-              className="flex-1 sm:flex-none gap-2 min-h-[44px]"
-              aria-label="Graph view"
-              aria-pressed={viewMode === 'graph'}
+            <div
+              className="flex items-center border rounded-lg p-1 bg-muted/20 w-full sm:w-auto"
+              role="group"
+              aria-label="View mode selection"
             >
-              <Network className="h-4 w-4" aria-hidden="true" />
-              <span>Graph</span>
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('list')}
-              className="flex-1 sm:flex-none gap-2 min-h-[44px]"
-              aria-label="List view"
-              aria-pressed={viewMode === 'list'}
-            >
-              <List className="h-4 w-4" aria-hidden="true" />
-              <span>List</span>
-            </Button>
-          </div>
+              <Button
+                asChild
+                variant={viewMode === 'graph' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="flex-1 sm:flex-none gap-2 min-h-[44px]"
+                aria-label="Graph view"
+                aria-pressed={viewMode === 'graph'}
+              >
+                <Link href={viewHref('graph')}>
+                  <Network className="size-4" aria-hidden="true" />
+                  <span>Graph</span>
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="flex-1 sm:flex-none gap-2 min-h-[44px]"
+                aria-label="List view"
+                aria-pressed={viewMode === 'list'}
+              >
+                <Link href={viewHref('list')}>
+                  <List className="size-4" aria-hidden="true" />
+                  <span>List</span>
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Stats and Filters Row */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           {/* Stats */}
-          <div className="flex items-center gap-4 flex-wrap" role="status" aria-live="polite">
+          <div
+            className="flex items-center gap-4 flex-wrap"
+            role="status"
+            aria-live="polite"
+          >
             <div className="flex items-center gap-2">
-              <Hash className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <Hash
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
               <span className="text-sm font-medium">
                 {stats.total} {viewMode === 'graph' ? 'nodes' : 'concepts'}
               </span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    <Info className="size-3.5 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[280px]">
                     <p className="text-xs">
@@ -652,7 +780,11 @@ function KnowledgePageContent() {
             {Object.entries(stats.byType).length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
                 {Object.entries(stats.byType).map(([type, count]) => (
-                  <Badge key={type} variant="outline" className="text-xs capitalize">
+                  <Badge
+                    key={type}
+                    variant="outline"
+                    className="text-xs capitalize"
+                  >
                     {type.replace('_', ' ')}: {count}
                   </Badge>
                 ))}
@@ -666,18 +798,27 @@ function KnowledgePageContent() {
             {viewMode === 'list' && (
               <ConceptFilter
                 selectedTypes={selectedTypes}
-                onSelectionChange={setSelectedTypes}
+                onSelectionChange={(types) =>
+                  updateKnowledgeMapState({ selectedTypes: types })
+                }
               />
             )}
 
             {/* Sort (List view only) */}
             {viewMode === 'list' && (
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+              <Select
+                value={sortBy}
+                onValueChange={(value) =>
+                  updateKnowledgeMapState({ sortBy: value as SortOption })
+                }
+              >
                 <SelectTrigger className="w-full sm:w-[200px] min-h-[44px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="mention_count_desc">Most Mentioned</SelectItem>
+                  <SelectItem value="mention_count_desc">
+                    Most Mentioned
+                  </SelectItem>
                   <SelectItem value="last_seen_desc">Recently Seen</SelectItem>
                   <SelectItem value="name_asc">Name A-Z</SelectItem>
                   <SelectItem value="name_desc">Name Z-A</SelectItem>
@@ -724,14 +865,21 @@ function KnowledgePageContent() {
 
         {viewMode === 'list' && originPageId && (
           <Alert className="border-primary/30 bg-primary/5">
-            <Sparkles className="h-4 w-4 text-primary" />
+            <Sparkles className="size-4 text-primary" />
             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-sm">
-                Concept view is a secondary enrichment surface. Primary knowledge navigation remains
-                page-centric.
+                Concept view is a secondary enrichment surface. Primary
+                knowledge navigation remains page-centric.
               </span>
-              <Button asChild size="sm" variant="outline" className="min-h-[36px] w-fit">
-                <Link href={`/knowledge/pages/${encodeURIComponent(originPageId)}`}>
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="min-h-[36px] w-fit"
+              >
+                <Link
+                  href={`/knowledge/pages/${encodeURIComponent(originPageId)}`}
+                >
                   Back to page detail
                 </Link>
               </Button>
@@ -743,7 +891,7 @@ function KnowledgePageContent() {
       {/* Error Display */}
       {error && (
         <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -751,7 +899,7 @@ function KnowledgePageContent() {
       {/* Main Content */}
       <AnimatePresence mode="wait">
         {loading ? (
-          <motion.div
+          <m.div
             key="loading"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -760,11 +908,15 @@ function KnowledgePageContent() {
             {viewMode === 'graph' ? (
               <KnowledgeGraphSkeleton />
             ) : (
-              <ConceptListViewSkeleton viewMode="list" groupCount={3} itemsPerGroup={8} />
+              <ConceptListViewSkeleton
+                viewMode="list"
+                groupCount={3}
+                itemsPerGroup={8}
+              />
             )}
-          </motion.div>
+          </m.div>
         ) : !hasData ? (
-          <motion.div
+          <m.div
             key="empty"
             variants={fadeIn}
             initial="hidden"
@@ -773,24 +925,27 @@ function KnowledgePageContent() {
           >
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
               <div className="bg-primary/5 rounded-full p-6 mb-6">
-                <Brain className="h-12 w-12 text-primary" />
+                <Brain className="size-12 text-primary" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">Your Knowledge Graph is Empty</h3>
+              <h3 className="text-xl font-semibold mb-3">
+                Your Knowledge Graph is Empty
+              </h3>
               <p className="text-sm text-muted-foreground max-w-lg mb-8">
-                The Knowledge Graph automatically discovers and connects concepts from your content.
-                As you add recordings, videos, and documents, AI will extract key topics, tools, people, and ideas.
+                The Knowledge Graph automatically discovers and connects
+                concepts from your content. As you add recordings, videos, and
+                documents, AI will extract key topics, tools, people, and ideas.
               </p>
 
               {/* How it works section */}
               <div className="bg-muted/30 rounded-lg p-6 max-w-2xl w-full mb-8">
                 <h4 className="font-medium mb-4 flex items-center gap-2 justify-center">
-                  <Sparkles className="h-4 w-4 text-primary" />
+                  <Sparkles className="size-4 text-primary" />
                   How the Knowledge Graph Works
                 </h4>
                 <div className="grid sm:grid-cols-3 gap-4 text-left">
                   <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
                     <div className="bg-background rounded-full p-2 mb-2">
-                      <Upload className="h-5 w-5 text-muted-foreground" />
+                      <Upload className="size-5 text-muted-foreground" />
                     </div>
                     <p className="text-sm font-medium">1. Add Content</p>
                     <p className="text-xs text-muted-foreground">
@@ -799,16 +954,17 @@ function KnowledgePageContent() {
                   </div>
                   <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
                     <div className="bg-background rounded-full p-2 mb-2">
-                      <Sparkles className="h-5 w-5 text-muted-foreground" />
+                      <Sparkles className="size-5 text-muted-foreground" />
                     </div>
                     <p className="text-sm font-medium">2. AI Extraction</p>
                     <p className="text-xs text-muted-foreground">
-                      Concepts like tools, processes, people, and topics are automatically identified
+                      Concepts like tools, processes, people, and topics are
+                      automatically identified
                     </p>
                   </div>
                   <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
                     <div className="bg-background rounded-full p-2 mb-2">
-                      <Network className="h-5 w-5 text-muted-foreground" />
+                      <Network className="size-5 text-muted-foreground" />
                     </div>
                     <p className="text-sm font-medium">3. Build Connections</p>
                     <p className="text-xs text-muted-foreground">
@@ -821,30 +977,30 @@ function KnowledgePageContent() {
               {/* Concept types info */}
               <div className="flex flex-wrap justify-center gap-2 mb-8">
                 <Badge variant="outline" className="text-xs">
-                  <span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5" />
+                  <span className="size-2 rounded-full bg-blue-500 mr-1.5" />
                   Tools & Technologies
                 </Badge>
                 <Badge variant="outline" className="text-xs">
-                  <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5" />
+                  <span className="size-2 rounded-full bg-green-500 mr-1.5" />
                   Processes & Workflows
                 </Badge>
                 <Badge variant="outline" className="text-xs">
-                  <span className="w-2 h-2 rounded-full bg-purple-500 mr-1.5" />
+                  <span className="size-2 rounded-full bg-purple-500 mr-1.5" />
                   People & Organizations
                 </Badge>
                 <Badge variant="outline" className="text-xs">
-                  <span className="w-2 h-2 rounded-full bg-orange-500 mr-1.5" />
+                  <span className="size-2 rounded-full bg-orange-500 mr-1.5" />
                   Technical Terms
                 </Badge>
               </div>
 
               <Button asChild>
-                <a href="/library">Go to Library</a>
+                <Link href="/library">Go to Library</Link>
               </Button>
             </div>
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div
+          <m.div
             key={viewMode}
             variants={fadeIn}
             initial="hidden"
@@ -857,30 +1013,40 @@ function KnowledgePageContent() {
                 <Card className="gap-3 py-4">
                   <CardHeader className="px-4 pb-0">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Filter className="h-4 w-4 text-muted-foreground" />
+                      <Filter className="size-4 text-muted-foreground" />
                       Graph filters
                     </CardTitle>
                     <CardDescription>
-                      Narrow node/edge types, include superseded records, and focus
-                      specific cluster hulls without leaving the map.
+                      Narrow node/edge types, include superseded records, and
+                      focus specific cluster hulls without leaving the map.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="px-4 space-y-4">
                     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                       <Input
                         value={graphSearch}
-                        onChange={(event) => setGraphSearch(event.target.value)}
+                        onChange={(event) =>
+                          updateKnowledgeMapState({
+                            graphSearch: event.target.value,
+                          })
+                        }
                         placeholder="Search nodes by title, app, or screen"
                         aria-label="Search graph nodes"
                       />
-                      <label className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-                        <span className="text-muted-foreground">Include superseded</span>
+                      <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                        <span className="text-muted-foreground">
+                          Include superseded
+                        </span>
                         <Switch
                           checked={includeSuperseded}
-                          onCheckedChange={setIncludeSuperseded}
+                          onCheckedChange={(checked) =>
+                            updateKnowledgeMapState({
+                              includeSuperseded: checked,
+                            })
+                          }
                           aria-label="Include superseded pages"
                         />
-                      </label>
+                      </div>
                     </div>
 
                     <div className="grid gap-4 lg:grid-cols-2">
@@ -894,7 +1060,9 @@ function KnowledgePageContent() {
                               key={kind}
                               type="button"
                               variant={
-                                selectedNodeKinds.includes(kind) ? 'secondary' : 'outline'
+                                selectedNodeKinds.includes(kind)
+                                  ? 'secondary'
+                                  : 'outline'
                               }
                               size="sm"
                               onClick={() => toggleNodeKind(kind)}
@@ -916,7 +1084,9 @@ function KnowledgePageContent() {
                               key={kind}
                               type="button"
                               variant={
-                                selectedEdgeKinds.includes(kind) ? 'secondary' : 'outline'
+                                selectedEdgeKinds.includes(kind)
+                                  ? 'secondary'
+                                  : 'outline'
                               }
                               size="sm"
                               onClick={() => toggleEdgeKind(kind)}
@@ -956,10 +1126,12 @@ function KnowledgePageContent() {
                 <div className="grid gap-4 xl:grid-cols-2">
                   <Card className="gap-3 py-4">
                     <CardHeader className="px-4 pb-0">
-                      <CardTitle className="text-base">Typed edge legend</CardTitle>
+                      <CardTitle className="text-base">
+                        Typed edge legend
+                      </CardTitle>
                       <CardDescription>
-                        Operational edge classes and relationship distribution currently
-                        visible in the graph.
+                        Operational edge classes and relationship distribution
+                        currently visible in the graph.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="px-4 space-y-3">
@@ -972,8 +1144,11 @@ function KnowledgePageContent() {
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
                                 <span
-                                  className="inline-flex h-2.5 w-2.5 rounded-full"
-                                  style={{ backgroundColor: EDGE_KIND_STYLES[kind].color }}
+                                  className="inline-flex size-2.5 rounded-full"
+                                  style={{
+                                    backgroundColor:
+                                      EDGE_KIND_STYLES[kind].color,
+                                  }}
                                   aria-hidden="true"
                                 />
                                 <p className="text-sm font-medium">
@@ -984,7 +1159,9 @@ function KnowledgePageContent() {
                                 {EDGE_KIND_STYLES[kind].description}
                               </p>
                             </div>
-                            <Badge variant="outline">{edgeKindBreakdown[kind]}</Badge>
+                            <Badge variant="outline">
+                              {edgeKindBreakdown[kind]}
+                            </Badge>
                           </div>
                         ))}
                       </div>
@@ -994,19 +1171,28 @@ function KnowledgePageContent() {
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {Object.entries(relationshipBreakdown).length > 0 ? (
-                            (Object.entries(relationshipBreakdown) as Array<
-                              [
-                                'requires' | 'precedes' | 'contradicts' | 'related',
-                                number,
-                              ]
-                            >).map(([relationshipType, count]) => (
+                            (
+                              Object.entries(relationshipBreakdown) as Array<
+                                [
+                                  (
+                                    | 'requires'
+                                    | 'precedes'
+                                    | 'contradicts'
+                                    | 'related'
+                                  ),
+                                  number,
+                                ]
+                              >
+                            ).map(([relationshipType, count]) => (
                               <Badge key={relationshipType} variant="secondary">
-                                {RELATIONSHIP_TYPE_LABELS[relationshipType]}: {count}
+                                {RELATIONSHIP_TYPE_LABELS[relationshipType]}:{' '}
+                                {count}
                               </Badge>
                             ))
                           ) : (
                             <span className="text-xs text-muted-foreground">
-                              No org-to-org relationships in the current filter context.
+                              No org-to-org relationships in the current filter
+                              context.
                             </span>
                           )}
                         </div>
@@ -1016,10 +1202,12 @@ function KnowledgePageContent() {
 
                   <Card className="gap-3 py-4">
                     <CardHeader className="px-4 pb-0">
-                      <CardTitle className="text-base">Cluster hull visualization</CardTitle>
+                      <CardTitle className="text-base">
+                        Cluster hull visualization
+                      </CardTitle>
                       <CardDescription>
-                        Computed hulls summarize each cluster envelope, member pages, and
-                        connected vendor overlays.
+                        Computed hulls summarize each cluster envelope, member
+                        pages, and connected vendor overlays.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="px-4 space-y-2">
@@ -1029,30 +1217,45 @@ function KnowledgePageContent() {
                         </p>
                       ) : (
                         clusterHulls.slice(0, 8).map((hull, index) => {
-                          const accent = CLUSTER_HULL_COLORS[index % CLUSTER_HULL_COLORS.length];
-                          const isFocused = focusedClusterNodeId === hull.clusterNodeId;
+                          const accent =
+                            CLUSTER_HULL_COLORS[
+                              index % CLUSTER_HULL_COLORS.length
+                            ];
+                          const isFocused =
+                            focusedClusterNodeId === hull.clusterNodeId;
                           return (
                             <button
                               key={hull.clusterNodeId}
                               type="button"
                               onClick={() =>
-                                setFocusedClusterNodeId((current) =>
-                                  current === hull.clusterNodeId ? null : hull.clusterNodeId
-                                )
+                                updateKnowledgeMapState((state) => ({
+                                  ...state,
+                                  focusedClusterNodeId:
+                                    state.focusedClusterNodeId ===
+                                    hull.clusterNodeId
+                                      ? null
+                                      : hull.clusterNodeId,
+                                }))
                               }
                               className={`w-full rounded-md border px-3 py-2 text-left transition hover:shadow-sm ${accent} ${
                                 isFocused ? 'ring-1 ring-primary' : ''
                               }`}
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-medium">{hull.clusterLabel}</p>
-                                <Badge variant={isFocused ? 'default' : 'outline'}>
+                                <p className="text-sm font-medium">
+                                  {hull.clusterLabel}
+                                </p>
+                                <Badge
+                                  variant={isFocused ? 'default' : 'outline'}
+                                >
                                   {isFocused ? 'Focused' : 'Focus'}
                                 </Badge>
                               </div>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                {hull.memberCount} org pages · {hull.vendorNodeIds.length}{' '}
-                                vendor links · {hull.relationshipEdgeCount} internal relationships
+                                {hull.memberCount} org pages ·{' '}
+                                {hull.vendorNodeIds.length} vendor links ·{' '}
+                                {hull.relationshipEdgeCount} internal
+                                relationships
                               </p>
                             </button>
                           );
@@ -1075,10 +1278,12 @@ function KnowledgePageContent() {
 
                   <Card className="gap-3 py-4">
                     <CardHeader className="px-4 pb-0">
-                      <CardTitle className="text-base">Graph inspector</CardTitle>
+                      <CardTitle className="text-base">
+                        Graph inspector
+                      </CardTitle>
                       <CardDescription>
-                        Select a node to inspect routing metadata and jump through related
-                        records.
+                        Select a node to inspect routing metadata and jump
+                        through related records.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="px-4 space-y-4">
@@ -1086,11 +1291,14 @@ function KnowledgePageContent() {
                         <>
                           <div className="space-y-2 rounded-md border p-3">
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-semibold">{selectedGraphNode.name}</p>
+                              <p className="text-sm font-semibold">
+                                {selectedGraphNode.name}
+                              </p>
                               <Badge variant="outline">
                                 {selectedGraphNode.nodeKind
                                   ? NODE_KIND_LABELS[selectedGraphNode.nodeKind]
-                                  : selectedGraphNode.typeLabel || selectedGraphNode.type}
+                                  : selectedGraphNode.typeLabel ||
+                                    selectedGraphNode.type}
                               </Badge>
                               {selectedGraphNode.status && (
                                 <Badge
@@ -1111,13 +1319,20 @@ function KnowledgePageContent() {
                               {selectedGraphNode.screen && (
                                 <span>Screen: {selectedGraphNode.screen}</span>
                               )}
-                              {typeof selectedGraphNode.confidence === 'number' && (
+                              {typeof selectedGraphNode.confidence ===
+                                'number' && (
                                 <span>
-                                  Confidence: {Math.round(selectedGraphNode.confidence * 100)}%
+                                  Confidence:{' '}
+                                  {Math.round(
+                                    selectedGraphNode.confidence * 100,
+                                  )}
+                                  %
                                 </span>
                               )}
                               {selectedGraphNode.memberCount && (
-                                <span>Members: {selectedGraphNode.memberCount}</span>
+                                <span>
+                                  Members: {selectedGraphNode.memberCount}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -1127,12 +1342,14 @@ function KnowledgePageContent() {
                               <Button asChild size="sm" variant="outline">
                                 <Link href={selectedGraphNodeKnowledgeHref}>
                                   Open page
-                                  <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                                  <ArrowRight className="ml-2 size-3.5" />
                                 </Link>
                               </Button>
                             )}
                             <Button asChild size="sm" variant="ghost">
-                              <Link href={selectedGraphNodeHealthHref}>Open health</Link>
+                              <Link href={selectedGraphNodeHealthHref}>
+                                Open health
+                              </Link>
                             </Button>
                             {selectedGraphNode.sourceUrl && (
                               <Button asChild size="sm" variant="ghost">
@@ -1142,7 +1359,7 @@ function KnowledgePageContent() {
                                   rel="noreferrer"
                                 >
                                   Vendor source
-                                  <ExternalLink className="ml-2 h-3.5 w-3.5" />
+                                  <ExternalLink className="ml-2 size-3.5" />
                                 </a>
                               </Button>
                             )}
@@ -1151,11 +1368,14 @@ function KnowledgePageContent() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() =>
-                                  setFocusedClusterNodeId((current) =>
-                                    current === selectedGraphNode.id
-                                      ? null
-                                      : selectedGraphNode.id
-                                  )
+                                  updateKnowledgeMapState((state) => ({
+                                    ...state,
+                                    focusedClusterNodeId:
+                                      state.focusedClusterNodeId ===
+                                      selectedGraphNode.id
+                                        ? null
+                                        : selectedGraphNode.id,
+                                  }))
                                 }
                               >
                                 {focusedClusterNodeId === selectedGraphNode.id
@@ -1169,9 +1389,9 @@ function KnowledgePageContent() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() =>
-                                    setFocusedClusterNodeId(
-                                      `cluster:${selectedGraphNode.clusterId}`
-                                    )
+                                    updateKnowledgeMapState({
+                                      focusedClusterNodeId: `cluster:${selectedGraphNode.clusterId}`,
+                                    })
                                   }
                                 >
                                   Focus cluster hull
@@ -1185,42 +1405,53 @@ function KnowledgePageContent() {
                             </p>
                             {connectedGraphNodes.length === 0 ? (
                               <p className="text-sm text-muted-foreground">
-                                No visible connections for this node under current filters.
+                                No visible connections for this node under
+                                current filters.
                               </p>
                             ) : (
                               <div className="space-y-2">
-                                {connectedGraphNodes.slice(0, 12).map((connection) => (
-                                  <button
-                                    key={connection.node.id}
-                                    type="button"
-                                    onClick={() =>
-                                      setSelectedGraphNodeId(connection.node.id)
-                                    }
-                                    className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition hover:bg-muted/40"
-                                  >
-                                    <div className="space-y-1">
-                                      <p className="text-sm font-medium">
-                                        {connection.node.name}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {EDGE_KIND_STYLES[connection.edgeKind].label} ·{' '}
-                                        {connection.edgeType}
-                                      </p>
-                                    </div>
-                                    <ArrowRight
-                                      className="h-4 w-4 text-muted-foreground"
-                                      aria-hidden="true"
-                                    />
-                                  </button>
-                                ))}
+                                {connectedGraphNodes
+                                  .slice(0, 12)
+                                  .map((connection) => (
+                                    <button
+                                      key={connection.node.id}
+                                      type="button"
+                                      onClick={() =>
+                                        updateKnowledgeMapState({
+                                          selectedGraphNodeId:
+                                            connection.node.id,
+                                        })
+                                      }
+                                      className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left transition hover:bg-muted/40"
+                                    >
+                                      <div className="space-y-1">
+                                        <p className="text-sm font-medium">
+                                          {connection.node.name}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {
+                                            EDGE_KIND_STYLES[
+                                              connection.edgeKind
+                                            ].label
+                                          }{' '}
+                                          · {connection.edgeType}
+                                        </p>
+                                      </div>
+                                      <ArrowRight
+                                        className="size-4 text-muted-foreground"
+                                        aria-hidden="true"
+                                      />
+                                    </button>
+                                  ))}
                               </div>
                             )}
                           </div>
                         </>
                       ) : (
                         <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                          Select a node in the graph to inspect metadata, jump to docs,
-                          focus cluster hulls, and step through related nodes.
+                          Select a node in the graph to inspect metadata, jump
+                          to docs, focus cluster hulls, and step through related
+                          nodes.
                         </div>
                       )}
                     </CardContent>
@@ -1235,7 +1466,7 @@ function KnowledgePageContent() {
                 viewMode="list"
               />
             )}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -1257,7 +1488,9 @@ function KnowledgePageContent() {
 export default function KnowledgePage() {
   return (
     <KeyboardShortcutsProvider>
-      <KnowledgePageContent />
+      <Suspense fallback={<KnowledgeGraphSkeleton />}>
+        <KnowledgePageContent />
+      </Suspense>
     </KeyboardShortcutsProvider>
   );
 }

@@ -80,7 +80,7 @@ export function DriftIndicator({
           aria-label={`${LEVEL_LABEL[level]}: ${label}${pctText}`}
         >
           <span
-            className="inline-block h-1.5 w-1.5 rounded-full bg-current"
+            className="inline-block size-1.5 rounded-full bg-current"
             aria-hidden="true"
           />
           {label}{pctText}

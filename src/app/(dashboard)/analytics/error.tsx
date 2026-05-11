@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
@@ -28,7 +29,7 @@ export default function AnalyticsError({
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="trbd-icon-chip">
-              <AlertTriangle className="h-6 w-6 text-destructive" />
+              <AlertTriangle className="size-6 text-destructive" />
             </div>
             <CardTitle>Something went wrong</CardTitle>
           </div>
@@ -50,7 +51,7 @@ export default function AnalyticsError({
           <div className="flex gap-3">
             <Button onClick={() => reset()}>Try again</Button>
             <Button variant="outline" asChild>
-              <a href="/dashboard">Go to Dashboard</a>
+              <Link href="/dashboard">Go to Dashboard</Link>
             </Button>
           </div>
         </CardContent>

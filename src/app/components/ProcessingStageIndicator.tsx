@@ -1,8 +1,15 @@
 'use client';
 
 import * as React from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Check, Upload, FileText, Sparkles, Search, FileCheck } from 'lucide-react';
+import { AnimatePresence, m } from 'motion/react';
+import {
+  Check,
+  Upload,
+  FileText,
+  Sparkles,
+  Search,
+  FileCheck,
+} from 'lucide-react';
 
 import { cn } from '@/lib/utils/cn';
 import { getStageConfig } from '@/lib/constants/processing-messages';
@@ -53,7 +60,11 @@ export default function ProcessingStageIndicator({
   };
 
   return (
-    <div className={cn('w-full space-y-2', className)} role="region" aria-label="Processing stages">
+    <div
+      className={cn('w-full space-y-2', className)}
+      role="region"
+      aria-label="Processing stages"
+    >
       <AnimatePresence mode="popLayout">
         {stages.map((stage, index) => {
           const isActive = stage.status === 'in_progress';
@@ -62,7 +73,7 @@ export default function ProcessingStageIndicator({
           const IconComponent = getStageIcon(stage.id);
 
           return (
-            <motion.div
+            <m.div
               key={stage.id}
               layout
               initial={{ opacity: 0, x: -20 }}
@@ -80,20 +91,20 @@ export default function ProcessingStageIndicator({
                 'relative flex items-center gap-3 rounded-lg border px-4 py-3 transition-all',
                 isActive && 'border-primary/30 bg-primary/5',
                 isCompleted && 'border-border/50 bg-muted/30',
-                isPending && 'border-border/30 bg-background opacity-60'
+                isPending && 'border-border/30 bg-background opacity-60',
               )}
             >
               {/* Icon with loader ring */}
               <div className="relative flex-shrink-0">
                 {isCompleted && (
-                  <motion.div
-                    initial={{ scale: 0 }}
+                  <m.div
+                    initial={{ scale: 0.95 }}
                     animate={{ scale: 1 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                     className="flex size-10 items-center justify-center rounded-full bg-primary/10"
                   >
                     <Check className="size-5 text-primary" strokeWidth={2.5} />
-                  </motion.div>
+                  </m.div>
                 )}
 
                 {isActive && (
@@ -112,7 +123,7 @@ export default function ProcessingStageIndicator({
                         strokeWidth="2"
                         className="text-border/30"
                       />
-                      <motion.circle
+                      <m.circle
                         cx="20"
                         cy="20"
                         r="18"
@@ -142,13 +153,19 @@ export default function ProcessingStageIndicator({
                     </svg>
 
                     {/* Static icon in center */}
-                    <IconComponent className="size-5 text-primary" strokeWidth={2} />
+                    <IconComponent
+                      className="size-5 text-primary"
+                      strokeWidth={2}
+                    />
                   </div>
                 )}
 
                 {isPending && (
                   <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-                    <IconComponent className="size-5 text-muted-foreground/40" strokeWidth={2} />
+                    <IconComponent
+                      className="size-5 text-muted-foreground/40"
+                      strokeWidth={2}
+                    />
                   </div>
                 )}
               </div>
@@ -160,7 +177,7 @@ export default function ProcessingStageIndicator({
                     'text-sm font-medium transition-colors',
                     isActive && 'text-foreground',
                     isCompleted && 'text-muted-foreground',
-                    isPending && 'text-muted-foreground/60'
+                    isPending && 'text-muted-foreground/60',
                   )}
                 >
                   {stage.label}
@@ -168,28 +185,32 @@ export default function ProcessingStageIndicator({
 
                 {/* Show benefit only for active stage */}
                 {isActive && stage.benefit && (
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     className="mt-0.5 text-xs text-muted-foreground/70"
                   >
                     {stage.benefit}
-                  </motion.div>
+                  </m.div>
                 )}
               </div>
 
               {/* Status indicator */}
               {isActive && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className="flex-shrink-0"
                 >
                   <div className="flex gap-0.5">
-                    {[0, 1, 2].map((i) => (
-                      <motion.div
-                        key={i}
+                    {[
+                      { id: 'processing-dot-1', delay: 0 },
+                      { id: 'processing-dot-2', delay: 0.2 },
+                      { id: 'processing-dot-3', delay: 0.4 },
+                    ].map((dot) => (
+                      <m.div
+                        key={dot.id}
                         className="size-1 rounded-full bg-primary"
                         animate={{
                           opacity: [0.3, 1, 0.3],
@@ -197,15 +218,15 @@ export default function ProcessingStageIndicator({
                         transition={{
                           duration: 1.5,
                           repeat: Infinity,
-                          delay: i * 0.2,
+                          delay: dot.delay,
                           ease: 'easeInOut',
                         }}
                       />
                     ))}
                   </div>
-                </motion.div>
+                </m.div>
               )}
-            </motion.div>
+            </m.div>
           );
         })}
       </AnimatePresence>

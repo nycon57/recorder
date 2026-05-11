@@ -15,19 +15,22 @@ const SEED_METADATA = JSON.stringify({ seed: 'demo' });
 
 export async function seedImportedDocs(
   client: PoolClient,
-  opts: { dryRun: boolean }
+  opts: { dryRun: boolean },
 ): Promise<void> {
   const now = new Date().toISOString();
   const docs = loadImportedDocFixtures();
 
-  for (const doc of docs) {
-    if (opts.dryRun) {
-      console.log(`[dry-run] Would upsert imported doc: ${doc.slug} (${doc.id})`);
-      continue;
-    }
+  await Promise.all(
+    docs.map(async (doc) => {
+      if (opts.dryRun) {
+        console.log(
+          `[dry-run] Would upsert imported doc: ${doc.slug} (${doc.id})`,
+        );
+        return;
+      }
 
-    await client.query(
-      `INSERT INTO imported_documents (
+      await client.query(
+        `INSERT INTO imported_documents (
         id, connector_id, org_id, external_id, title, content, file_type, file_size,
         metadata, sync_status, processing_status, chunks_generated, embeddings_generated,
         last_synced_at, first_synced_at, created_at, updated_at
@@ -42,27 +45,28 @@ export async function seedImportedDocs(
         processing_status  = EXCLUDED.processing_status,
         last_synced_at     = EXCLUDED.last_synced_at,
         updated_at         = EXCLUDED.updated_at`,
-      [
-        doc.id,
-        doc.connectorId,
-        DEMO_ORG_ID,
-        doc.externalId,
-        doc.title,
-        doc.content,
-        doc.fileType,
-        doc.fileSize,
-        SEED_METADATA,
-        'synced',
-        'processed',
-        true,
-        false,
-        SEED_CREATED_AT,
-        SEED_CREATED_AT,
-        SEED_CREATED_AT,
-        now,
-      ]
-    );
+        [
+          doc.id,
+          doc.connectorId,
+          DEMO_ORG_ID,
+          doc.externalId,
+          doc.title,
+          doc.content,
+          doc.fileType,
+          doc.fileSize,
+          SEED_METADATA,
+          'synced',
+          'processed',
+          true,
+          false,
+          SEED_CREATED_AT,
+          SEED_CREATED_AT,
+          SEED_CREATED_AT,
+          now,
+        ],
+      );
 
-    console.log(`[seed] imported doc upserted: ${doc.slug} (${doc.id})`);
-  }
+      console.log(`[seed] imported doc upserted: ${doc.slug} (${doc.id})`);
+    }),
+  );
 }

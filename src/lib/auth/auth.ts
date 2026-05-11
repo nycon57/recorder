@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { admin, magicLink, organization } from "better-auth/plugins";
 import { Pool } from "pg";
+
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { ac, roles } from "@/lib/auth/permissions";
 
@@ -147,4 +148,4 @@ export const auth = betterAuth({
 });
 
 export type Session = typeof auth.$Infer.Session;
-export type User = typeof auth.$Infer.Session.user;
+type User = typeof auth.$Infer.Session.user;

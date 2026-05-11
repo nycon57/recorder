@@ -19,7 +19,7 @@ export function getStripe(): Stripe {
  * Proxy re-export so existing code that does `stripe.xyz` keeps working
  * while still using lazy initialisation under the hood.
  */
-export const stripe = new Proxy({} as Stripe, {
+const stripe = new Proxy({} as Stripe, {
   get(_, prop) {
     return (getStripe() as unknown as Record<string | symbol, unknown>)[prop];
   },
@@ -28,7 +28,7 @@ export const stripe = new Proxy({} as Stripe, {
 // ---------------------------------------------------------------------------
 // Plan definitions — mirrors Tribora's pricing page
 // ---------------------------------------------------------------------------
-export const PLANS = {
+const PLANS = {
   free: {
     name: "Starter",
     price: 0,
@@ -56,4 +56,4 @@ export const PLANS = {
   },
 } as const;
 
-export type PlanKey = keyof typeof PLANS;
+type PlanKey = keyof typeof PLANS;

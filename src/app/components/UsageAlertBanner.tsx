@@ -41,9 +41,9 @@ export function UsageAlertBanner() {
       className="mb-6"
     >
       {isHardStop ? (
-        <XOctagon className="h-4 w-4" aria-hidden="true" />
+        <XOctagon className="size-4" aria-hidden="true" />
       ) : (
-        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+        <AlertTriangle className="size-4" aria-hidden="true" />
       )}
       <AlertDescription className="flex flex-wrap items-center gap-x-1">
         {alert.message}{' '}

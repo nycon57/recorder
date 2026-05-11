@@ -46,10 +46,9 @@ async function explainQuery(name: string, query: string) {
   console.log('='.repeat(100));
   console.log(`\nQuery:\n${query}\n`);
 
-  const { data, error } = await supabase
-    .rpc('exec_sql', {
-      query: `EXPLAIN (ANALYZE, BUFFERS, VERBOSE) ${query}`
-    });
+  const { data, error } = await supabase.rpc('exec_sql', {
+    query: `EXPLAIN (ANALYZE, BUFFERS, VERBOSE) ${query}`,
+  });
 
   if (error) {
     console.error('❌ Error:', error.message);
@@ -82,6 +81,16 @@ async function explainQuery(name: string, query: string) {
   }
 }
 
+function runExplainQueries(
+  queries: Array<{ name: string; query: string }>,
+): Promise<void> {
+  return queries
+    .reduce<
+      Promise<unknown>
+    >((chain, { name, query }) => chain.then(() => explainQuery(name, query)), Promise.resolve())
+    .then(() => undefined);
+}
+
 async function testCriticalQueries() {
   console.log('🎯 EXPLAIN ANALYZE - Critical Query Analysis');
   console.log('='.repeat(100));
@@ -89,93 +98,79 @@ async function testCriticalQueries() {
   console.log(`Sample Org ID: ${SAMPLE_ORG_ID}`);
   console.log(`Sample Clerk ID: ${SAMPLE_CLERK_ID}`);
 
-  // Query 1: User lookup by clerk_id (most critical - every API call)
-  await explainQuery(
-    'Query 1: User Lookup by clerk_id',
-    `
+  await runExplainQueries([
+    {
+      name: 'Query 1: User Lookup by clerk_id',
+      query: `
       SELECT id, org_id, role, email, name
       FROM users
       WHERE clerk_id = '${SAMPLE_CLERK_ID}';
-    `
-  );
-
-  // Query 2: Jobs polling (every 60 seconds)
-  await explainQuery(
-    'Query 2: Jobs Polling (Pending Jobs)',
-    `
+    `,
+    },
+    {
+      name: 'Query 2: Jobs Polling (Pending Jobs)',
+      query: `
       SELECT *
       FROM jobs
       WHERE status = 'pending'
       ORDER BY created_at ASC
       LIMIT 10;
-    `
-  );
-
-  // Query 3: Recordings list query
-  await explainQuery(
-    'Query 3: Recordings List Query',
-    `
+    `,
+    },
+    {
+      name: 'Query 3: Recordings List Query',
+      query: `
       SELECT *
       FROM recordings
       WHERE org_id = '${SAMPLE_ORG_ID}'
         AND deleted_at IS NULL
       ORDER BY created_at DESC
       LIMIT 100;
-    `
-  );
-
-  // Query 4: Recordings status filter
-  await explainQuery(
-    'Query 4: Recordings Status Filter',
-    `
+    `,
+    },
+    {
+      name: 'Query 4: Recordings Status Filter',
+      query: `
       SELECT status
       FROM recordings
       WHERE org_id = '${SAMPLE_ORG_ID}'
         AND deleted_at IS NULL;
-    `
-  );
-
-  // Query 5: Recordings file size aggregation
-  await explainQuery(
-    'Query 5: Recordings File Size Aggregation',
-    `
+    `,
+    },
+    {
+      name: 'Query 5: Recordings File Size Aggregation',
+      query: `
       SELECT file_size, content_type
       FROM recordings
       WHERE org_id = '${SAMPLE_ORG_ID}'
         AND deleted_at IS NULL;
-    `
-  );
-
-  // Query 6: Tags list query
-  await explainQuery(
-    'Query 6: Tags List Query',
-    `
+    `,
+    },
+    {
+      name: 'Query 6: Tags List Query',
+      query: `
       SELECT *
       FROM tags
       WHERE org_id = '${SAMPLE_ORG_ID}'
         AND deleted_at IS NULL
       ORDER BY name ASC
       LIMIT 100;
-    `
-  );
-
-  // Query 7: Collections list query
-  await explainQuery(
-    'Query 7: Collections List Query',
-    `
+    `,
+    },
+    {
+      name: 'Query 7: Collections List Query',
+      query: `
       SELECT *
       FROM collections
       WHERE org_id = '${SAMPLE_ORG_ID}'
         AND deleted_at IS NULL
       ORDER BY name ASC
       LIMIT 50;
-    `
-  );
-
-  // Query 8: Vector similarity search (semantic search)
-  await explainQuery(
-    'Query 8: Vector Similarity Search',
-    `
+    `,
+    },
+    {
+      name: 'Query 8: Vector Similarity Search',
+      query: `
       SELECT
         recording_id,
         text,
@@ -184,13 +179,11 @@ async function testCriticalQueries() {
       WHERE org_id = '${SAMPLE_ORG_ID}'
       ORDER BY embedding <=> '[0.1,0.2,0.3]'::vector
       LIMIT 10;
-    `
-  );
-
-  // Query 9: Recording with tags and collections (JOIN query)
-  await explainQuery(
-    'Query 9: Recording with Tags (JOIN)',
-    `
+    `,
+    },
+    {
+      name: 'Query 9: Recording with Tags (JOIN)',
+      query: `
       SELECT r.*, t.name as tag_name
       FROM recordings r
       LEFT JOIN recording_tags rt ON r.id = rt.recording_id
@@ -198,13 +191,11 @@ async function testCriticalQueries() {
       WHERE r.org_id = '${SAMPLE_ORG_ID}'
         AND r.deleted_at IS NULL
       LIMIT 50;
-    `
-  );
-
-  // Query 10: Job status by recording
-  await explainQuery(
-    'Query 10: Jobs by Recording ID',
-    `
+    `,
+    },
+    {
+      name: 'Query 10: Jobs by Recording ID',
+      query: `
       SELECT *
       FROM jobs
       WHERE recording_id IN (
@@ -213,8 +204,9 @@ async function testCriticalQueries() {
         LIMIT 10
       )
       ORDER BY created_at DESC;
-    `
-  );
+    `,
+    },
+  ]);
 
   console.log('\n\n📋 Summary & Recommendations:');
   console.log('='.repeat(100));
@@ -236,10 +228,14 @@ async function testCriticalQueries() {
   console.log('   - N+1 query patterns in JOIN operations');
 
   console.log('\n4. Next Steps:');
-  console.log('   - Apply migration: supabase/migrations/20251111000001_add_performance_indexes.sql');
+  console.log(
+    '   - Apply migration: supabase/migrations/20251111000001_add_performance_indexes.sql',
+  );
   console.log('   - Run ANALYZE on affected tables');
   console.log('   - Re-run this script to verify improvements');
-  console.log('   - Monitor production query performance with pg_stat_statements');
+  console.log(
+    '   - Monitor production query performance with pg_stat_statements',
+  );
 
   console.log('\n✨ Analysis complete!\n');
 }

@@ -6,12 +6,16 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 /**
  * Helper function to calculate average of a field from historical health data
  */
-function calculateAverage(historicalHealth: any[] | null | undefined, field: string): number {
+function calculateAverage(
+  historicalHealth: any[] | null | undefined,
+  field: string,
+): number {
   if (!historicalHealth || historicalHealth.length === 0) {
     return 0;
   }
   return Math.round(
-    historicalHealth.reduce((sum, h) => sum + (h[field] || 0), 0) / historicalHealth.length
+    historicalHealth.reduce((sum, h) => sum + (h[field] || 0), 0) /
+      historicalHealth.length,
   );
 }
 
@@ -20,7 +24,7 @@ function calculateAverage(historicalHealth: any[] | null | undefined, field: str
  */
 function mapTrendData(
   historicalHealth: any[] | null | undefined,
-  field: string
+  field: string,
 ): Array<{ timestamp: string; value: number }> {
   return historicalHealth
     ? historicalHealth.slice(0, 24).map((h) => ({
@@ -44,24 +48,34 @@ export const GET = apiHandler(async (request: NextRequest) => {
   await requireAuth();
 
   // Get latest health log
-  const { data: latestHealth } = await supabaseAdmin
-    .from('system_health_log')
-    .select('*')
-    .order('recorded_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  // Get historical data for trends (last 24 hours)
-  const { data: historicalHealth } = await supabaseAdmin
-    .from('system_health_log')
-    .select('*')
-    .gte('recorded_at', new Date(Date.now() - 86400000).toISOString())
-    .order('recorded_at', { ascending: false });
+  const [{ data: latestHealth }, { data: historicalHealth }] =
+    await Promise.all([
+      supabaseAdmin
+        .from('system_health_log')
+        .select('*')
+        .order('recorded_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('system_health_log')
+        .select('*')
+        .gte('recorded_at', new Date(Date.now() - 86400000).toISOString())
+        .order('recorded_at', { ascending: false }),
+    ]);
 
   // Calculate averages (guards against empty array division)
-  const avgApiResponseTime = calculateAverage(historicalHealth, 'api_response_time');
-  const avgJobProcessingTime = calculateAverage(historicalHealth, 'job_processing_time');
-  const avgStorageLatency = calculateAverage(historicalHealth, 'storage_latency');
+  const avgApiResponseTime = calculateAverage(
+    historicalHealth,
+    'api_response_time',
+  );
+  const avgJobProcessingTime = calculateAverage(
+    historicalHealth,
+    'job_processing_time',
+  );
+  const avgStorageLatency = calculateAverage(
+    historicalHealth,
+    'storage_latency',
+  );
   const avgThroughput = calculateAverage(historicalHealth, 'throughput');
 
   // Build trends data

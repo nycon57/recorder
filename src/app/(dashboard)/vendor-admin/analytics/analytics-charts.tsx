@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { format, parseISO } from 'date-fns';
+import { Download } from 'lucide-react';
+
 import {
   BarChart,
   Bar,
@@ -9,10 +12,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-} from 'recharts';
-import { format, parseISO } from 'date-fns';
-import { Download } from 'lucide-react';
-
+} from '@/app/components/analytics/dynamic-recharts';
 import {
   Card,
   CardContent,
@@ -120,13 +120,16 @@ function downloadCsv(data: AnalyticsData) {
 // ---------------------------------------------------------------------------
 
 export function AnalyticsCharts() {
+  return useAnalyticsChartsImplementation();
+}
+
+function useAnalyticsChartsImplementation() {
   const [data, setData] = useState<AnalyticsData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>('30d');
 
   const fetchData = useCallback(async () => {
-    setIsLoading(true);
+    setData(null);
     setError(null);
     try {
       const res = await fetch(`/api/vendor/analytics?period=${period}`);
@@ -137,10 +140,9 @@ export function AnalyticsCharts() {
       const json = await res.json();
       setData(json.data);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load analytics';
+      const message =
+        err instanceof Error ? err.message : 'Failed to load analytics';
       setError(message);
-    } finally {
-      setIsLoading(false);
     }
   }, [period]);
 
@@ -149,7 +151,7 @@ export function AnalyticsCharts() {
   }, [fetchData]);
 
   // ---- Loading state ----
-  if (isLoading) {
+  if (!data && !error) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -157,8 +159,8 @@ export function AnalyticsCharts() {
           <Skeleton className="h-8 w-40" />
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}>
+          {['summary-a', 'summary-b', 'summary-c'].map((skeletonId) => (
+            <Card key={skeletonId}>
               <CardHeader>
                 <Skeleton className="h-4 w-24" />
               </CardHeader>
@@ -222,7 +224,7 @@ export function AnalyticsCharts() {
           onClick={() => downloadCsv(data)}
           className="gap-2"
         >
-          <Download className="h-4 w-4" />
+          <Download className="size-4" />
           Export CSV
         </Button>
       </div>
@@ -231,9 +233,7 @@ export function AnalyticsCharts() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Queries
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Total Queries</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -263,17 +263,13 @@ export function AnalyticsCharts() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Avg Latency
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Avg Latency</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
               {data.avgLatencyMs.toLocaleString()} ms
             </div>
-            <p className="text-xs text-muted-foreground">
-              Time to first byte
-            </p>
+            <p className="text-xs text-muted-foreground">Time to first byte</p>
           </CardContent>
         </Card>
       </div>
@@ -297,10 +293,7 @@ export function AnalyticsCharts() {
                 data={data.queriesByDay}
                 margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
               >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  className="stroke-muted"
-                />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 12 }}
@@ -313,7 +306,9 @@ export function AnalyticsCharts() {
                   allowDecimals={false}
                 />
                 <Tooltip
-                  labelFormatter={(value) => formatXAxis(value as string)}
+                  labelFormatter={(value: string | number) =>
+                    formatXAxis(String(value))
+                  }
                   formatter={(value: number) => [
                     value.toLocaleString(),
                     'Queries',
@@ -342,9 +337,7 @@ export function AnalyticsCharts() {
         <Card>
           <CardHeader>
             <CardTitle>Top Questions</CardTitle>
-            <CardDescription>
-              Most frequently asked questions
-            </CardDescription>
+            <CardDescription>Most frequently asked questions</CardDescription>
           </CardHeader>
           <CardContent>
             {data.topQuestions.length === 0 ? (
@@ -360,8 +353,8 @@ export function AnalyticsCharts() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.topQuestions.map((row, i) => (
-                    <TableRow key={i}>
+                  {data.topQuestions.map((row) => (
+                    <TableRow key={row.question}>
                       <TableCell className="max-w-xs truncate text-sm">
                         {row.question}
                       </TableCell>
@@ -380,9 +373,7 @@ export function AnalyticsCharts() {
         <Card>
           <CardHeader>
             <CardTitle>Top Apps</CardTitle>
-            <CardDescription>
-              Most queried applications
-            </CardDescription>
+            <CardDescription>Most queried applications</CardDescription>
           </CardHeader>
           <CardContent>
             {data.topApps.length === 0 ? (
@@ -398,8 +389,8 @@ export function AnalyticsCharts() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.topApps.map((row, i) => (
-                    <TableRow key={i}>
+                  {data.topApps.map((row) => (
+                    <TableRow key={row.app}>
                       <TableCell className="text-sm font-medium">
                         {row.app}
                       </TableCell>
@@ -422,19 +413,20 @@ export function AnalyticsCharts() {
             Knowledge Gaps
             {data.knowledgeGaps.length > 0 && (
               <Badge variant="destructive" className="text-xs">
-                {data.knowledgeGaps.length} gap{data.knowledgeGaps.length !== 1 ? 's' : ''}
+                {data.knowledgeGaps.length} gap
+                {data.knowledgeGaps.length !== 1 ? 's' : ''}
               </Badge>
             )}
           </CardTitle>
           <CardDescription>
-            Questions where neither org nor vendor knowledge matched — consider
+            Questions where neither org nor vendor knowledge matched - consider
             adding documentation for these topics.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {data.knowledgeGaps.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No knowledge gaps detected — great coverage!
+              No knowledge gaps detected - great coverage!
             </p>
           ) : (
             <Table>
@@ -445,8 +437,8 @@ export function AnalyticsCharts() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.knowledgeGaps.map((row, i) => (
-                  <TableRow key={i}>
+                {data.knowledgeGaps.map((row) => (
+                  <TableRow key={row.question}>
                     <TableCell className="max-w-md truncate text-sm">
                       {row.question}
                     </TableCell>

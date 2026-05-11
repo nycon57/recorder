@@ -64,96 +64,93 @@ interface ContentModalProps {
   className?: string;
   /** Modal content */
   children: React.ReactNode;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
-const ContentModal = React.forwardRef<HTMLDivElement, ContentModalProps>(
-  (
-    {
-      open,
-      onOpenChange,
-      size = 'lg',
-      glass = true,
-      glow = true,
-      showCloseButton = true,
-      className,
-      children,
-    },
-    ref
-  ) => {
-    return (
-      <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
-        <DialogPrimitive.Portal>
-          {/* Overlay with brand-consistent blur */}
-          <DialogPrimitive.Overlay
-            className={cn(
-              'fixed inset-0 z-50',
-              'bg-black/60 backdrop-blur-sm',
-              'data-[state=open]:animate-in data-[state=closed]:animate-out',
-              'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0'
-            )}
-          />
+function ContentModal({
+  open,
+  onOpenChange,
+  size = 'lg',
+  glass = true,
+  glow = true,
+  showCloseButton = true,
+  className,
+  children,
+  ref,
+}: ContentModalProps) {
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        {/* Overlay with brand-consistent blur */}
+        <DialogPrimitive.Overlay
+          className={cn(
+            'fixed inset-0 z-50',
+            'bg-black/60 backdrop-blur-sm',
+            'data-[state=open]:animate-in data-[state=closed]:animate-out',
+            'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0'
+          )}
+        />
 
-          {/* Content with brand styling */}
-          <DialogPrimitive.Content
-            ref={ref}
-            className={cn(
-              // Position and sizing
-              'fixed left-[50%] top-[50%] z-50 w-full translate-x-[-50%] translate-y-[-50%]',
-              sizeClasses[size],
-              'max-h-[90vh] overflow-hidden',
+        {/* Content with brand styling */}
+        <DialogPrimitive.Content
+          ref={ref}
+          className={cn(
+            // Position and sizing
+            'fixed left-[50%] top-[50%] z-50 w-full translate-x-[-50%] translate-y-[-50%]',
+            sizeClasses[size],
+            'max-h-[90vh] overflow-hidden',
 
-              // Base styling
-              'rounded-xl border shadow-2xl',
+            // Base styling
+            'rounded-xl border shadow-2xl',
 
-              // Frosted glass effect (use background for darker modal)
-              glass && [
-                'bg-background/95 backdrop-blur-xl',
-                'border-border/50',
-              ],
+            // Frosted glass effect (use background for darker modal)
+            glass && [
+              'bg-background/95 backdrop-blur-xl',
+              'border-border/50',
+            ],
 
-              // Non-glass fallback
-              !glass && 'bg-background border-border',
+            // Non-glass fallback
+            !glass && 'bg-background border-border',
 
-              // Glow effect on focus-within
-              glow && [
-                'transition-shadow duration-200',
-                'focus-within:shadow-[0_0_30px_rgba(0,223,130,0.15)]',
-              ],
+            // Glow effect on focus-within
+            glow && [
+              'transition-shadow duration-200',
+              'focus-within:shadow-[0_0_30px_rgba(0,223,130,0.15)]',
+            ],
 
-              // Animations using brand easing
-              'data-[state=open]:animate-in data-[state=closed]:animate-out',
-              'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-              'data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-4',
-              'data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95',
-              'duration-200',
+            // Animations using brand easing
+            'data-[state=open]:animate-in data-[state=closed]:animate-out',
+            'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+            'data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-4',
+            'data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95',
+            'duration-200',
 
-              className
-            )}
-          >
-            {children}
+            className
+          )}
+        >
+          {children}
 
-            {showCloseButton && (
-              <DialogPrimitive.Close
-                className={cn(
-                  'absolute right-4 top-4',
-                  'rounded-sm p-1',
-                  'opacity-70 ring-offset-background',
-                  'transition-all duration-150',
-                  'hover:opacity-100 hover:bg-muted/50',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                  'disabled:pointer-events-none'
-                )}
-              >
-                <Cross2Icon className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </DialogPrimitive.Close>
-            )}
-          </DialogPrimitive.Content>
-        </DialogPrimitive.Portal>
-      </DialogPrimitive.Root>
-    );
-  }
-);
+          {showCloseButton && (
+            <DialogPrimitive.Close
+              className={cn(
+                'absolute right-4 top-4',
+                'rounded-sm p-1',
+                'opacity-70 ring-offset-background',
+                'transition-all duration-150',
+                'hover:opacity-100 hover:bg-muted/50',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                'disabled:pointer-events-none'
+              )}
+            >
+              <Cross2Icon className="size-4" />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          )}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+}
 ContentModal.displayName = 'ContentModal';
 
 /**
@@ -177,34 +174,44 @@ ContentModalHeader.displayName = 'ContentModalHeader';
 /**
  * ContentModalTitle - Title for ContentModal
  */
-const ContentModalTitle = React.forwardRef<
-  HTMLHeadingElement,
-  React.HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => (
-  <DialogPrimitive.Title
-    ref={ref}
-    className={cn(
-      'text-lg font-semibold leading-none tracking-tight',
-      className
-    )}
-    {...props}
-  />
-));
+function ContentModalTitle({
+  className,
+  ref,
+  ...props
+}: React.HTMLAttributes<HTMLHeadingElement> & {
+  ref?: React.Ref<HTMLHeadingElement>;
+}) {
+  return (
+    <DialogPrimitive.Title
+      ref={ref}
+      className={cn(
+        'text-lg font-semibold leading-none tracking-tight',
+        className
+      )}
+      {...props}
+    />
+  );
+}
 ContentModalTitle.displayName = 'ContentModalTitle';
 
 /**
  * ContentModalDescription - Description for ContentModal
  */
-const ContentModalDescription = React.forwardRef<
-  HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
->(({ className, ...props }, ref) => (
-  <DialogPrimitive.Description
-    ref={ref}
-    className={cn('text-sm text-muted-foreground', className)}
-    {...props}
-  />
-));
+function ContentModalDescription({
+  className,
+  ref,
+  ...props
+}: React.HTMLAttributes<HTMLParagraphElement> & {
+  ref?: React.Ref<HTMLParagraphElement>;
+}) {
+  return (
+    <DialogPrimitive.Description
+      ref={ref}
+      className={cn('text-sm text-muted-foreground', className)}
+      {...props}
+    />
+  );
+}
 ContentModalDescription.displayName = 'ContentModalDescription';
 
 /**
@@ -251,7 +258,4 @@ export {
   ContentModalTitle,
   ContentModalDescription,
   ContentModalBody,
-  ContentModalFooter,
-  type ContentModalProps,
-  type ModalSize,
 };

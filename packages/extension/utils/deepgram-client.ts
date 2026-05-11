@@ -30,7 +30,7 @@ export interface DeepgramClientOptions {
   endpointing?: number;
 }
 
-export interface DeepgramToken {
+interface DeepgramToken {
   token: string;
   /** ISO timestamp when the temporary token expires */
   expiresAt: string;
@@ -60,7 +60,7 @@ export interface DeepgramStreamingSession {
 /**
  * Fetch a short-lived Deepgram token from the Tribora backend.
  */
-export async function getDeepgramToken(): Promise<DeepgramToken> {
+async function getDeepgramToken(): Promise<DeepgramToken> {
   try {
     return await apiFetch<DeepgramToken>("/api/extension/deepgram-token", {
       method: "POST",

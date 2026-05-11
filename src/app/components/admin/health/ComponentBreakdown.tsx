@@ -1,9 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { CheckCircle2, XCircle, AlertTriangle, Database, Cloud, Cpu, Zap } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Database,
+  Cloud,
+  Cpu,
+  Zap,
+} from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
 import { Skeleton } from '@/app/components/ui/skeleton';
@@ -17,47 +31,38 @@ interface Component {
 }
 
 export default function ComponentBreakdown() {
-  const [components, setComponents] = useState<Component[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: components = [],
+    isLoading,
+    error,
+  } = useQuery<Component[], Error>({
+    queryKey: ['analytics', 'metrics', 'components'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        '/api/analytics/metrics?includeHealth=true',
+        { signal },
+      );
 
-  useEffect(() => {
-    const fetchComponents = async () => {
-      try {
-        const response = await fetch('/api/analytics/metrics?includeHealth=true');
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch component health');
-        }
-
-        const { data } = await response.json();
-        setComponents(data.health?.components || []);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching component health:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load data');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch component health');
       }
-    };
 
-    fetchComponents();
-
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchComponents, 30000);
-    return () => clearInterval(interval);
-  }, []);
+      const { data } = await response.json();
+      return data.health?.components || [];
+    },
+    refetchInterval: 30000,
+  });
 
   const getComponentIcon = (id: string) => {
     switch (id) {
       case 'storage':
-        return <Database className="h-5 w-5" />;
+        return <Database className="size-5" />;
       case 'api':
-        return <Zap className="h-5 w-5" />;
+        return <Zap className="size-5" />;
       case 'workers':
-        return <Cpu className="h-5 w-5" />;
+        return <Cpu className="size-5" />;
       case 'cdn':
-        return <Cloud className="h-5 w-5" />;
+        return <Cloud className="size-5" />;
       default:
         return null;
     }
@@ -66,17 +71,19 @@ export default function ComponentBreakdown() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'healthy':
-        return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+        return <CheckCircle2 className="size-4 text-green-600" />;
       case 'degraded':
-        return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+        return <AlertTriangle className="size-4 text-yellow-600" />;
       case 'down':
-        return <XCircle className="h-4 w-4 text-red-600" />;
+        return <XCircle className="size-4 text-red-600" />;
       default:
         return null;
     }
   };
 
-  const getStatusBadgeVariant = (status: string): 'default' | 'secondary' | 'destructive' => {
+  const getStatusBadgeVariant = (
+    status: string,
+  ): 'default' | 'secondary' | 'destructive' => {
     switch (status) {
       case 'healthy':
         return 'default';
@@ -89,7 +96,7 @@ export default function ComponentBreakdown() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -98,9 +105,11 @@ export default function ComponentBreakdown() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-20 w-full" />
-            ))}
+            {['component-1', 'component-2', 'component-3', 'component-4'].map(
+              (skeletonId) => (
+                <Skeleton key={skeletonId} className="h-20 w-full" />
+              ),
+            )}
           </div>
         </CardContent>
       </Card>
@@ -111,7 +120,9 @@ export default function ComponentBreakdown() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading component health: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading component health: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -137,8 +148,12 @@ export default function ComponentBreakdown() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{component.name}</span>
-                        <Badge variant={getStatusBadgeVariant(component.status)}>
+                        <span className="text-sm font-medium">
+                          {component.name}
+                        </span>
+                        <Badge
+                          variant={getStatusBadgeVariant(component.status)}
+                        >
                           {component.status.toUpperCase()}
                         </Badge>
                       </div>
@@ -151,7 +166,9 @@ export default function ComponentBreakdown() {
                   </div>
                   <div className="flex items-center gap-2">
                     {getStatusIcon(component.status)}
-                    <span className="text-sm font-medium">{component.health}%</span>
+                    <span className="text-sm font-medium">
+                      {component.health}%
+                    </span>
                   </div>
                 </div>
                 <Progress value={component.health} className="h-2" />

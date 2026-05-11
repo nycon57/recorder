@@ -17,7 +17,14 @@
  * Missing content directory → empty manifest (safe degradation, see plan §R8).
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import process from 'node:process';
@@ -137,57 +144,60 @@ async function main(): Promise<void> {
     );
   }
 
-  const pages: CompiledEntry[] = [];
+  const pages = (
+    await Promise.all(
+      files.map(async (filepath): Promise<CompiledEntry | null> => {
+        const relDisplay = relative(ROOT, filepath);
 
-  for (const filepath of files) {
-    const relDisplay = relative(ROOT, filepath);
+        try {
+          const source = readFileSync(filepath, 'utf8');
+          const { data, body, rawYaml } = parseFrontmatter(source);
 
-    try {
-      const source = readFileSync(filepath, 'utf8');
-      const { data, body, rawYaml } = parseFrontmatter(source);
+          // Reject authored slug or updatedAt — must be derived
+          if ('slug' in data) {
+            throw new Error(
+              `"slug" must be derived from file path, not authored. Remove it from frontmatter.`,
+            );
+          }
+          if ('updatedAt' in data) {
+            throw new Error(
+              `"updatedAt" must be derived from git log, not authored. Remove it from frontmatter.`,
+            );
+          }
 
-      // Reject authored slug or updatedAt — must be derived
-      if ('slug' in data) {
-        throw new Error(
-          `"slug" must be derived from file path, not authored. Remove it from frontmatter.`,
-        );
-      }
-      if ('updatedAt' in data) {
-        throw new Error(
-          `"updatedAt" must be derived from git log, not authored. Remove it from frontmatter.`,
-        );
-      }
+          const slug = deriveSlug(filepath);
+          const updatedAt = getUpdatedAt(filepath);
+          const contentHash = computeHash(rawYaml, body);
 
-      const slug = deriveSlug(filepath);
-      const updatedAt = getUpdatedAt(filepath);
-      const contentHash = computeHash(rawYaml, body);
+          // Assemble full page object
+          const raw = {
+            ...data,
+            slug,
+            updatedAt,
+            contentHash,
+            source: 'git' as const,
+          };
 
-      // Assemble full page object
-      const raw = {
-        ...data,
-        slug,
-        updatedAt,
-        contentHash,
-        source: 'git' as const,
-      };
+          // Validate via Zod — throws on invalid frontmatter
+          const page = parseDocsPage(raw);
 
-      // Validate via Zod — throws on invalid frontmatter
-      const page = parseDocsPage(raw);
+          // Skip draft pages in production
+          if (page.draft && IS_PRODUCTION) {
+            return null;
+          }
 
-      // Skip draft pages in production
-      if (page.draft && IS_PRODUCTION) {
-        continue;
-      }
+          // Compile Markdown → HTML
+          const bodyHtml = await compileMarkdown(body);
 
-      // Compile Markdown → HTML
-      const bodyHtml = await compileMarkdown(body);
-
-      pages.push({ ...page, bodyHtml });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`[docs:build] ${relDisplay}: ${msg}`);
-    }
-  }
+          return { ...page, bodyHtml };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push(`[docs:build] ${relDisplay}: ${msg}`);
+          return null;
+        }
+      }),
+    )
+  ).filter((page): page is CompiledEntry => Boolean(page));
 
   // Validate related links (warn only — never fail)
   const pageMap = new Map<string, DocsPage>(pages.map((p) => [p.slug, p]));

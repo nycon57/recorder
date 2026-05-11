@@ -12,7 +12,7 @@ import { NextRequest } from 'next/server';
 
 import {
   apiHandler,
-  requireAdmin,
+  requireSystemAdmin,
   successResponse,
   errors,
   parseBody,
@@ -28,8 +28,8 @@ import {
  * List experiments with optional filtering and performance metrics
  */
 export const GET = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  await requireAdmin();
+  // SECURITY: Cross-org experiments — require Tribora staff (system admin)
+  await requireSystemAdmin();
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status') || null;
@@ -166,8 +166,8 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * Create a new A/B test experiment
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  await requireAdmin();
+  // SECURITY: Cross-org experiments — require Tribora staff (system admin)
+  await requireSystemAdmin();
 
   const body = await parseBody(request, adminCreateExperimentSchema);
 
@@ -249,8 +249,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
  * Update an existing experiment
  */
 export const PUT = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  await requireAdmin();
+  // SECURITY: Cross-org experiments — require Tribora staff (system admin)
+  await requireSystemAdmin();
 
   const body = await parseBody(request, adminUpdateExperimentSchema);
 
@@ -325,8 +325,8 @@ export const PUT = apiHandler(async (request: NextRequest) => {
  * Delete an experiment (and all associated data)
  */
 export const DELETE = apiHandler(async (request: NextRequest) => {
-  // Require admin privileges
-  await requireAdmin();
+  // SECURITY: Cross-org experiments — require Tribora staff (system admin)
+  await requireSystemAdmin();
 
   const { searchParams } = new URL(request.url);
   const experimentId = searchParams.get('experimentId');

@@ -18,10 +18,19 @@ import { findMatchingConcepts, getConceptContentIds } from './concept-search';
 const embeddingCache = new Map<string, number[]>();
 const CACHE_MAX_SIZE = 100;
 
-// Environment-based configuration
-const DEFAULT_THRESHOLD = parseFloat(process.env.SEARCH_DEFAULT_THRESHOLD || '0.5');
-const ENABLE_HYBRID = process.env.SEARCH_ENABLE_HYBRID !== 'false';
-const ENABLE_QUERY_EXPANSION = process.env.SEARCH_ENABLE_QUERY_EXPANSION !== 'false';
+const getDefaultThreshold = () =>
+  parseFloat(process.env.SEARCH_DEFAULT_THRESHOLD || '0.5');
+const isHybridSearchEnabled = () => process.env.SEARCH_ENABLE_HYBRID !== 'false';
+const isQueryExpansionEnabled = () =>
+  process.env.SEARCH_ENABLE_QUERY_EXPANSION !== 'false';
+
+export function __clearVectorSearchCachesForTest() {
+  embeddingCache.clear();
+}
+
+function containsText(text: string, searchText: string) {
+  return text.includes(searchText);
+}
 
 export interface SearchResult {
   id: string;
@@ -59,19 +68,20 @@ export interface SearchResult {
  */
 function getAdaptiveThreshold(query: string): number {
   const wordCount = query.trim().split(/\s+/).length;
+  const defaultThreshold = getDefaultThreshold();
 
   // Short queries (< 5 words) - exploratory, need high recall
   if (wordCount < 5) {
-    return DEFAULT_THRESHOLD;
+    return defaultThreshold;
   }
 
   // Medium queries (5-10 words) - balanced approach
   if (wordCount <= 10) {
-    return Math.min(DEFAULT_THRESHOLD + 0.05, 0.7);
+    return Math.min(defaultThreshold + 0.05, 0.7);
   }
 
   // Long, specific queries - can be more precise
-  return Math.min(DEFAULT_THRESHOLD + 0.15, 0.7);
+  return Math.min(defaultThreshold + 0.15, 0.7);
 }
 
 export interface SearchOptions {
@@ -127,7 +137,7 @@ export interface SearchOptions {
  */
 export async function vectorSearch(
   query: string,
-  options: SearchOptions
+  options: SearchOptions,
 ): Promise<SearchResult[]> {
   const {
     orgId,
@@ -155,7 +165,7 @@ export async function vectorSearch(
 
   // Expand short queries for better recall (if enabled)
   let processedQuery = query;
-  if (ENABLE_QUERY_EXPANSION && wordCount <= 2) {
+  if (isQueryExpansionEnabled() && wordCount <= 2) {
     processedQuery = await expandShortQuery(query, orgId);
     if (processedQuery !== query) {
       console.log('[Vector Search] Query expanded:', {
@@ -174,7 +184,12 @@ export async function vectorSearch(
   // For short queries, use hybrid search for better results (if enabled)
   // Skip if already in a hybrid context (prevent infinite recursion)
   const isHybridContext = (options as any).__isHybridContext === true;
-  if (ENABLE_HYBRID && wordCount < 5 && searchMode === 'standard' && !isHybridContext) {
+  if (
+    isHybridSearchEnabled() &&
+    wordCount < 5 &&
+    searchMode === 'standard' &&
+    !isHybridContext
+  ) {
     console.log('[Vector Search] Using hybrid search for short query');
     return await hybridSearch(processedQuery, {
       ...options,
@@ -195,7 +210,9 @@ export async function vectorSearch(
     // Fallback to standard search if no hierarchical results found
     // This handles cases where summaries haven't been generated yet
     if (hierarchicalResults.length === 0) {
-      console.log('[Vector Search] No hierarchical results found, falling back to standard search');
+      console.log(
+        '[Vector Search] No hierarchical results found, falling back to standard search',
+      );
       // Recursively call with standard mode
       return vectorSearch(processedQuery, {
         ...options,
@@ -213,7 +230,8 @@ export async function vectorSearch(
       similarity: r.similarity,
       metadata: {
         ...r.metadata,
-        contentType: r.metadata.source === 'document' ? 'document' : 'recording',
+        contentType:
+          r.metadata.source === 'document' ? 'document' : 'recording',
       },
       createdAt: r.createdAt,
     }));
@@ -223,25 +241,25 @@ export async function vectorSearch(
 
     if (contentIds && contentIds.length > 0) {
       filteredResults = filteredResults.filter((r) =>
-        contentIds.includes(r.contentId)
+        contentIds.includes(r.contentId),
       );
     }
 
     if (source) {
       filteredResults = filteredResults.filter(
-        (r) => r.metadata.source === source
+        (r) => r.metadata.source === source,
       );
     }
 
     if (dateFrom) {
       filteredResults = filteredResults.filter(
-        (r) => new Date(r.createdAt) >= dateFrom
+        (r) => new Date(r.createdAt) >= dateFrom,
       );
     }
 
     if (dateTo) {
       filteredResults = filteredResults.filter(
-        (r) => new Date(r.createdAt) <= dateTo
+        (r) => new Date(r.createdAt) <= dateTo,
       );
     }
 
@@ -318,7 +336,8 @@ export async function vectorSearch(
 
   // For complex filters (tags, collections, favorites), we need pre-filtering
   // to get eligible content IDs first
-  const needsPreFiltering = (tagIds && tagIds.length > 0) || collectionId || favoritesOnly;
+  const needsPreFiltering =
+    (tagIds && tagIds.length > 0) || collectionId || favoritesOnly;
   let eligibleContentIds: string[] | undefined = contentIds;
 
   if (needsPreFiltering) {
@@ -377,10 +396,15 @@ export async function vectorSearch(
   }
 
   // Calculate statistics for monitoring
-  const similarities = results.map((r: any) => r.similarity).filter((s: number | null): s is number => s !== null);
-  const avgSimilarity = similarities.length > 0
-    ? similarities.reduce((a: number, b: number) => a + b, 0) / similarities.length
-    : 0;
+  const similarities = results.flatMap((__item: any) => {
+    const __mapped = __item.similarity;
+    return __mapped !== null ? [__mapped] : [];
+  });
+  const avgSimilarity =
+    similarities.length > 0
+      ? similarities.reduce((a: number, b: number) => a + b, 0) /
+        similarities.length
+      : 0;
   const minSimilarity = similarities.length > 0 ? Math.min(...similarities) : 0;
   const maxSimilarity = similarities.length > 0 ? Math.max(...similarities) : 0;
 
@@ -414,7 +438,12 @@ export async function vectorSearch(
   // Apply concept boosting if enabled (default: true)
   const { conceptBoost = true, conceptBoostFactor = 0.15 } = options;
   if (conceptBoost && searchResults.length > 0) {
-    return applyConceptBoost(processedQuery, orgId, searchResults, conceptBoostFactor);
+    return applyConceptBoost(
+      processedQuery,
+      orgId,
+      searchResults,
+      conceptBoostFactor,
+    );
   }
 
   return searchResults;
@@ -435,9 +464,15 @@ async function getEligibleContentIds(
     tagFilterMode?: 'AND' | 'OR';
     collectionId?: string;
     favoritesOnly?: boolean;
-  }
+  },
 ): Promise<string[] | undefined> {
-  const { contentIds, tagIds, tagFilterMode = 'OR', collectionId, favoritesOnly } = filters;
+  const {
+    contentIds,
+    tagIds,
+    tagFilterMode = 'OR',
+    collectionId,
+    favoritesOnly,
+  } = filters;
 
   let eligibleContentIds = contentIds ? [...contentIds] : undefined;
 
@@ -454,19 +489,23 @@ async function getEligibleContentIds(
       return [];
     }
 
-    const taggedIds = taggedContent?.map((r: { content_id: string }) => r.content_id) || [];
+    const taggedIds =
+      taggedContent?.map((r: { content_id: string }) => r.content_id) || [];
 
     if (tagFilterMode === 'AND') {
       // For AND mode: count how many tags each content item has
-      const contentTagCounts = taggedIds.reduce((acc: Record<string, number>, id: string) => {
-        acc[id] = (acc[id] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      const contentTagCounts = taggedIds.reduce(
+        (acc: Record<string, number>, id: string) => {
+          acc[id] = (acc[id] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
 
       // Only keep content items that have ALL the specified tags
-      const fullyTaggedIds = Object.entries(contentTagCounts)
-        .filter(([_, count]) => count === tagIds.length)
-        .map(([id]) => id);
+      const fullyTaggedIds = Object.entries(contentTagCounts).flatMap(
+        ([id, count]) => (count === tagIds.length ? [id] : []),
+      );
 
       eligibleContentIds = eligibleContentIds
         ? eligibleContentIds.filter((id: string) => fullyTaggedIds.includes(id))
@@ -475,7 +514,9 @@ async function getEligibleContentIds(
       // For OR mode: content must have ANY of the tags
       const uniqueTaggedIds = [...new Set(taggedIds)];
       eligibleContentIds = eligibleContentIds
-        ? eligibleContentIds.filter((id: string) => uniqueTaggedIds.includes(id))
+        ? eligibleContentIds.filter((id: string) =>
+            uniqueTaggedIds.includes(id),
+          )
         : uniqueTaggedIds;
     }
 
@@ -493,14 +534,20 @@ async function getEligibleContentIds(
       .eq('content.org_id', orgId);
 
     if (collectionError) {
-      console.error('[Vector Search] Collection filter error:', collectionError);
+      console.error(
+        '[Vector Search] Collection filter error:',
+        collectionError,
+      );
       return [];
     }
 
-    const collectionContentIds = collectionItems?.map((i: { content_id: string }) => i.content_id) || [];
+    const collectionContentIds =
+      collectionItems?.map((i: { content_id: string }) => i.content_id) || [];
 
     eligibleContentIds = eligibleContentIds
-      ? eligibleContentIds.filter((id: string) => collectionContentIds.includes(id))
+      ? eligibleContentIds.filter((id: string) =>
+          collectionContentIds.includes(id),
+        )
       : collectionContentIds;
 
     if (eligibleContentIds && eligibleContentIds.length === 0) {
@@ -520,10 +567,13 @@ async function getEligibleContentIds(
       return [];
     }
 
-    const favoriteContentIds = favorites?.map((f: { content_id: string }) => f.content_id) || [];
+    const favoriteContentIds =
+      favorites?.map((f: { content_id: string }) => f.content_id) || [];
 
     eligibleContentIds = eligibleContentIds
-      ? eligibleContentIds.filter((id: string) => favoriteContentIds.includes(id))
+      ? eligibleContentIds.filter((id: string) =>
+          favoriteContentIds.includes(id),
+        )
       : favoriteContentIds;
 
     if (eligibleContentIds && eligibleContentIds.length === 0) {
@@ -552,7 +602,7 @@ async function executeComplexFilteredSearch(
     collectionId?: string;
     favoritesOnly?: boolean;
   },
-  limit: number
+  limit: number,
 ): Promise<SearchResult[]> {
   const supabase = supabaseAdmin;
   const {
@@ -599,7 +649,7 @@ async function executeComplexFilteredSearch(
         content_type,
         deleted_at
       )
-    `
+    `,
     )
     .eq('org_id', orgId)
     .is('content.deleted_at', null); // Exclude trashed items
@@ -645,15 +695,22 @@ async function executeComplexFilteredSearch(
 
   // Step 3: Calculate similarities
   const embeddingString = `[${queryEmbedding.join(',')}]`;
-  const { data: matches, error: matchError } = await supabase.rpc('match_chunks', {
-    query_embedding: embeddingString,
-    match_threshold: 0.5, // Using lower threshold for complex filtered searches
-    match_count: chunks.length * 2, // Get more results for filtering
-    filter_org_id: orgId,
-  });
+  const { data: matches, error: matchError } = await supabase.rpc(
+    'match_chunks',
+    {
+      query_embedding: embeddingString,
+      match_threshold: 0.5, // Using lower threshold for complex filtered searches
+      match_count: chunks.length * 2, // Get more results for filtering
+      filter_org_id: orgId,
+    },
+  );
 
   if (matchError) {
-    console.error('[Vector Search] Similarity calculation error:', matchError, matchError.stack);
+    console.error(
+      '[Vector Search] Similarity calculation error:',
+      matchError,
+      matchError.stack,
+    );
     // Return chunks with null similarity to indicate calculation failure
     return chunks.map((chunk: any) => ({
       id: chunk.id,
@@ -673,20 +730,26 @@ async function executeComplexFilteredSearch(
   // Filter match_chunks results to only include chunks from our filtered set
   // This ensures trashed content is excluded
   return matches
-    .filter((match: any) => allowedChunkIds.has(match.id))
-    .map((match: any) => ({
-      id: match.id,
-      contentId: match.content_id,
-      contentTitle: match.content_title,
-      contentType: match.content_type || 'recording',
-      chunkText: match.chunk_text,
-      similarity: match.similarity,
-      metadata: {
-        ...(match.metadata || {}),
-        contentType: match.content_type || match.metadata?.contentType,
-      },
-      createdAt: match.created_at,
-    }))
+    .flatMap((__item: any) =>
+      allowedChunkIds.has(__item.id)
+        ? [
+            {
+              id: __item.id,
+              contentId: __item.content_id,
+              contentTitle: __item.content_title,
+              contentType: __item.content_type || 'recording',
+              chunkText: __item.chunk_text,
+              similarity: __item.similarity,
+              metadata: {
+                ...(__item.metadata || {}),
+                contentType:
+                  __item.content_type || __item.metadata?.contentType,
+              },
+              createdAt: __item.created_at,
+            },
+          ]
+        : [],
+    )
     .sort((a: SearchResult, b: SearchResult) => {
       // Handle null similarities: push null values to the end
       if (a.similarity === null && b.similarity === null) return 0;
@@ -707,7 +770,10 @@ async function executeComplexFilteredSearch(
  *
  * Expected savings: 20-35% reduction in embedding API calls for repeated queries
  */
-async function generateQueryEmbedding(query: string, orgId: string): Promise<number[]> {
+async function generateQueryEmbedding(
+  query: string,
+  orgId: string,
+): Promise<number[]> {
   // Normalize query for consistent caching
   const normalizedQuery = EmbeddingCache.normalizeQuery(query);
 
@@ -734,14 +800,17 @@ async function generateQueryEmbedding(query: string, orgId: string): Promise<num
       return redisCached;
     }
   } catch (error) {
-    console.warn('[Vector Search] Redis cache lookup failed, generating fresh embedding:', error);
+    console.warn(
+      '[Vector Search] Redis cache lookup failed, generating fresh embedding:',
+      error,
+    );
     // Continue to generate embedding - caching is an optimization, not critical
   }
 
   // Cache miss - generate new embedding
   const { embedding, provider } = await generateEmbeddingWithFallback(
     normalizedQuery,
-    'RETRIEVAL_QUERY'
+    'RETRIEVAL_QUERY',
   );
 
   console.log(`[Vector Search] Embedding generated using ${provider}`);
@@ -771,7 +840,7 @@ async function calculateSimilarities(
   chunks: any[],
   queryEmbedding: number[],
   threshold: number,
-  orgId: string
+  orgId: string,
 ): Promise<SearchResult[]> {
   // Use admin client since API route already validates auth
   const supabase = supabaseAdmin;
@@ -793,50 +862,56 @@ async function calculateSimilarities(
   if (error) {
     console.error('Similarity calculation error:', error);
     // Fallback to client-side calculation if RPC fails
-    return chunks
-      .map((chunk) => ({
-        id: chunk.id,
-        contentId: chunk.content_id,
-        contentTitle: chunk.content?.title || 'Untitled',
-        contentType: chunk.content?.content_type || 'recording',
-        chunkText: chunk.chunk_text,
+    return chunks.flatMap((__item: any) => {
+      const __mapped = {
+        id: __item.id,
+        contentId: __item.content_id,
+        contentTitle: __item.content?.title || 'Untitled',
+        contentType: __item.content?.content_type || 'recording',
+        chunkText: __item.chunk_text,
         similarity: 0.8, // Placeholder
         metadata: {
-          ...(chunk.metadata || {}),
-          contentType: chunk.content?.content_type || chunk.metadata?.contentType,
+          ...(__item.metadata || {}),
+          contentType:
+            __item.content?.content_type || __item.metadata?.contentType,
         },
-        createdAt: chunk.created_at,
-      }))
-      .filter((r) => r.similarity >= threshold);
+        createdAt: __item.created_at,
+      };
+      return __mapped.similarity >= threshold ? [__mapped] : [];
+    });
   }
 
   // Filter match_chunks results to only include chunks from our filtered set
   // This ensures trashed content is excluded
-  return data
-    .filter((match: any) => allowedChunkIds.has(match.id))
-    .map((match: any) => ({
-      id: match.id,
-      contentId: match.content_id,
-      contentTitle: match.content_title,
-      contentType: match.content_type || 'recording',
-      chunkText: match.chunk_text,
-      similarity: match.similarity,
-      metadata: {
-        ...(match.metadata || {}),
-        contentType: match.content_type || match.metadata?.contentType,
-      },
-      createdAt: match.created_at,
-    }));
+  return data.flatMap((__item: any) =>
+    allowedChunkIds.has(__item.id)
+      ? [
+          {
+            id: __item.id,
+            contentId: __item.content_id,
+            contentTitle: __item.content_title,
+            contentType: __item.content_type || 'recording',
+            chunkText: __item.chunk_text,
+            similarity: __item.similarity,
+            metadata: {
+              ...(__item.metadata || {}),
+              contentType: __item.content_type || __item.metadata?.contentType,
+            },
+            createdAt: __item.created_at,
+          },
+        ]
+      : [],
+  );
 }
 
 /**
  * Search within specific content
  */
-export async function searchContent(
+async function searchContent(
   contentId: string,
   query: string,
   orgId: string,
-  options?: Partial<SearchOptions>
+  options?: Partial<SearchOptions>,
 ): Promise<SearchResult[]> {
   return vectorSearch(query, {
     ...options,
@@ -851,10 +926,10 @@ export const searchRecording = searchContent;
 /**
  * Get similar chunks to a given chunk (for "related content" features)
  */
-export async function findSimilarChunks(
+async function findSimilarChunks(
   chunkId: string,
   orgId: string,
-  limit: number = 5
+  limit: number = 5,
 ): Promise<SearchResult[]> {
   // Use admin client since this is called from authenticated context
   const supabase = supabaseAdmin;
@@ -877,7 +952,7 @@ export async function findSimilarChunks(
     threshold: 0.6, // Lower threshold for related content
   }).then((results) =>
     // Filter out the original chunk
-    results.filter((r) => r.id !== chunkId).slice(0, limit)
+    results.filter((r) => r.id !== chunkId).slice(0, limit),
   );
 }
 
@@ -886,24 +961,28 @@ export async function findSimilarChunks(
  */
 export async function hybridSearch(
   query: string,
-  options: SearchOptions
+  options: SearchOptions,
 ): Promise<SearchResult[]> {
   const { limit = 10 } = options;
 
   // Perform vector search
   // IMPORTANT: Set __isHybridContext flag to prevent infinite recursion
-  const vectorResults = await vectorSearch(query, {
-    ...options,
-    searchMode: 'standard', // Explicitly set to prevent hybrid routing loop
-    limit: limit * 2, // Get more results for reranking
-    __isHybridContext: true, // Internal flag to prevent re-entry
-  } as SearchOptions);
-
-  // Perform keyword search
-  const keywordResults = await keywordSearch(query, options);
+  const [vectorResults, keywordResults] = await Promise.all([
+    vectorSearch(query, {
+      ...options,
+      searchMode: 'standard', // Explicitly set to prevent hybrid routing loop
+      limit: limit * 2, // Get more results for reranking
+      __isHybridContext: true, // Internal flag to prevent re-entry
+    } as SearchOptions),
+    keywordSearch(query, options),
+  ]);
 
   // Merge and rerank results
-  const mergedResults = mergeSearchResults(vectorResults, keywordResults, query);
+  const mergedResults = mergeSearchResults(
+    vectorResults,
+    keywordResults,
+    query,
+  );
 
   return mergedResults.slice(0, limit);
 }
@@ -914,7 +993,7 @@ export async function hybridSearch(
  */
 async function keywordSearch(
   query: string,
-  options: SearchOptions
+  options: SearchOptions,
 ): Promise<SearchResult[]> {
   const {
     orgId,
@@ -936,7 +1015,8 @@ async function keywordSearch(
   // Get eligible content IDs based on complex filters (tags, collections, favorites)
   let eligibleContentIds: string[] | undefined = contentIds;
 
-  const needsPreFiltering = (tagIds && tagIds.length > 0) || collectionId || favoritesOnly;
+  const needsPreFiltering =
+    (tagIds && tagIds.length > 0) || collectionId || favoritesOnly;
   if (needsPreFiltering) {
     eligibleContentIds = await getEligibleContentIds(supabase, orgId, {
       contentIds,
@@ -990,7 +1070,7 @@ async function keywordSearch(
 function mergeSearchResults(
   vectorResults: SearchResult[],
   keywordResults: SearchResult[],
-  query: string
+  query: string,
 ): SearchResult[] {
   const resultMap = new Map<string, SearchResult>();
   const queryTerms = query.toLowerCase().split(/\s+/);
@@ -1019,10 +1099,10 @@ function mergeSearchResults(
 
     // Check if title or text contains any query terms
     for (const term of queryTerms) {
-      if (titleLower.includes(term)) {
+      if (containsText(titleLower, term)) {
         boost *= 1.3; // 30% boost for title match
       }
-      if (textLower.includes(term)) {
+      if (containsText(textLower, term)) {
         boost *= 1.1; // 10% boost for text match
       }
     }
@@ -1037,7 +1117,7 @@ function mergeSearchResults(
 
   // Convert back to array and sort by similarity
   return boostedResults.sort(
-    (a, b) => (b.similarity ?? 0) - (a.similarity ?? 0)
+    (a, b) => (b.similarity ?? 0) - (a.similarity ?? 0),
   );
 }
 
@@ -1055,23 +1135,28 @@ async function applyConceptBoost(
   query: string,
   orgId: string,
   results: SearchResult[],
-  boostFactor: number
+  boostFactor: number,
 ): Promise<SearchResult[]> {
   try {
     // Find concepts matching the query
-    const matchingConcepts = await findMatchingConcepts(query, orgId, { limit: 5 });
+    const matchingConcepts = await findMatchingConcepts(query, orgId, {
+      limit: 5,
+    });
 
     if (matchingConcepts.length === 0) {
       console.log('[Vector Search] No matching concepts for boosting');
       return results;
     }
 
-    console.log('[Vector Search] Found matching concepts:', matchingConcepts.map(c => c.name));
+    console.log(
+      '[Vector Search] Found matching concepts:',
+      matchingConcepts.map((c) => c.name),
+    );
 
     // Get content IDs that mention these concepts
     const conceptContentIds = await getConceptContentIds(
-      matchingConcepts.map(c => c.id),
-      orgId
+      matchingConcepts.map((c) => c.id),
+      orgId,
     );
 
     if (conceptContentIds.size === 0) {
@@ -1079,15 +1164,20 @@ async function applyConceptBoost(
     }
 
     // Apply boost to results whose contentId is in the concept content set
-    const boostedResults = results.map(result => {
+    const boostedResults = results.map((result) => {
       const mentionCount = conceptContentIds.get(result.contentId) || 0;
 
       if (mentionCount > 0 && result.similarity !== null) {
         // Calculate boost based on mention count (diminishing returns)
         const boost = boostFactor * Math.min(1, Math.log2(mentionCount + 1));
-        const boostedSimilarity = Math.min(1.0, result.similarity * (1 + boost));
+        const boostedSimilarity = Math.min(
+          1.0,
+          result.similarity * (1 + boost),
+        );
 
-        console.log(`[Vector Search] Boosting "${result.contentTitle}" by ${(boost * 100).toFixed(1)}% (${mentionCount} concept mentions)`);
+        console.log(
+          `[Vector Search] Boosting "${result.contentTitle}" by ${(boost * 100).toFixed(1)}% (${mentionCount} concept mentions)`,
+        );
 
         return {
           ...result,

@@ -1,8 +1,16 @@
 'use client';
 
+import Image from 'next/image';
 import * as React from 'react';
-import { Clock, Heart, FileStack, FolderX, FolderPlus, ArrowRight } from 'lucide-react';
-import { motion } from 'motion/react';
+import {
+  Clock,
+  Heart,
+  FileStack,
+  FolderX,
+  FolderPlus,
+  ArrowRight,
+} from 'lucide-react';
+import { m } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
@@ -57,7 +65,7 @@ interface LibraryRootViewProps {
   /** Handler for "See all" recent items */
   onSeeAllRecent?: () => void;
   /** Custom content component for rendering items (when showing all/favorites/uncategorized) */
-  renderContent?: () => React.ReactNode;
+  content?: React.ReactNode;
   className?: string;
 }
 
@@ -81,7 +89,7 @@ export function LibraryRootView({
   onDeleteCollection,
   onRecentItemClick,
   onSeeAllRecent,
-  renderContent,
+  content,
   className,
 }: LibraryRootViewProps) {
   // Animation variants for staggered children
@@ -107,20 +115,23 @@ export function LibraryRootView({
     <div className={cn('space-y-8', className)}>
       {/* Quick Access Tabs */}
       <section>
-        <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as QuickAccessTab)}>
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => onTabChange(v as QuickAccessTab)}
+        >
           <TabsList className="h-auto flex-wrap gap-2 bg-transparent p-0">
             <TabsTrigger
               value="recent"
               className="gap-2 data-[state=active]:bg-accent"
             >
-              <Clock className="h-4 w-4" />
+              <Clock className="size-4" />
               Recent
             </TabsTrigger>
             <TabsTrigger
               value="favorites"
               className="gap-2 data-[state=active]:bg-accent"
             >
-              <Heart className="h-4 w-4" />
+              <Heart className="size-4" />
               Favorites
               {counts.favorites > 0 && (
                 <span className="text-xs text-muted-foreground">
@@ -132,7 +143,7 @@ export function LibraryRootView({
               value="all"
               className="gap-2 data-[state=active]:bg-accent"
             >
-              <FileStack className="h-4 w-4" />
+              <FileStack className="size-4" />
               All Content
               {counts.total > 0 && (
                 <span className="text-xs text-muted-foreground">
@@ -144,7 +155,7 @@ export function LibraryRootView({
               value="uncategorized"
               className="gap-2 data-[state=active]:bg-accent"
             >
-              <FolderX className="h-4 w-4" />
+              <FolderX className="size-4" />
               Uncategorized
               {counts.uncategorized > 0 && (
                 <span className="text-xs text-muted-foreground">
@@ -169,7 +180,7 @@ export function LibraryRootView({
                 onClick={onNewCollection}
                 className="gap-1.5"
               >
-                <FolderPlus className="h-4 w-4" />
+                <FolderPlus className="size-4" />
                 <span className="hidden sm:inline">New Folder</span>
               </Button>
             </div>
@@ -181,14 +192,14 @@ export function LibraryRootView({
                 ))}
               </div>
             ) : collections.length > 0 ? (
-              <motion.div
+              <m.div
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
               >
                 {collections.map((collection) => (
-                  <motion.div key={collection.id} variants={itemVariants}>
+                  <m.div key={collection.id} variants={itemVariants}>
                     <CollectionFolderCard
                       collection={collection}
                       onClick={() => onCollectionClick(collection.id)}
@@ -203,9 +214,9 @@ export function LibraryRootView({
                           : undefined
                       }
                     />
-                  </motion.div>
+                  </m.div>
                 ))}
-              </motion.div>
+              </m.div>
             ) : (
               <EmptyCollections onCreateCollection={onNewCollection} />
             )}
@@ -224,32 +235,32 @@ export function LibraryRootView({
                     className="gap-1.5 text-muted-foreground hover:text-foreground"
                   >
                     See all
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className="size-4" />
                   </Button>
                 )}
               </div>
 
-              <motion.div
+              <m.div
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
               >
                 {recentItems.slice(0, 8).map((item) => (
-                  <motion.div key={item.id} variants={itemVariants}>
+                  <m.div key={item.id} variants={itemVariants}>
                     <RecentItemCard
                       item={item}
                       onClick={() => onRecentItemClick?.(item.id)}
                     />
-                  </motion.div>
+                  </m.div>
                 ))}
-              </motion.div>
+              </m.div>
             </section>
           )}
         </>
       ) : (
         // Render custom content for other tabs (favorites, all, uncategorized)
-        renderContent?.()
+        content
       )}
     </div>
   );
@@ -258,23 +269,28 @@ export function LibraryRootView({
 /**
  * Empty state for collections section
  */
-function EmptyCollections({ onCreateCollection }: { onCreateCollection: () => void }) {
+function EmptyCollections({
+  onCreateCollection,
+}: {
+  onCreateCollection: () => void;
+}) {
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col items-center justify-center py-12 px-4 border border-dashed rounded-lg bg-muted/30"
     >
-      <FolderPlus className="h-12 w-12 text-muted-foreground/50 mb-4" />
+      <FolderPlus className="size-12 text-muted-foreground/50 mb-4" />
       <h3 className="text-lg font-medium mb-2">No collections yet</h3>
       <p className="text-sm text-muted-foreground text-center max-w-sm mb-4">
-        Create folders to organize your recordings, documents, and other content.
+        Create folders to organize your recordings, documents, and other
+        content.
       </p>
       <Button onClick={onCreateCollection} className="gap-1.5">
-        <FolderPlus className="h-4 w-4" />
+        <FolderPlus className="size-4" />
         Create Collection
       </Button>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -315,21 +331,24 @@ function RecentItemCard({
       className={cn(
         'w-full text-left p-3 rounded-lg border bg-card',
         'hover:border-primary/50 hover:bg-accent/50 transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
       )}
     >
       <div className="flex items-start gap-3">
         {/* Thumbnail or icon */}
         {item.thumbnail_url ? (
-          <div className="w-12 h-12 rounded bg-muted overflow-hidden flex-shrink-0">
-            <img
+          <div className="relative size-12 rounded bg-muted overflow-hidden flex-shrink-0">
+            <Image
               src={item.thumbnail_url}
               alt=""
-              className="w-full h-full object-cover"
+              fill
+              sizes="48px"
+              className="object-cover"
+              unoptimized
             />
           </div>
         ) : (
-          <div className="w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0 text-xl">
+          <div className="size-12 rounded bg-muted flex items-center justify-center flex-shrink-0 text-xl">
             {getContentTypeIcon()}
           </div>
         )}
@@ -339,9 +358,7 @@ function RecentItemCard({
           <h4 className="font-medium text-sm truncate">
             {item.title || 'Untitled'}
           </h4>
-          <p className="text-xs text-muted-foreground">
-            {formattedDate}
-          </p>
+          <p className="text-xs text-muted-foreground">{formattedDate}</p>
         </div>
       </div>
     </button>
@@ -386,7 +403,7 @@ export function LibraryRootViewSkeleton() {
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="p-3 rounded-lg border bg-card">
               <div className="flex gap-3">
-                <div className="w-12 h-12 bg-muted rounded" />
+                <div className="size-12 bg-muted rounded" />
                 <div className="flex-1 space-y-2">
                   <div className="h-4 w-3/4 bg-muted rounded" />
                   <div className="h-3 w-1/3 bg-muted rounded" />

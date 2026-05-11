@@ -111,8 +111,11 @@ describe('loadRecordingFixtures()', () => {
 
   it('authorship: 18 lead, 10 agent, 2 admin, 0 owner/reader', () => {
     const counts: Record<string, number> = {};
+    const roleByUserId = new Map(
+      Object.entries(DEMO_USER_IDS).map(([role, id]) => [id, role])
+    );
     for (const f of fixtures) {
-      const role = Object.entries(DEMO_USER_IDS).find(([, id]) => id === f.createdBy)?.[0] ?? 'unknown';
+      const role = roleByUserId.get(f.createdBy) ?? 'unknown';
       counts[role] = (counts[role] ?? 0) + 1;
     }
     expect(counts['lead']).toBe(18);

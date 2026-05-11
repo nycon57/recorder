@@ -21,10 +21,17 @@ const c = {
   gray: '\x1b[90m',
 };
 
-function check(name: string, status: 'pass' | 'fail' | 'warn', message?: string) {
+function check(
+  name: string,
+  status: 'pass' | 'fail' | 'warn',
+  message?: string,
+) {
   const emoji = status === 'pass' ? '✓' : status === 'fail' ? '✗' : '⚠';
-  const color = status === 'pass' ? c.green : status === 'fail' ? c.red : c.yellow;
-  console.log(`${color}${emoji} ${name}${c.reset}${message ? ` - ${message}` : ''}`);
+  const color =
+    status === 'pass' ? c.green : status === 'fail' ? c.red : c.yellow;
+  console.log(
+    `${color}${emoji} ${name}${c.reset}${message ? ` - ${message}` : ''}`,
+  );
 }
 
 function section(title: string) {
@@ -35,7 +42,9 @@ function section(title: string) {
 
 async function main() {
   console.log(`${c.blue}╔${'═'.repeat(58)}╗${c.reset}`);
-  console.log(`${c.blue}║${' '.repeat(15)}SYSTEM HEALTH CHECK${' '.repeat(23)}║${c.reset}`);
+  console.log(
+    `${c.blue}║${' '.repeat(15)}SYSTEM HEALTH CHECK${' '.repeat(23)}║${c.reset}`,
+  );
   console.log(`${c.blue}╚${'═'.repeat(58)}╝${c.reset}`);
 
   let totalChecks = 0;
@@ -62,7 +71,8 @@ async function main() {
     const value = process.env[name];
 
     if (exists) {
-      const preview = value!.length > 20 ? value!.substring(0, 20) + '...' : value;
+      const preview =
+        value!.length > 20 ? value!.substring(0, 20) + '...' : value;
       check(name, 'pass', preview);
       passedChecks++;
     } else {
@@ -82,7 +92,10 @@ async function main() {
   try {
     totalChecks++;
     const supabase = createAdminClient();
-    const { error } = await supabase.from('organizations').select('id').limit(1);
+    const { error } = await supabase
+      .from('organizations')
+      .select('id')
+      .limit(1);
 
     if (error) {
       check('Supabase connection', 'fail', error.message);
@@ -103,21 +116,29 @@ async function main() {
       'jobs',
     ];
 
-    for (const table of tables) {
-      totalChecks++;
-      const { error: tableError } = await supabase.from(table).select('id').limit(1);
-
-      if (tableError) {
-        check(`Table: ${table}`, 'fail', tableError.message);
-        failedChecks++;
-      } else {
-        check(`Table: ${table}`, 'pass');
-        passedChecks++;
-      }
-    }
+    await Promise.all(
+      Array.from(tables).map(async (table) => {
+        totalChecks++;
+        const { error: tableError } = await supabase
+          .from(table)
+          .select('id')
+          .limit(1);
+        if (tableError) {
+          check(`Table: ${table}`, 'fail', tableError.message);
+          failedChecks++;
+        } else {
+          check(`Table: ${table}`, 'pass');
+          passedChecks++;
+        }
+      }),
+    );
   } catch (error) {
     totalChecks++;
-    check('Supabase connection', 'fail', error instanceof Error ? error.message : 'Unknown error');
+    check(
+      'Supabase connection',
+      'fail',
+      error instanceof Error ? error.message : 'Unknown error',
+    );
     failedChecks++;
   }
 
@@ -148,7 +169,11 @@ async function main() {
     }
   } catch (error) {
     totalChecks++;
-    check('Google AI connection', 'fail', error instanceof Error ? error.message : 'Unknown error');
+    check(
+      'Google AI connection',
+      'fail',
+      error instanceof Error ? error.message : 'Unknown error',
+    );
     failedChecks++;
   }
 
@@ -171,7 +196,11 @@ async function main() {
     } else {
       const count = pendingJobs?.length || 0;
       if (count > 100) {
-        check('Pending jobs count', 'warn', `${count} jobs (queue backing up?)`);
+        check(
+          'Pending jobs count',
+          'warn',
+          `${count} jobs (queue backing up?)`,
+        );
         warnings++;
       } else {
         check('Pending jobs count', 'pass', `${count} jobs`);
@@ -214,57 +243,100 @@ async function main() {
       failedChecks++;
     } else {
       const count = recentRecordings?.length || 0;
-      const completed = recentRecordings?.filter((r) => r.status === 'completed').length || 0;
-      check('Recent recordings', 'pass', `${count} total, ${completed} completed`);
+      const completed =
+        recentRecordings?.filter((r) => r.status === 'completed').length || 0;
+      check(
+        'Recent recordings',
+        'pass',
+        `${count} total, ${completed} completed`,
+      );
       passedChecks++;
     }
   } catch (error) {
     totalChecks += 3;
     failedChecks += 3;
-    check('Database health', 'fail', error instanceof Error ? error.message : 'Unknown error');
+    check(
+      'Database health',
+      'fail',
+      error instanceof Error ? error.message : 'Unknown error',
+    );
   }
 
   // 5. Job Handlers
   section('5. Job Handlers');
 
   const handlers = [
-    { name: 'transcribe-gemini-video', path: '../src/lib/workers/handlers/transcribe-gemini-video' },
-    { name: 'docify-google', path: '../src/lib/workers/handlers/docify-google' },
-    { name: 'embeddings-google', path: '../src/lib/workers/handlers/embeddings-google' },
+    {
+      name: 'transcribe-gemini-video',
+      path: '../src/lib/workers/handlers/transcribe-gemini-video',
+    },
+    {
+      name: 'docify-google',
+      path: '../src/lib/workers/handlers/docify-google',
+    },
+    {
+      name: 'embeddings-google',
+      path: '../src/lib/workers/handlers/embeddings-google',
+    },
   ];
 
-  for (const handler of handlers) {
-    totalChecks++;
-    try {
-      const module = await import(handler.path);
-      const hasExport = Object.keys(module).length > 0;
-
-      if (hasExport) {
-        check(`Handler: ${handler.name}`, 'pass');
-        passedChecks++;
-      } else {
-        check(`Handler: ${handler.name}`, 'warn', 'No exports found');
-        warnings++;
-      }
-    } catch (error) {
-      check(`Handler: ${handler.name}`, 'fail', error instanceof Error ? error.message : 'Unknown');
-      failedChecks++;
+  const loadHandlerModule = (path: string) => {
+    switch (path) {
+      case '../src/lib/workers/handlers/transcribe-gemini-video':
+        return import('../src/lib/workers/handlers/transcribe-gemini-video');
+      case '../src/lib/workers/handlers/docify-google':
+        return import('../src/lib/workers/handlers/docify-google');
+      case '../src/lib/workers/handlers/embeddings-google':
+        return import('../src/lib/workers/handlers/embeddings-google');
+      default:
+        throw new Error(`Unsupported handler path: ${path}`);
     }
-  }
+  };
+
+  await Promise.all(
+    Array.from(handlers).map(async (handler) => {
+      totalChecks++;
+      try {
+        const module = await loadHandlerModule(handler.path);
+        const hasExport = Object.keys(module).length > 0;
+
+        if (hasExport) {
+          check(`Handler: ${handler.name}`, 'pass');
+          passedChecks++;
+        } else {
+          check(`Handler: ${handler.name}`, 'warn', 'No exports found');
+          warnings++;
+        }
+      } catch (error) {
+        check(
+          `Handler: ${handler.name}`,
+          'fail',
+          error instanceof Error ? error.message : 'Unknown',
+        );
+        failedChecks++;
+      }
+    }),
+  );
 
   // 6. Streaming Manager
   section('6. Streaming Manager');
 
   try {
     totalChecks++;
-    const { streamingManager } = await import('../src/lib/services/streaming-processor');
+    const { streamingManager } = await import(
+      '../src/lib/services/streaming-processor'
+    );
     const connectionCount = streamingManager.getConnectionCount();
 
     check('Streaming manager', 'pass', `${connectionCount} active connections`);
     passedChecks++;
   } catch (error) {
     totalChecks++;
-    check('Streaming manager', 'fail', error instanceof Error ? error.message : 'Unknown');
+    check(
+      'Streaming manager',
+      'fail',
+      error instanceof Error ? error.message : 'Unknown',
+    );
     failedChecks++;
   }
 
@@ -288,11 +360,17 @@ async function main() {
   if (healthScore === 100) {
     console.log(`${c.green}System is healthy and ready!${c.reset}`);
   } else if (healthScore >= 80) {
-    console.log(`${c.yellow}System is mostly healthy with minor issues${c.reset}`);
+    console.log(
+      `${c.yellow}System is mostly healthy with minor issues${c.reset}`,
+    );
   } else if (healthScore >= 60) {
-    console.log(`${c.yellow}System has significant issues that should be addressed${c.reset}`);
+    console.log(
+      `${c.yellow}System has significant issues that should be addressed${c.reset}`,
+    );
   } else {
-    console.log(`${c.red}System has critical issues and may not function correctly${c.reset}`);
+    console.log(
+      `${c.red}System has critical issues and may not function correctly${c.reset}`,
+    );
   }
 
   // Recommendations
@@ -318,8 +396,12 @@ async function main() {
     console.log(`${c.blue}Next Steps:${c.reset}`);
     console.log('  • Fix critical issues first');
     console.log('  • Run: yarn worker:dev (to process jobs)');
-    console.log('  • Run: yarn tsx scripts/test-processing-flow.ts (full test)');
-    console.log('  • Check: PROCESSING_PIPELINE_DEBUG_GUIDE.md (for detailed help)');
+    console.log(
+      '  • Run: yarn tsx scripts/test-processing-flow.ts (full test)',
+    );
+    console.log(
+      '  • Check: PROCESSING_PIPELINE_DEBUG_GUIDE.md (for detailed help)',
+    );
   }
 
   console.log('');

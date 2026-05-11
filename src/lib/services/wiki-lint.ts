@@ -57,14 +57,14 @@ export interface CoverageGapDetail {
   vendor_pages_count: number;
 }
 
-export interface ConfidenceDecayDetail {
+interface ConfidenceDecayDetail {
   page_id: string;
   topic: string;
   old_confidence: number;
   new_confidence: number;
 }
 
-export interface LintDetails {
+interface LintDetails {
   orphans: OrphanDetail[];
   stale: StaleDetail[];
   stale_links: StaleLinkDetail[];
@@ -117,12 +117,12 @@ const CONFIDENCE_DECAY_AGE_DAYS = 90;
  */
 export async function getLatestLintResult(
   orgId: string,
-  supabase: AdminClient = createClient()
+  supabase: AdminClient = createClient(),
 ): Promise<LintResult | null> {
   const { data, error } = await supabase
     .from('wiki_lint_results')
     .select(
-      'id, org_id, run_at, orphan_count, stale_count, stale_link_count, coverage_gap_count, confidence_decay_count, details'
+      'id, org_id, run_at, orphan_count, stale_count, stale_link_count, coverage_gap_count, confidence_decay_count, details',
     )
     .eq('org_id', orgId)
     .order('run_at', { ascending: false })
@@ -187,14 +187,16 @@ export async function runWikiLintAllOrgs(): Promise<LintResult[]> {
   const orgIds = await listOrgsWithWikiPages(supabase);
 
   const results: LintResult[] = [];
-  for (const orgId of orgIds) {
-    try {
-      const result = await runWikiLint(orgId, supabase);
-      results.push(result);
-    } catch (err) {
-      console.error(`[wiki-lint] org=${orgId} failed:`, err);
-    }
-  }
+  await Promise.all(
+    Array.from(orgIds).map(async (orgId) => {
+      try {
+        const result = await runWikiLint(orgId, supabase);
+        results.push(result);
+      } catch (err) {
+        console.error(`[wiki-lint] org=${orgId} failed:`, err);
+      }
+    }),
+  );
   return results;
 }
 
@@ -203,9 +205,9 @@ export async function runWikiLintAllOrgs(): Promise<LintResult[]> {
  * return the computed `LintResult`. The caller supplies the Supabase admin
  * client for DI/testability; defaults to a fresh admin client.
  */
-export async function runWikiLint(
+async function runWikiLint(
   orgId: string,
-  supabase: AdminClient = createClient()
+  supabase: AdminClient = createClient(),
 ): Promise<LintResult> {
   const runAt = new Date().toISOString();
 
@@ -268,7 +270,9 @@ async function listOrgsWithWikiPages(supabase: AdminClient): Promise<string[]> {
     .is('valid_until', null);
 
   if (error) {
-    throw new Error(`[wiki-lint] Failed to list orgs with wiki pages: ${error.message}`);
+    throw new Error(
+      `[wiki-lint] Failed to list orgs with wiki pages: ${error.message}`,
+    );
   }
 
   // De-dupe org_ids in JS — cheaper than a DISTINCT round-trip for small N.
@@ -281,7 +285,7 @@ async function listOrgsWithWikiPages(supabase: AdminClient): Promise<string[]> {
 
 async function loadActivePages(
   supabase: AdminClient,
-  orgId: string
+  orgId: string,
 ): Promise<ActivePage[]> {
   const { data, error } = await supabase
     .from('org_wiki_pages')
@@ -290,7 +294,9 @@ async function loadActivePages(
     .is('valid_until', null);
 
   if (error) {
-    throw new Error(`[wiki-lint] Failed to load active pages for ${orgId}: ${error.message}`);
+    throw new Error(
+      `[wiki-lint] Failed to load active pages for ${orgId}: ${error.message}`,
+    );
   }
 
   return (data ?? []) as ActivePage[];
@@ -308,7 +314,7 @@ async function loadActivePages(
 async function detectOrphans(
   supabase: AdminClient,
   orgId: string,
-  activePages: ActivePage[]
+  activePages: ActivePage[],
 ): Promise<OrphanDetail[]> {
   if (activePages.length === 0) return [];
 
@@ -318,7 +324,9 @@ async function detectOrphans(
     .eq('org_id', orgId);
 
   if (error) {
-    throw new Error(`[wiki-lint] Failed to load relationships for ${orgId}: ${error.message}`);
+    throw new Error(
+      `[wiki-lint] Failed to load relationships for ${orgId}: ${error.message}`,
+    );
   }
 
   const inbound = new Set<string>();
@@ -326,9 +334,11 @@ async function detectOrphans(
     if (row.target_page_id) inbound.add(row.target_page_id);
   }
 
-  return activePages
-    .filter((p) => !inbound.has(p.id))
-    .map((p) => ({ page_id: p.id, topic: p.topic }));
+  return activePages.flatMap((__item, __index, __array) =>
+    !inbound.has(__item.id)
+      ? [{ page_id: __item.id, topic: __item.topic }]
+      : [],
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -344,7 +354,7 @@ async function detectStale(
   supabase: AdminClient,
   orgId: string,
   activePages: ActivePage[],
-  thresholdDays: number
+  thresholdDays: number,
 ): Promise<StaleDetail[]> {
   if (activePages.length === 0) return [];
 
@@ -380,7 +390,7 @@ async function detectStale(
 async function detectStaleLinks(
   supabase: AdminClient,
   orgId: string,
-  activePages: ActivePage[]
+  activePages: ActivePage[],
 ): Promise<StaleLinkDetail[]> {
   if (activePages.length === 0) return [];
 
@@ -392,7 +402,9 @@ async function detectStaleLinks(
     .eq('org_id', orgId);
 
   if (error) {
-    throw new Error(`[wiki-lint] Failed to load topic index for ${orgId}: ${error.message}`);
+    throw new Error(
+      `[wiki-lint] Failed to load topic index for ${orgId}: ${error.message}`,
+    );
   }
 
   // Case-insensitive topic → {id, superseded} index. On duplicates we prefer
@@ -443,7 +455,7 @@ async function detectStaleLinks(
 async function detectCoverageGaps(
   supabase: AdminClient,
   _orgId: string,
-  activePages: ActivePage[]
+  activePages: ActivePage[],
 ): Promise<CoverageGapDetail[]> {
   const { data, error } = await supabase
     .from('vendor_wiki_pages')
@@ -451,11 +463,16 @@ async function detectCoverageGaps(
     .is('retired_at', null);
 
   if (error) {
-    throw new Error(`[wiki-lint] Failed to load vendor pages: ${error.message}`);
+    throw new Error(
+      `[wiki-lint] Failed to load vendor pages: ${error.message}`,
+    );
   }
 
   // Aggregate vendor rows by (app|screen) tuple.
-  const vendorCounts = new Map<string, { app: string; screen: string; count: number }>();
+  const vendorCounts = new Map<
+    string,
+    { app: string; screen: string; count: number }
+  >();
   for (const row of data ?? []) {
     if (!row.app || !row.screen) continue;
     const key = `${row.app.toLowerCase()}::${row.screen.toLowerCase()}`;
@@ -502,52 +519,57 @@ async function detectCoverageGaps(
 async function applyConfidenceDecay(
   supabase: AdminClient,
   _orgId: string,
-  activePages: ActivePage[]
+  activePages: ActivePage[],
 ): Promise<ConfidenceDecayDetail[]> {
   if (activePages.length === 0) return [];
 
   const ageCutoff = daysAgo(CONFIDENCE_DECAY_AGE_DAYS);
-  const eligible = activePages.filter((p) => p.confidence > CONFIDENCE_DECAY_FLOOR);
+  const eligible = activePages.filter(
+    (p) => p.confidence > CONFIDENCE_DECAY_FLOOR,
+  );
   if (eligible.length === 0) return [];
 
   const maxContributed = await loadMaxContributedAt(
     supabase,
-    eligible.map((p) => p.id)
+    eligible.map((p) => p.id),
   );
 
-  const updates: ConfidenceDecayDetail[] = [];
-  for (const page of eligible) {
-    const last = maxContributed.get(page.id) ?? null;
-    if (last !== null && last >= ageCutoff) continue; // fresh enough
+  const updates = (
+    await Promise.all(
+      eligible.map(async (page): Promise<ConfidenceDecayDetail | null> => {
+        const last = maxContributed.get(page.id) ?? null;
+        if (last !== null && last >= ageCutoff) return null; // fresh enough
 
-    const nextConfidence = Math.max(
-      CONFIDENCE_DECAY_FLOOR,
-      +(page.confidence - CONFIDENCE_DECAY_STEP).toFixed(4)
-    );
-    if (nextConfidence === page.confidence) continue; // already at floor
+        const nextConfidence = Math.max(
+          CONFIDENCE_DECAY_FLOOR,
+          +(page.confidence - CONFIDENCE_DECAY_STEP).toFixed(4),
+        );
+        if (nextConfidence === page.confidence) return null; // already at floor
 
-    const { error } = await supabase
-      .from('org_wiki_pages')
-      .update({
-        confidence: nextConfidence,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', page.id);
+        const { error } = await supabase
+          .from('org_wiki_pages')
+          .update({
+            confidence: nextConfidence,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', page.id);
 
-    if (error) {
-      console.error(
-        `[wiki-lint] confidence decay failed for page=${page.id}: ${error.message}`
-      );
-      continue;
-    }
+        if (error) {
+          console.error(
+            `[wiki-lint] confidence decay failed for page=${page.id}: ${error.message}`,
+          );
+          return null;
+        }
 
-    updates.push({
-      page_id: page.id,
-      topic: page.topic,
-      old_confidence: page.confidence,
-      new_confidence: nextConfidence,
-    });
-  }
+        return {
+          page_id: page.id,
+          topic: page.topic,
+          old_confidence: page.confidence,
+          new_confidence: nextConfidence,
+        };
+      }),
+    )
+  ).filter((update): update is ConfidenceDecayDetail => Boolean(update));
   return updates;
 }
 
@@ -562,7 +584,10 @@ async function applyConfidenceDecay(
  * flow is simpler and still safe because the (org_id, run_day) unique
  * index guarantees only one row per day.
  */
-async function persistResult(supabase: AdminClient, result: LintResult): Promise<void> {
+async function persistResult(
+  supabase: AdminClient,
+  result: LintResult,
+): Promise<void> {
   const runDay = new Date(result.run_at).toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
 
   const { data: existing, error: selErr } = await supabase
@@ -573,7 +598,9 @@ async function persistResult(supabase: AdminClient, result: LintResult): Promise
     .maybeSingle();
 
   if (selErr) {
-    throw new Error(`[wiki-lint] Failed to check existing lint row: ${selErr.message}`);
+    throw new Error(
+      `[wiki-lint] Failed to check existing lint row: ${selErr.message}`,
+    );
   }
 
   const payload = {
@@ -584,7 +611,8 @@ async function persistResult(supabase: AdminClient, result: LintResult): Promise
     stale_link_count: result.stale_link_count,
     coverage_gap_count: result.coverage_gap_count,
     confidence_decay_count: result.confidence_decay_count,
-    details: result.details as unknown as Database['public']['Tables']['wiki_lint_results']['Insert']['details'],
+    details:
+      result.details as unknown as Database['public']['Tables']['wiki_lint_results']['Insert']['details'],
   };
 
   if (existing?.id) {
@@ -593,12 +621,16 @@ async function persistResult(supabase: AdminClient, result: LintResult): Promise
       .update(payload)
       .eq('id', existing.id);
     if (error) {
-      throw new Error(`[wiki-lint] Failed to update lint row: ${error.message}`);
+      throw new Error(
+        `[wiki-lint] Failed to update lint row: ${error.message}`,
+      );
     }
   } else {
     const { error } = await supabase.from('wiki_lint_results').insert(payload);
     if (error) {
-      throw new Error(`[wiki-lint] Failed to insert lint row: ${error.message}`);
+      throw new Error(
+        `[wiki-lint] Failed to insert lint row: ${error.message}`,
+      );
     }
   }
 }
@@ -613,7 +645,7 @@ async function persistResult(supabase: AdminClient, result: LintResult): Promise
  */
 async function loadMaxContributedAt(
   supabase: AdminClient,
-  pageIds: string[]
+  pageIds: string[],
 ): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
   if (pageIds.length === 0) return out;
@@ -630,7 +662,9 @@ async function loadMaxContributedAt(
     .in('page_id', pageIds);
 
   if (error) {
-    throw new Error(`[wiki-lint] Failed to load wiki_page_sources: ${error.message}`);
+    throw new Error(
+      `[wiki-lint] Failed to load wiki_page_sources: ${error.message}`,
+    );
   }
 
   for (const row of data ?? []) {

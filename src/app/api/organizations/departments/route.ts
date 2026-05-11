@@ -14,11 +14,18 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { apiHandler, requireOrg, requireAdmin, successResponse, errors , parseBody } from '@/lib/utils/api';
+import {
+  apiHandler,
+  requireOrg,
+  requireAdmin,
+  successResponse,
+  errors,
+  parseBody,
+} from '@/lib/utils/api';
 import {
   createDepartmentSchema,
   listDepartmentsQuerySchema,
-  Department
+  Department,
 } from '@/lib/validations/departments';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
@@ -69,7 +76,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
     .order('name', { ascending: true });
 
   if (error) {
-    console.error('[GET /api/organizations/departments] Error fetching departments:', error);
+    console.error(
+      '[GET /api/organizations/departments] Error fetching departments:',
+      error,
+    );
     throw new Error('Failed to fetch departments');
   }
 
@@ -80,7 +90,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
     name: dept.name,
     description: dept.description,
     slug: dept.slug,
-    defaultVisibility: dept.default_visibility as 'private' | 'department' | 'org' | 'public',
+    defaultVisibility: dept.default_visibility as
+      | 'private'
+      | 'department'
+      | 'org'
+      | 'public',
     createdAt: dept.created_at,
     updatedAt: dept.updated_at,
     createdBy: dept.created_by,
@@ -91,15 +105,21 @@ export const GET = apiHandler(async (request: NextRequest) => {
     const { data: memberCounts } = await supabase
       .from('user_departments')
       .select('department_id')
-      .in('department_id', result.map(d => d.id));
+      .in(
+        'department_id',
+        result.map((d) => d.id),
+      );
 
     if (memberCounts) {
-      const countMap = memberCounts.reduce((acc, { department_id }) => {
-        acc[department_id] = (acc[department_id] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      const countMap = memberCounts.reduce(
+        (acc, { department_id }) => {
+          acc[department_id] = (acc[department_id] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
 
-      result = result.map(dept => ({
+      result = result.map((dept) => ({
         ...dept,
         memberCount: countMap[dept.id] || 0,
       }));
@@ -132,9 +152,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
  * Security: Requires admin or owner role
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { orgId, userId } = await requireAdmin();
-
-  const bodyData = await parseBody<z.infer<typeof createDepartmentSchema>>(request, createDepartmentSchema);
+  const [{ orgId, userId }, bodyData] = await Promise.all([
+    requireAdmin(),
+    parseBody<z.infer<typeof createDepartmentSchema>>(
+      request,
+      createDepartmentSchema,
+    ),
+  ]);
 
   const supabase = supabaseAdmin;
 
@@ -151,7 +175,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
       .single();
 
     if (parentError || !parentDept) {
-      return errors.badRequest('Parent department not found or not in your organization');
+      return errors.badRequest(
+        'Parent department not found or not in your organization',
+      );
     }
   }
 
@@ -164,7 +190,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .single();
 
   if (existing) {
-    return errors.badRequest(`Department with slug "${slug}" already exists in your organization`);
+    return errors.badRequest(
+      `Department with slug "${slug}" already exists in your organization`,
+    );
   }
 
   // Create department
@@ -183,7 +211,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
     .single();
 
   if (error) {
-    console.error('[POST /api/organizations/departments] Error creating department:', error);
+    console.error(
+      '[POST /api/organizations/departments] Error creating department:',
+      error,
+    );
     throw new Error('Failed to create department');
   }
 
@@ -194,7 +225,11 @@ export const POST = apiHandler(async (request: NextRequest) => {
     name: department.name,
     description: department.description,
     slug: department.slug,
-    defaultVisibility: department.default_visibility as 'private' | 'department' | 'org' | 'public',
+    defaultVisibility: department.default_visibility as
+      | 'private'
+      | 'department'
+      | 'org'
+      | 'public',
     createdAt: department.created_at,
     updatedAt: department.updated_at,
     createdBy: department.created_by,
@@ -206,7 +241,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       department: formattedDepartment,
     },
     undefined,
-    201
+    201,
   );
 });
 
@@ -218,12 +253,12 @@ function buildDepartmentTree(departments: Department[]): Department[] {
   const roots: Department[] = [];
 
   // Initialize all departments with empty children array
-  departments.forEach(dept => {
+  departments.forEach((dept) => {
     deptMap.set(dept.id, { ...dept, children: [] });
   });
 
   // Build tree structure
-  departments.forEach(dept => {
+  departments.forEach((dept) => {
     const node = deptMap.get(dept.id)!;
 
     if (dept.parentId) {

@@ -8,9 +8,11 @@
  * - publish=true: Request write permissions for publishing
  */
 
+import crypto from 'crypto';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import crypto from 'crypto';
+
 import { requireOrg } from '@/lib/utils/api';
 import { GoogleDriveConnector } from '@/lib/connectors/google-drive';
 
@@ -28,14 +30,43 @@ function generateState(orgId: string, requestPublish: boolean): string {
   return Buffer.from(stateData).toString('base64url');
 }
 
+function renderPostRedirectPage(requestPublish: boolean): NextResponse {
+  return new NextResponse(
+    `<!doctype html>
+    <html>
+      <head><meta charset="utf-8"><title>Continue to Google Drive</title></head>
+      <body>
+        <form id="oauth-form" method="post" action="/api/integrations/google-drive/auth">
+          <input type="hidden" name="publish" value="${requestPublish ? 'true' : 'false'}">
+          <button type="submit">Continue to Google Drive</button>
+        </form>
+        <script>document.getElementById('oauth-form').requestSubmit();</script>
+      </body>
+    </html>`,
+    {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    }
+  );
+}
+
 export async function GET(req: NextRequest) {
+  const requestPublish = req.nextUrl.searchParams.get('publish') === 'true';
+  return renderPostRedirectPage(requestPublish);
+}
+
+export async function POST(req: NextRequest) {
   try {
     // Authenticate user and get internal org ID
     const { orgId } = await requireOrg();
 
     // Check if publish permissions requested
-    const searchParams = req.nextUrl.searchParams;
-    const requestPublish = searchParams.get('publish') === 'true';
+    const formData = await req.formData().catch(() => null);
+    const requestPublish =
+      formData?.get('publish') === 'true' ||
+      req.nextUrl.searchParams.get('publish') === 'true';
 
     // Validate environment variables
     const clientId = process.env.GOOGLE_CLIENT_ID;

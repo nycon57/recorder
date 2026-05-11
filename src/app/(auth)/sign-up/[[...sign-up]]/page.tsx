@@ -1,11 +1,11 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { Suspense, useReducer } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Zap, Search, Users, Brain, Loader2 } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
+import { m, useReducedMotion } from 'motion/react';
 
 import { signIn, signUp } from '@/lib/auth/auth-client';
 import {
@@ -26,15 +26,34 @@ import {
  * - Warm, inviting copy that emphasizes transformation
  * - Trust indicators prominent for conversion
  */
-export default function SignUpPage() {
+function SignUpPageContent() {
+  return useSignUpPageContentImplementation();
+}
+
+function useSignUpPageContentImplementation() {
   const shouldReduceMotion = useReducedMotion();
-  const router = useRouter();
+  const { push } = useRouter();
   const searchParams = useSearchParams();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        name: string;
+        email: string;
+        password: string;
+        error: string;
+        loading: boolean;
+      },
+      patch: Partial<{
+        name: string;
+        email: string;
+        password: string;
+        error: string;
+        loading: boolean;
+      }>,
+    ) => ({ ...current, ...patch }),
+    { name: '', email: '', password: '', error: '', loading: false },
+  );
+  const { name, email, password, error, loading } = state;
 
   const features = [
     {
@@ -61,14 +80,12 @@ export default function SignUpPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    dispatch({ loading: true, error: '' });
     const { error } = await signUp.email({ email, password, name });
     if (error) {
-      setError(error.message || 'Sign up failed');
-      setLoading(false);
+      dispatch({ error: error.message || 'Sign up failed', loading: false });
     } else {
-      router.push(getExtensionAuthPath(searchParams));
+      push(getExtensionAuthPath(searchParams));
     }
   };
 
@@ -97,7 +114,7 @@ export default function SignUpPage() {
       {/* Left Column - Sign Up Form */}
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 lg:px-8">
         {/* Back to Home - Top Left */}
-        <motion.div
+        <m.div
           initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
@@ -110,10 +127,10 @@ export default function SignUpPage() {
             <ArrowLeft className="size-4 transition-transform duration-200 group-hover:-translate-x-1" />
             <span>Back to home</span>
           </Link>
-        </motion.div>
+        </m.div>
 
         {/* Main Content Card */}
-        <motion.div
+        <m.div
           initial={
             shouldReduceMotion
               ? { opacity: 1 }
@@ -128,15 +145,15 @@ export default function SignUpPage() {
             className="relative rounded-2xl p-8 md:p-10"
             style={{
               background: 'rgba(4, 34, 34, 0.6)',
-              backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
               border: '1px solid rgba(0, 223, 130, 0.1)',
               boxShadow:
-                '0 0 60px rgba(0, 223, 130, 0.08), inset 0 1px 0 rgba(255,255,255,0.05)',
+                '0 24px 80px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)',
             }}
           >
             {/* Logo */}
-            <motion.div
+            <m.div
               initial={
                 shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -10 }
               }
@@ -168,10 +185,10 @@ export default function SignUpPage() {
                   Tribora
                 </span>
               </Link>
-            </motion.div>
+            </m.div>
 
             {/* Header */}
-            <motion.div
+            <m.div
               initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.4, delay: 0.2 }}
@@ -181,11 +198,7 @@ export default function SignUpPage() {
                 className="text-3xl md:text-4xl font-light tracking-tight mb-3"
                 style={{
                   fontFamily: 'var(--font-heading)',
-                  background:
-                    'linear-gradient(135deg, #00df82 0%, #2cc295 50%, rgb(241,247,247) 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
+                  color: 'rgb(241,247,247)',
                 }}
               >
                 Start your journey
@@ -193,10 +206,10 @@ export default function SignUpPage() {
               <p className="text-base" style={{ color: 'rgb(170, 203, 196)' }}>
                 Create your account and illuminate your team&apos;s knowledge
               </p>
-            </motion.div>
+            </m.div>
 
             {/* Sign Up Form */}
-            <motion.div
+            <m.div
               initial={
                 shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }
               }
@@ -270,15 +283,17 @@ export default function SignUpPage() {
 
                 <div>
                   <label
+                    htmlFor="sign-up-name"
                     className="block text-sm font-medium mb-2"
                     style={{ color: 'rgb(170, 203, 196)' }}
                   >
                     Full name
                   </label>
                   <input
+                    id="sign-up-name"
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => dispatch({ name: e.target.value })}
                     placeholder="John Doe"
                     required
                     className={inputStyles}
@@ -288,15 +303,17 @@ export default function SignUpPage() {
 
                 <div>
                   <label
+                    htmlFor="sign-up-email"
                     className="block text-sm font-medium mb-2"
                     style={{ color: 'rgb(170, 203, 196)' }}
                   >
                     Email address
                   </label>
                   <input
+                    id="sign-up-email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => dispatch({ email: e.target.value })}
                     placeholder="you@example.com"
                     required
                     className={inputStyles}
@@ -306,15 +323,17 @@ export default function SignUpPage() {
 
                 <div>
                   <label
+                    htmlFor="sign-up-password"
                     className="block text-sm font-medium mb-2"
                     style={{ color: 'rgb(170, 203, 196)' }}
                   >
                     Password
                   </label>
                   <input
+                    id="sign-up-password"
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => dispatch({ password: e.target.value })}
                     placeholder="Create a password"
                     required
                     className={inputStyles}
@@ -335,17 +354,17 @@ export default function SignUpPage() {
                   {loading ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
-                      Creating account...
+                      Creating account…
                     </>
                   ) : (
                     'Create account'
                   )}
                 </button>
               </form>
-            </motion.div>
+            </m.div>
 
             {/* Footer Link */}
-            <motion.div
+            <m.div
               initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.4, delay: 0.4 }}
@@ -366,10 +385,10 @@ export default function SignUpPage() {
                   Sign in
                 </Link>
               </p>
-            </motion.div>
+            </m.div>
 
             {/* Terms & Privacy */}
-            <motion.p
+            <m.p
               initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.4, delay: 0.5 }}
@@ -390,9 +409,9 @@ export default function SignUpPage() {
               >
                 Privacy Policy
               </Link>
-            </motion.p>
+            </m.p>
           </div>
-        </motion.div>
+        </m.div>
       </div>
 
       {/* Right Column - Feature Showcase (Hidden on mobile) */}
@@ -406,14 +425,14 @@ export default function SignUpPage() {
           }}
         />
 
-        <motion.div
+        <m.div
           initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
           className="relative max-w-lg"
         >
           {/* Headline */}
-          <motion.div
+          <m.div
             initial={
               shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }
             }
@@ -431,11 +450,7 @@ export default function SignUpPage() {
               Transform recordings into{' '}
               <span
                 style={{
-                  background:
-                    'linear-gradient(135deg, #00df82 0%, #2cc295 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
+                  color: 'rgb(0,223,130)',
                 }}
               >
                 searchable knowledge
@@ -445,12 +460,12 @@ export default function SignUpPage() {
               Join thousands of teams using Tribora to capture, preserve, and
               share their expertise.
             </p>
-          </motion.div>
+          </m.div>
 
           {/* Feature List */}
           <div className="space-y-6">
             {features.map((feature, index) => (
-              <motion.div
+              <m.div
                 key={feature.title}
                 initial={
                   shouldReduceMotion ? { opacity: 1 } : { opacity: 0, x: 20 }
@@ -487,12 +502,12 @@ export default function SignUpPage() {
                     {feature.description}
                   </p>
                 </div>
-              </motion.div>
+              </m.div>
             ))}
           </div>
 
           {/* Social Proof */}
-          <motion.div
+          <m.div
             initial={
               shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }
             }
@@ -563,9 +578,17 @@ export default function SignUpPage() {
                 </div>
               </div>
             </div>
-          </motion.div>
-        </motion.div>
+          </m.div>
+        </m.div>
       </div>
     </div>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignUpPageContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,5 @@
 'use client';
 
-import { formatDistanceToNow, format } from 'date-fns';
 import {
   User,
   Mail,
@@ -30,6 +29,7 @@ import {
 } from '@/app/components/ui/dropdown-menu';
 import { UserAvatar } from '@/app/components/shared/UserAvatar';
 import { RoleBadge } from '@/app/components/shared/RoleBadge';
+import { formatStableDate, formatStableDateTime } from '@/lib/utils/formatting';
 
 interface Department {
   id: string;
@@ -64,10 +64,26 @@ interface MemberDetailDrawerProps {
 
 function StatusBadge({ status }: { status: string }) {
   const variants = {
-    active: { variant: 'default' as const, label: 'Active', color: 'text-green-600' },
-    pending: { variant: 'secondary' as const, label: 'Pending', color: 'text-yellow-600' },
-    suspended: { variant: 'destructive' as const, label: 'Suspended', color: 'text-red-600' },
-    deleted: { variant: 'outline' as const, label: 'Deleted', color: 'text-gray-600' },
+    active: {
+      variant: 'default' as const,
+      label: 'Active',
+      color: 'text-green-600',
+    },
+    pending: {
+      variant: 'secondary' as const,
+      label: 'Pending',
+      color: 'text-yellow-600',
+    },
+    suspended: {
+      variant: 'destructive' as const,
+      label: 'Suspended',
+      color: 'text-red-600',
+    },
+    deleted: {
+      variant: 'outline' as const,
+      label: 'Deleted',
+      color: 'text-gray-600',
+    },
   };
 
   const config = variants[status as keyof typeof variants] || variants.active;
@@ -99,7 +115,9 @@ export function MemberDetailDrawer({
   };
 
   const handleDelete = () => {
-    if (confirm(`Are you sure you want to remove ${member.name || member.email}?`)) {
+    if (
+      confirm(`Are you sure you want to remove ${member.name || member.email}?`)
+    ) {
       if (onDelete) {
         onDelete(member);
       } else if (onUpdate) {
@@ -118,13 +136,13 @@ export function MemberDetailDrawer({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon">
-                  <MoreVertical className="h-4 w-4" />
+                  <MoreVertical className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
                 <DropdownMenuItem onClick={handleEdit}>
-                  <Edit className="h-4 w-4 mr-2" />
+                  <Edit className="size-4 mr-2" />
                   Edit Details
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -133,7 +151,7 @@ export function MemberDetailDrawer({
                   className="text-destructive"
                   disabled={member.role === 'owner'}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  <Trash2 className="size-4 mr-2" />
                   Remove Member
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -174,18 +192,18 @@ export function MemberDetailDrawer({
             <h4 className="text-sm font-medium">Contact Information</h4>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <Mail className="h-4 w-4 text-muted-foreground" />
+                <Mail className="size-4 text-muted-foreground" />
                 <span className="text-sm">{member.email}</span>
               </div>
               {member.phone && (
                 <div className="flex items-center gap-3">
-                  <User className="h-4 w-4 text-muted-foreground" />
+                  <User className="size-4 text-muted-foreground" />
                   <span className="text-sm">{member.phone}</span>
                 </div>
               )}
               {member.location && (
                 <div className="flex items-center gap-3">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <Building2 className="size-4 text-muted-foreground" />
                   <span className="text-sm">{member.location}</span>
                 </div>
               )}
@@ -201,7 +219,7 @@ export function MemberDetailDrawer({
               <div className="flex flex-wrap gap-2">
                 {member.departments.map((dept) => (
                   <Badge key={dept.id} variant="outline">
-                    <Building2 className="h-3 w-3 mr-1" />
+                    <Building2 className="size-3 mr-1" />
                     {dept.name}
                   </Badge>
                 ))}
@@ -220,25 +238,29 @@ export function MemberDetailDrawer({
             <h4 className="text-sm font-medium">Activity</h4>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Last Active</span>
+                <span className="text-sm text-muted-foreground">
+                  Last Active
+                </span>
                 <span className="text-sm">
                   {member.last_active_at
-                    ? formatDistanceToNow(new Date(member.last_active_at), {
-                        addSuffix: true,
-                      })
+                    ? formatStableDateTime(member.last_active_at)
                     : 'Never'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Member Since</span>
+                <span className="text-sm text-muted-foreground">
+                  Member Since
+                </span>
                 <span className="text-sm">
-                  {format(new Date(member.created_at), 'MMM d, yyyy')}
+                  {formatStableDate(member.created_at)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Last Updated</span>
+                <span className="text-sm text-muted-foreground">
+                  Last Updated
+                </span>
                 <span className="text-sm">
-                  {format(new Date(member.updated_at), 'MMM d, yyyy')}
+                  {formatStableDate(member.updated_at)}
                 </span>
               </div>
             </div>
@@ -249,7 +271,7 @@ export function MemberDetailDrawer({
           {/* Actions */}
           <div className="space-y-3">
             <Button className="w-full" onClick={handleEdit}>
-              <Edit className="h-4 w-4 mr-2" />
+              <Edit className="size-4 mr-2" />
               Edit Member
             </Button>
             <Button
@@ -258,12 +280,13 @@ export function MemberDetailDrawer({
               onClick={handleDelete}
               disabled={member.role === 'owner'}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              <Trash2 className="size-4 mr-2" />
               Remove Member
             </Button>
             {member.role === 'owner' && (
               <p className="text-xs text-muted-foreground text-center">
-                Owner accounts cannot be removed. Transfer ownership in organization settings.
+                Owner accounts cannot be removed. Transfer ownership in
+                organization settings.
               </p>
             )}
           </div>

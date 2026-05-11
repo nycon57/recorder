@@ -1,11 +1,11 @@
-"use client"
+'use client';
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import * as motion from "motion/react-client"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Activity01Icon } from "@hugeicons/core-free-icons"
+import * as React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import * as motion from 'motion/react-client';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Activity01Icon } from '@hugeicons/core-free-icons';
 
 import {
   SidebarGroup,
@@ -14,7 +14,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-} from "@/app/components/ui/sidebar"
+} from '@/app/components/ui/sidebar';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -25,7 +25,7 @@ const containerVariants = {
       delayChildren: 0.2,
     },
   },
-}
+};
 
 const itemVariants = {
   hidden: { opacity: 0, x: -12 },
@@ -33,12 +33,12 @@ const itemVariants = {
     opacity: 1,
     x: 0,
     transition: {
-      type: "spring" as const,
+      type: 'spring' as const,
       stiffness: 400,
       damping: 30,
     },
   },
-}
+};
 
 const labelVariants = {
   hidden: { opacity: 0, y: -8 },
@@ -46,47 +46,34 @@ const labelVariants = {
     opacity: 1,
     y: 0,
     transition: {
-      type: "spring" as const,
+      type: 'spring' as const,
       stiffness: 400,
       damping: 30,
       delay: 0.15,
     },
   },
-}
+};
 
 export function NavIntelligenceAurora() {
-  const pathname = usePathname()
-  const isActive = pathname === "/agent-activity" || pathname.startsWith("/agent-activity/")
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  const MotionDiv = mounted ? motion.div : "div"
+  const pathname = usePathname();
+  const isActive =
+    pathname === '/agent-activity' || pathname.startsWith('/agent-activity/');
+  const MotionDiv = motion.div;
 
   return (
     <SidebarGroup>
-      <MotionDiv
-        {...(mounted ? {
-          initial: "hidden",
-          animate: "visible",
-          variants: labelVariants,
-        } : {})}
-      >
+      <MotionDiv initial="hidden" animate="visible" variants={labelVariants}>
         <SidebarGroupLabel>Intelligence</SidebarGroupLabel>
       </MotionDiv>
       <SidebarGroupContent>
         <SidebarMenu>
           <MotionDiv
-            {...(mounted ? {
-              variants: containerVariants,
-              initial: "hidden",
-              animate: "visible",
-            } : {})}
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
             className="space-y-1"
           >
-            <MotionDiv {...(mounted ? { variants: itemVariants } : {})}>
+            <MotionDiv variants={itemVariants}>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
@@ -106,5 +93,5 @@ export function NavIntelligenceAurora() {
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  )
+  );
 }

@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { FileVideo, FileAudio, FileImage, FileText, File } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { formatBytes, calculatePercentage } from '@/lib/utils/formatting';
@@ -23,54 +29,46 @@ interface FileAnalyticsData {
 }
 
 export default function FileTypeAnalytics() {
-  const [data, setData] = useState<FileAnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error } = useQuery<FileAnalyticsData, Error>({
+    queryKey: ['analytics', 'metrics', 'file-types'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch('/api/analytics/metrics', { signal });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch('/api/analytics/metrics');
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch file type data');
-        }
-
-        const { data: metricsData } = await response.json();
-
-        setData({
-          fileTypes: metricsData.fileTypes || [],
-          totalFiles: metricsData.summary?.totalFiles || 0,
-          totalStorage: metricsData.summary?.totalStorage || 0,
-        });
-      } catch (err) {
-        console.error('Error fetching file type data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load data');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch file type data');
       }
-    };
 
-    fetchData();
-  }, []);
+      const { data: metricsData } = await response.json();
+
+      return {
+        fileTypes: metricsData.fileTypes || [],
+        totalFiles: metricsData.summary?.totalFiles || 0,
+        totalStorage: metricsData.summary?.totalStorage || 0,
+      };
+    },
+  });
 
   const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith('video/')) return <FileVideo className="h-4 w-4" />;
-    if (mimeType.startsWith('audio/')) return <FileAudio className="h-4 w-4" />;
-    if (mimeType.startsWith('image/')) return <FileImage className="h-4 w-4" />;
-    if (mimeType.startsWith('text/')) return <FileText className="h-4 w-4" />;
-    return <File className="h-4 w-4" />;
+    if (mimeType.startsWith('video/')) return <FileVideo className="size-4" />;
+    if (mimeType.startsWith('audio/')) return <FileAudio className="size-4" />;
+    if (mimeType.startsWith('image/')) return <FileImage className="size-4" />;
+    if (mimeType.startsWith('text/')) return <FileText className="size-4" />;
+    return <File className="size-4" />;
   };
 
   const getFileTypeColor = (mimeType: string): string => {
-    if (mimeType.startsWith('video/')) return 'text-blue-600 dark:text-blue-400';
-    if (mimeType.startsWith('audio/')) return 'text-purple-600 dark:text-purple-400';
-    if (mimeType.startsWith('image/')) return 'text-green-600 dark:text-green-400';
-    if (mimeType.startsWith('text/')) return 'text-yellow-600 dark:text-yellow-400';
+    if (mimeType.startsWith('video/'))
+      return 'text-blue-600 dark:text-blue-400';
+    if (mimeType.startsWith('audio/'))
+      return 'text-purple-600 dark:text-purple-400';
+    if (mimeType.startsWith('image/'))
+      return 'text-green-600 dark:text-green-400';
+    if (mimeType.startsWith('text/'))
+      return 'text-yellow-600 dark:text-yellow-400';
     return 'text-gray-600 dark:text-gray-400';
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -88,7 +86,9 @@ export default function FileTypeAnalytics() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading file type data: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading file type data: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -119,9 +119,12 @@ export default function FileTypeAnalytics() {
                         {getFileIcon(fileType.mimeType)}
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{fileType.mimeType}</p>
+                        <p className="text-sm font-medium">
+                          {fileType.mimeType}
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          {fileType.count.toLocaleString()} files • Avg. {formatBytes(fileType.averageSize)}
+                          {fileType.count.toLocaleString()} files • Avg.{' '}
+                          {formatBytes(fileType.averageSize)}
                         </p>
                       </div>
                     </div>
@@ -142,17 +145,25 @@ export default function FileTypeAnalytics() {
                     <div
                       className="bg-primary h-2 rounded-full transition-all"
                       style={{
-                        width: `${calculatePercentage(fileType.storage, data.totalStorage)}%`
+                        width: `${calculatePercentage(fileType.storage, data.totalStorage)}%`,
                       }}
                     />
                   </div>
 
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>
-                      {calculatePercentage(fileType.count, data.totalFiles).toFixed(1)}% of files
+                      {calculatePercentage(
+                        fileType.count,
+                        data.totalFiles,
+                      ).toFixed(1)}
+                      % of files
                     </span>
                     <span>
-                      {calculatePercentage(fileType.storage, data.totalStorage).toFixed(1)}% of storage
+                      {calculatePercentage(
+                        fileType.storage,
+                        data.totalStorage,
+                      ).toFixed(1)}
+                      % of storage
                     </span>
                   </div>
                 </div>
@@ -180,11 +191,22 @@ export default function FileTypeAnalytics() {
               .filter((ft) => ft.compressionRate > 0)
               .sort((a, b) => b.compressionRate - a.compressionRate)
               .map((fileType) => (
-                <div key={`compression-${fileType.mimeType}`} className="space-y-2">
+                <div
+                  key={`compression-${fileType.mimeType}`}
+                  className="space-y-2"
+                >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{fileType.mimeType}</span>
+                    <span className="text-sm font-medium">
+                      {fileType.mimeType}
+                    </span>
                     <Badge
-                      variant={fileType.compressionRate >= 50 ? 'default' : fileType.compressionRate >= 25 ? 'secondary' : 'outline'}
+                      variant={
+                        fileType.compressionRate >= 50
+                          ? 'default'
+                          : fileType.compressionRate >= 25
+                            ? 'secondary'
+                            : 'outline'
+                      }
                     >
                       {fileType.compressionRate.toFixed(1)}%
                     </Badge>
@@ -192,20 +214,27 @@ export default function FileTypeAnalytics() {
                   <div className="w-full bg-muted rounded-full h-2">
                     <div
                       className={`h-2 rounded-full transition-all ${
-                        fileType.compressionRate >= 50 ? 'bg-green-600' :
-                        fileType.compressionRate >= 25 ? 'bg-yellow-600' :
-                        'bg-orange-600'
+                        fileType.compressionRate >= 50
+                          ? 'bg-green-600'
+                          : fileType.compressionRate >= 25
+                            ? 'bg-yellow-600'
+                            : 'bg-orange-600'
                       }`}
                       style={{ width: `${fileType.compressionRate}%` }}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Saving {formatBytes(fileType.storage * (fileType.compressionRate / 100))} compared to uncompressed
+                    Saving{' '}
+                    {formatBytes(
+                      fileType.storage * (fileType.compressionRate / 100),
+                    )}{' '}
+                    compared to uncompressed
                   </p>
                 </div>
               ))}
 
-            {data.fileTypes.filter((ft) => ft.compressionRate > 0).length === 0 && (
+            {data.fileTypes.filter((ft) => ft.compressionRate > 0).length ===
+              0 && (
               <div className="text-center text-muted-foreground py-8">
                 <p className="text-sm">No compression data available</p>
               </div>
@@ -223,11 +252,15 @@ export default function FileTypeAnalytics() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">Total Files</p>
-              <p className="text-2xl font-bold">{data.totalFiles.toLocaleString()}</p>
+              <p className="text-2xl font-bold">
+                {data.totalFiles.toLocaleString()}
+              </p>
             </div>
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">Total Storage</p>
-              <p className="text-2xl font-bold">{formatBytes(data.totalStorage)}</p>
+              <p className="text-2xl font-bold">
+                {formatBytes(data.totalStorage)}
+              </p>
             </div>
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">File Types</p>
@@ -236,7 +269,9 @@ export default function FileTypeAnalytics() {
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">Avg. File Size</p>
               <p className="text-2xl font-bold">
-                {data.totalFiles > 0 ? formatBytes(data.totalStorage / data.totalFiles) : '0 B'}
+                {data.totalFiles > 0
+                  ? formatBytes(data.totalStorage / data.totalFiles)
+                  : '0 B'}
               </p>
             </div>
           </div>

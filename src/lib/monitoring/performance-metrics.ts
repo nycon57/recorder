@@ -19,7 +19,7 @@ const redis = new Redis({
 /**
  * Metric types
  */
-export enum MetricType {
+enum MetricType {
   API_LATENCY = 'api_latency',
   JOB_DURATION = 'job_duration',
   CACHE_HIT = 'cache_hit',
@@ -34,13 +34,13 @@ export enum MetricType {
  */
 export const PERFORMANCE_TARGETS = {
   api: {
-    p50: 200,  // 200ms median
-    p95: 500,  // 500ms 95th percentile
+    p50: 200, // 200ms median
+    p95: 500, // 500ms 95th percentile
     p99: 1000, // 1s 99th percentile
   },
   job: {
-    transcription: 30000,     // 30s
-    embedding: 5000,          // 5s
+    transcription: 30000, // 30s
+    embedding: 5000, // 5s
     document_generation: 10000, // 10s
   },
   cache: {
@@ -54,34 +54,30 @@ export const PERFORMANCE_TARGETS = {
 /**
  * Track an API metric
  */
-export async function trackApiMetric(
+async function trackApiMetric(
   endpoint: string,
   duration: number,
-  status: 'success' | 'error' = 'success'
+  status: 'success' | 'error' = 'success',
 ): Promise<void> {
   try {
     const timestamp = Date.now();
     const hour = Math.floor(timestamp / 3600000) * 3600000;
 
-    // Store in time-series format
     const key = `metrics:api:${endpoint}:${hour}`;
+    const writes: Array<Promise<unknown>> = [
+      redis.zadd(key, {
+        score: timestamp,
+        member: JSON.stringify({ duration, status }),
+      }),
+      redis.expire(key, 604800),
+      updateApiAggregates(endpoint, duration, status),
+    ];
 
-    await redis.zadd(key, {
-      score: timestamp,
-      member: JSON.stringify({ duration, status }),
-    });
-
-    // Expire after 7 days
-    await redis.expire(key, 604800);
-
-    // Update aggregates
-    await updateApiAggregates(endpoint, duration, status);
-
-    // Track slow APIs
     if (duration > PERFORMANCE_TARGETS.api.p95) {
-      await trackSlowApi(endpoint, duration);
+      writes.push(trackSlowApi(endpoint, duration));
     }
 
+    await Promise.all(writes);
   } catch (error) {
     console.error('[Metrics] Error tracking API metric:', error);
   }
@@ -90,10 +86,10 @@ export async function trackApiMetric(
 /**
  * Track a job processing metric
  */
-export async function trackJobMetric(
+async function trackJobMetric(
   jobType: string,
   duration: number,
-  status: 'success' | 'error' = 'success'
+  status: 'success' | 'error' = 'success',
 ): Promise<void> {
   try {
     const timestamp = Date.now();
@@ -101,16 +97,14 @@ export async function trackJobMetric(
 
     const key = `metrics:job:${jobType}:${hour}`;
 
-    await redis.zadd(key, {
-      score: timestamp,
-      member: JSON.stringify({ duration, status }),
-    });
-
-    await redis.expire(key, 604800);
-
-    // Update job throughput
-    await updateJobThroughput(jobType);
-
+    await Promise.all([
+      redis.zadd(key, {
+        score: timestamp,
+        member: JSON.stringify({ duration, status }),
+      }),
+      redis.expire(key, 604800),
+      updateJobThroughput(jobType),
+    ]);
   } catch (error) {
     console.error('[Metrics] Error tracking job metric:', error);
   }
@@ -119,10 +113,10 @@ export async function trackJobMetric(
 /**
  * Track database query performance
  */
-export async function trackDbQuery(
+async function trackDbQuery(
   operation: string,
   table: string,
-  duration: number
+  duration: number,
 ): Promise<void> {
   try {
     const timestamp = Date.now();
@@ -139,7 +133,6 @@ export async function trackDbQuery(
     if (duration > PERFORMANCE_TARGETS.database.queryTime) {
       await trackSlowQuery(operation, table, duration);
     }
-
   } catch (error) {
     console.error('[Metrics] Error tracking DB query:', error);
   }
@@ -148,9 +141,9 @@ export async function trackDbQuery(
 /**
  * Track cache operations
  */
-export async function trackCacheOperation(
+async function trackCacheOperation(
   hit: boolean,
-  latency: number
+  latency: number,
 ): Promise<void> {
   try {
     const key = hit ? 'metrics:cache:hits' : 'metrics:cache:misses';
@@ -161,7 +154,6 @@ export async function trackCacheOperation(
       score: Date.now(),
       member: latency.toString(),
     });
-
   } catch (error) {
     console.error('[Metrics] Error tracking cache operation:', error);
   }
@@ -170,29 +162,24 @@ export async function trackCacheOperation(
 /**
  * Track error rates
  */
-export async function trackError(
-  context: string,
-  error: Error
-): Promise<void> {
+async function trackError(context: string, error: Error): Promise<void> {
   try {
     const timestamp = Date.now();
     const hour = Math.floor(timestamp / 3600000) * 3600000;
 
     const key = `metrics:errors:${context}:${hour}`;
 
-    await redis.zadd(key, {
-      score: timestamp,
-      member: JSON.stringify({
-        message: error.message,
-        stack: error.stack?.substring(0, 500),
+    await Promise.all([
+      redis.zadd(key, {
+        score: timestamp,
+        member: JSON.stringify({
+          message: error.message,
+          stack: error.stack?.substring(0, 500),
+        }),
       }),
-    });
-
-    await redis.expire(key, 259200); // 3 days
-
-    // Increment error counter
-    await redis.incr(`metrics:errors:count:${context}`);
-
+      redis.expire(key, 259200),
+      redis.incr(`metrics:errors:count:${context}`),
+    ]);
   } catch (err) {
     console.error('[Metrics] Error tracking error:', err);
   }
@@ -204,25 +191,20 @@ export async function trackError(
 async function updateApiAggregates(
   endpoint: string,
   duration: number,
-  status: string
+  status: string,
 ): Promise<void> {
   const key = `metrics:api:aggregate:${endpoint}`;
 
-  // Use HyperLogLog for unique request counting
-  await redis.pfadd(`metrics:api:requests:${endpoint}`, Date.now().toString());
-
-  // Store duration for percentile calculation
-  await redis.zadd(`${key}:durations`, {
-    score: duration,
-    member: `${Date.now()}-${Math.random()}`,
-  });
-
-  // Increment status counter
-  await redis.hincrby(`${key}:status`, status, 1);
-
-  // Set expiry
-  await redis.expire(`${key}:durations`, 86400);
-  await redis.expire(`${key}:status`, 86400);
+  await Promise.all([
+    redis.pfadd(`metrics:api:requests:${endpoint}`, Date.now().toString()),
+    redis.zadd(`${key}:durations`, {
+      score: duration,
+      member: `${Date.now()}-${Math.random()}`,
+    }),
+    redis.hincrby(`${key}:status`, status, 1),
+    redis.expire(`${key}:durations`, 86400),
+    redis.expire(`${key}:status`, 86400),
+  ]);
 }
 
 /**
@@ -239,10 +221,7 @@ async function updateJobThroughput(jobType: string): Promise<void> {
 /**
  * Track slow API endpoints
  */
-async function trackSlowApi(
-  endpoint: string,
-  duration: number
-): Promise<void> {
+async function trackSlowApi(endpoint: string, duration: number): Promise<void> {
   await redis.zadd('metrics:slow:apis', {
     score: duration,
     member: `${endpoint}:${Date.now()}`,
@@ -258,7 +237,7 @@ async function trackSlowApi(
 async function trackSlowQuery(
   operation: string,
   table: string,
-  duration: number
+  duration: number,
 ): Promise<void> {
   await redis.zadd('metrics:slow:queries', {
     score: duration,
@@ -273,13 +252,16 @@ async function trackSlowQuery(
  */
 export async function getPerformanceMetrics(): Promise<{
   api: {
-    endpoints: Record<string, {
-      p50: number;
-      p95: number;
-      p99: number;
-      errorRate: number;
-      requestCount: number;
-    }>;
+    endpoints: Record<
+      string,
+      {
+        p50: number;
+        p95: number;
+        p99: number;
+        errorRate: number;
+        requestCount: number;
+      }
+    >;
     slowest: Array<{ endpoint: string; duration: number }>;
   };
   jobs: {
@@ -304,44 +286,61 @@ export async function getPerformanceMetrics(): Promise<{
     const apiEndpoints: Record<string, any> = {};
 
     // Get all tracked endpoints (this is simplified, in production you'd maintain a list)
-    const endpoints = ['/api/library', '/api/dashboard/stats', '/api/search', '/api/recordings'];
+    const endpoints = [
+      '/api/library',
+      '/api/dashboard/stats',
+      '/api/search',
+      '/api/recordings',
+    ];
 
-    for (const endpoint of endpoints) {
-      const durations = await redis.zrange(
-        `metrics:api:aggregate:${endpoint}:durations`,
-        0,
-        -1,
-        { withScores: true }
-      );
+    await Promise.all(
+      Array.from(endpoints).map(async (endpoint) => {
+        const durations = await redis.zrange(
+          `metrics:api:aggregate:${endpoint}:durations`,
+          0,
+          -1,
+          { withScores: true },
+        );
+        if (durations.length > 0) {
+          const durValues = durations
+            .flatMap((__item, __index, __array) =>
+              __index % 2 === 1 ? [Number(__item)] : [],
+            )
+            .sort((a, b) => a - b);
 
-      if (durations.length > 0) {
-        const durValues = durations
-          .filter((_, i) => i % 2 === 1)
-          .map(v => Number(v))
-          .sort((a, b) => a - b);
+          const p50Index = Math.floor(durValues.length * 0.5);
+          const p95Index = Math.floor(durValues.length * 0.95);
+          const p99Index = Math.floor(durValues.length * 0.99);
 
-        const p50Index = Math.floor(durValues.length * 0.5);
-        const p95Index = Math.floor(durValues.length * 0.95);
-        const p99Index = Math.floor(durValues.length * 0.99);
+          const statusCounts = await redis.hgetall(
+            `metrics:api:aggregate:${endpoint}:status`,
+          );
+          const totalRequests = Object.values(statusCounts || {}).reduce(
+            (sum: number, count) => sum + Number(count),
+            0,
+          );
 
-        const statusCounts = await redis.hgetall(`metrics:api:aggregate:${endpoint}:status`);
-        const totalRequests = Object.values(statusCounts || {})
-          .reduce((sum: number, count) => sum + Number(count), 0);
+          const errorCount = Number(statusCounts?.error || 0);
 
-        const errorCount = Number(statusCounts?.error || 0);
-
-        apiEndpoints[endpoint] = {
-          p50: durValues[p50Index] || 0,
-          p95: durValues[p95Index] || 0,
-          p99: durValues[p99Index] || 0,
-          errorRate: (totalRequests as number) > 0 ? (errorCount / (totalRequests as number)) * 100 : 0,
-          requestCount: totalRequests as number,
-        };
-      }
-    }
+          apiEndpoints[endpoint] = {
+            p50: durValues[p50Index] || 0,
+            p95: durValues[p95Index] || 0,
+            p99: durValues[p99Index] || 0,
+            errorRate:
+              (totalRequests as number) > 0
+                ? (errorCount / (totalRequests as number)) * 100
+                : 0,
+            requestCount: totalRequests as number,
+          };
+        }
+      }),
+    );
 
     // Get slow APIs
-    const slowApis = await redis.zrange('metrics:slow:apis', 0, 9, { rev: true, withScores: true });
+    const slowApis = await redis.zrange('metrics:slow:apis', 0, 9, {
+      rev: true,
+      withScores: true,
+    });
     const slowestApis = [];
     for (let i = 0; i < slowApis.length; i += 2) {
       const [endpoint] = (slowApis[i] as string).split(':');
@@ -352,39 +351,51 @@ export async function getPerformanceMetrics(): Promise<{
     }
 
     // Get cache metrics
-    const cacheHits = await redis.get('metrics:cache:hits') || 0;
-    const cacheMisses = await redis.get('metrics:cache:misses') || 0;
+    const cacheHits = (await redis.get('metrics:cache:hits')) || 0;
+    const cacheMisses = (await redis.get('metrics:cache:misses')) || 0;
     const totalCacheOps = Number(cacheHits) + Number(cacheMisses);
-    const cacheHitRate = totalCacheOps > 0
-      ? (Number(cacheHits) / totalCacheOps) * 100
-      : 0;
+    const cacheHitRate =
+      totalCacheOps > 0 ? (Number(cacheHits) / totalCacheOps) * 100 : 0;
 
     // Get cache latency
-    const cacheLatencies = await redis.zrange('metrics:cache:latency', -100, -1);
-    const avgCacheLatency = cacheLatencies.length > 0
-      ? cacheLatencies.reduce((sum: number, lat) => sum + Number(lat), 0) / cacheLatencies.length
-      : 0;
+    const cacheLatencies = await redis.zrange(
+      'metrics:cache:latency',
+      -100,
+      -1,
+    );
+    const avgCacheLatency =
+      cacheLatencies.length > 0
+        ? cacheLatencies.reduce((sum: number, lat) => sum + Number(lat), 0) /
+          cacheLatencies.length
+        : 0;
 
     // Get job throughput (simplified)
     const jobTypes = ['transcribe', 'generate_embeddings', 'doc_generate'];
     const jobThroughput: Record<string, number> = {};
 
-    for (const jobType of jobTypes) {
-      const minute = Math.floor(Date.now() / 60000) * 60000;
-      let total = 0;
-
-      // Get last 10 minutes
-      for (let i = 0; i < 10; i++) {
-        const key = `metrics:throughput:${jobType}:${minute - i * 60000}`;
-        const count = await redis.get(key);
-        total += Number(count || 0);
-      }
-
-      jobThroughput[jobType] = total / 10; // Average per minute
-    }
+    await Promise.all(
+      Array.from(jobTypes).map(async (jobType) => {
+        const minute = Math.floor(Date.now() / 60000) * 60000;
+        let total = 0;
+        await Promise.all(
+          Array.from(
+            { length: Math.max(0, Math.ceil((10 - 0) / 1)) },
+            (_, __loopIndex) => 0 + __loopIndex * 1,
+          ).map(async (i) => {
+            const key = `metrics:throughput:${jobType}:${minute - i * 60000}`;
+            const count = await redis.get(key);
+            total += Number(count || 0);
+          }),
+        );
+        jobThroughput[jobType] = total / 10;
+      }),
+    );
 
     // Get slow queries
-    const slowQueries = await redis.zrange('metrics:slow:queries', 0, 9, { rev: true, withScores: true });
+    const slowQueries = await redis.zrange('metrics:slow:queries', 0, 9, {
+      rev: true,
+      withScores: true,
+    });
     const slowestQueries = [];
     for (let i = 0; i < slowQueries.length; i += 2) {
       const [table, operation] = (slowQueries[i] as string).split(':');
@@ -399,11 +410,13 @@ export async function getPerformanceMetrics(): Promise<{
     const errorCounts: Record<string, number> = {};
     let totalErrors = 0;
 
-    for (const context of errorContexts) {
-      const count = await redis.get(`metrics:errors:count:${context}`) || 0;
-      errorCounts[context] = Number(count);
-      totalErrors += Number(count);
-    }
+    await Promise.all(
+      Array.from(errorContexts).map(async (context) => {
+        const count = (await redis.get(`metrics:errors:count:${context}`)) || 0;
+        errorCounts[context] = Number(count);
+        totalErrors += Number(count);
+      }),
+    );
 
     return {
       api: {
@@ -427,7 +440,6 @@ export async function getPerformanceMetrics(): Promise<{
         contexts: errorCounts,
       },
     };
-
   } catch (error) {
     console.error('[Metrics] Error getting performance metrics:', error);
     return {
@@ -454,22 +466,31 @@ export async function resetMetrics(): Promise<void> {
     'metrics:slow:*',
   ];
 
-  for (const pattern of patterns) {
-    const keys = [];
-    let cursor = 0;
+  const scanPattern = async (
+    pattern: string,
+    cursor = 0,
+    keys: string[] = [],
+  ): Promise<string[]> => {
+    const result = await redis.scan(cursor, {
+      match: pattern,
+      count: 100,
+    });
 
-    do {
-      const result = await redis.scan(cursor, {
-        match: pattern,
-        count: 100,
-      });
+    const nextCursor =
+      typeof result[0] === 'string' ? parseInt(result[0], 10) : result[0];
+    const nextKeys = keys.concat(result[1] || []);
 
-      cursor = typeof result[0] === 'string' ? parseInt(result[0], 10) : result[0];
-      keys.push(...(result[1] || []));
-    } while (cursor !== 0);
+    return nextCursor === 0
+      ? nextKeys
+      : scanPattern(pattern, nextCursor, nextKeys);
+  };
 
-    if (keys.length > 0) {
-      await Promise.all(keys.map(key => redis.del(key)));
-    }
-  }
+  await Promise.all(
+    Array.from(patterns).map(async (pattern) => {
+      const keys = await scanPattern(pattern);
+      if (keys.length > 0) {
+        await Promise.all(keys.map((key) => redis.del(key)));
+      }
+    }),
+  );
 }

@@ -181,16 +181,18 @@ export default async function ExtensionContextDebugPage({
         <CardContent>
           <form method="GET" className="grid gap-4 md:grid-cols-6">
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium">Search</label>
+              <label htmlFor="extension-context-search" className="mb-2 block text-sm font-medium">Search</label>
               <Input
+                id="extension-context-search"
                 name="q"
                 defaultValue={filters.query ?? ''}
                 placeholder="app, screen, summary, path..."
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">App</label>
+              <label htmlFor="extension-context-app" className="mb-2 block text-sm font-medium">App</label>
               <select
+                id="extension-context-app"
                 name="app"
                 defaultValue={filters.app ?? 'all'}
                 className="bg-background border-primary/40 focus-visible:border-accent/50 focus-visible:ring-accent/20 h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
@@ -204,10 +206,11 @@ export default async function ExtensionContextDebugPage({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">
+              <label htmlFor="extension-context-page-type" className="mb-2 block text-sm font-medium">
                 Page Type
               </label>
               <select
+                id="extension-context-page-type"
                 name="pageType"
                 defaultValue={filters.pageType ?? 'all'}
                 className="bg-background border-primary/40 focus-visible:border-accent/50 focus-visible:ring-accent/20 h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
@@ -221,10 +224,11 @@ export default async function ExtensionContextDebugPage({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">
+              <label htmlFor="extension-context-knowledge-mode" className="mb-2 block text-sm font-medium">
                 Knowledge Mode
               </label>
               <select
+                id="extension-context-knowledge-mode"
                 name="knowledgeMode"
                 defaultValue={filters.knowledgeMode ?? 'all'}
                 className="bg-background border-primary/40 focus-visible:border-accent/50 focus-visible:ring-accent/20 h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
@@ -238,8 +242,9 @@ export default async function ExtensionContextDebugPage({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">Host</label>
+              <label htmlFor="extension-context-host" className="mb-2 block text-sm font-medium">Host</label>
               <select
+                id="extension-context-host"
                 name="host"
                 defaultValue={filters.host ?? 'all'}
                 className="bg-background border-primary/40 focus-visible:border-accent/50 focus-visible:ring-accent/20 h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
@@ -254,8 +259,9 @@ export default async function ExtensionContextDebugPage({
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium">Since</label>
+              <label htmlFor="extension-context-since" className="mb-2 block text-sm font-medium">Since</label>
               <select
+                id="extension-context-since"
                 name="since"
                 defaultValue={filters.since}
                 className="bg-background border-primary/40 focus-visible:border-accent/50 focus-visible:ring-accent/20 h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
@@ -268,8 +274,9 @@ export default async function ExtensionContextDebugPage({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium">Limit</label>
+              <label htmlFor="extension-context-limit" className="mb-2 block text-sm font-medium">Limit</label>
               <Input
+                id="extension-context-limit"
                 name="limit"
                 type="number"
                 min={10}

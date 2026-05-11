@@ -31,14 +31,15 @@ export const POST = apiHandler(
   ) => {
     const { orgId, userId, role } = await requireOrg();
     const supabase = supabaseAdmin;
-    const { id } = await params;
 
     if (!hasPermission(role as OrganizationRole, 'recording:create')) {
       return errors.forbidden();
     }
 
-    // Validate request body
-    const body = await parseBody(request, reprocessRecordingSchema);
+    const [{ id }, body] = await Promise.all([
+      params,
+      parseBody(request, reprocessRecordingSchema),
+    ]);
     // Type assertion for parsed body
     const { step } = body as { step: string };
 
@@ -136,18 +137,15 @@ export const POST = apiHandler(
 
     if (step === 'embeddings' || step === 'all') {
       // Verify transcript and document exist (both required for embeddings)
-      const { data: transcript } = await supabase
-        .from('transcripts')
-        .select('id')
-        .eq('content_id', id)
-        .single();
-
-      const { data: document } = await supabase
-        .from('documents')
-        .select('id')
-        .eq('content_id', id)
-        .eq('org_id', orgId)
-        .single();
+      const [{ data: transcript }, { data: document }] = await Promise.all([
+        supabase.from('transcripts').select('id').eq('content_id', id).single(),
+        supabase
+          .from('documents')
+          .select('id')
+          .eq('content_id', id)
+          .eq('org_id', orgId)
+          .single(),
+      ]);
 
       if (!transcript && step === 'embeddings') {
         return errors.badRequest(

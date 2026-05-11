@@ -19,7 +19,7 @@ export default function AssistantLoading() {
       <div className="flex-1 overflow-y-auto mb-4 space-y-4">
         {/* Empty state */}
         <div className="text-center py-12 text-muted-foreground">
-          <Bot className="w-16 h-16 mx-auto mb-4 text-muted animate-pulse" />
+          <Bot className="size-16 mx-auto mb-4 text-muted animate-pulse" />
           <Skeleton className="h-6 w-32 mx-auto mb-2" />
           <Skeleton className="h-4 w-64 mx-auto" />
         </div>

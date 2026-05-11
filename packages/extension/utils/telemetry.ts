@@ -137,10 +137,13 @@ async function readTelemetryQueue(): Promise<QueuedTelemetryEvent[]> {
   if (!Array.isArray(queue)) return [];
 
   const cutoff = Date.now() - MAX_EVENT_AGE_MS;
-  return queue
-    .filter(isQueuedTelemetryEvent)
-    .filter((event) => Date.parse(event.queuedAt) >= cutoff)
-    .slice(-MAX_QUEUE_SIZE);
+  const validEvents: QueuedTelemetryEvent[] = [];
+  for (const event of queue) {
+    if (isQueuedTelemetryEvent(event) && Date.parse(event.queuedAt) >= cutoff) {
+      validEvents.push(event);
+    }
+  }
+  return validEvents.slice(-MAX_QUEUE_SIZE);
 }
 
 async function writeTelemetryQueue(
@@ -217,7 +220,7 @@ export function summarizeTelemetryToolArgs(args: {
   };
 }
 
-export function telemetryOutcomeEventType(
+function telemetryOutcomeEventType(
   type: ExtensionProductTelemetryEventType,
 ): ExtensionProductTelemetryEventType {
   return type;

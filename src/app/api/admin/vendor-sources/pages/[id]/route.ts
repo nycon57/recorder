@@ -26,37 +26,37 @@ import { createLogger } from '@/lib/utils/logger';
 const logger = createLogger({ service: 'vendor-sources-pages' });
 
 export const GET = apiHandler(
-  async (_request: NextRequest, context: { params: { id: string } }) => {
+  async (_request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     await requireSystemAdmin();
 
-    const { id } = await Promise.resolve(context.params);
+    const { id } = await context.params;
 
     if (!id || typeof id !== 'string') {
       return errors.badRequest('Missing page id');
     }
 
-    const { data: page, error: pageError } = await (supabaseAdmin as any)
+    const { data: page, error: pageError } = (await (supabaseAdmin as any)
       .from('vendor_wiki_pages')
       .select(
         'id, app, screen, source_url, content, content_hash, created_at, updated_at, vendor_source_id, curated_by, ingest_job_id',
       )
       .eq('id', id)
-      .single() as {
-        data: {
-          id: string;
-          app: string;
-          screen: string;
-          source_url: string | null;
-          content: string | null;
-          content_hash: string | null;
-          created_at: string;
-          updated_at: string;
-          vendor_source_id: string | null;
-          curated_by: string | null;
-          ingest_job_id: string | null;
-        } | null;
-        error: { code?: string; message: string } | null;
-      };
+      .single()) as {
+      data: {
+        id: string;
+        app: string;
+        screen: string;
+        source_url: string | null;
+        content: string | null;
+        content_hash: string | null;
+        created_at: string;
+        updated_at: string;
+        vendor_source_id: string | null;
+        curated_by: string | null;
+        ingest_job_id: string | null;
+      } | null;
+      error: { code?: string; message: string } | null;
+    };
 
     if (pageError || !page) {
       return errors.notFound('Vendor wiki page');
@@ -71,19 +71,19 @@ export const GET = apiHandler(
     } | null = null;
 
     if (page.vendor_source_id) {
-      const { data: source } = await (supabaseAdmin as any)
+      const { data: source } = (await (supabaseAdmin as any)
         .from('vendor_doc_sources')
         .select('app, source_url, publisher_hostname, status')
         .eq('id', page.vendor_source_id)
-        .single() as {
-          data: {
-            app: string;
-            source_url: string;
-            publisher_hostname: string;
-            status: string;
-          } | null;
-          error: unknown;
-        };
+        .single()) as {
+        data: {
+          app: string;
+          source_url: string;
+          publisher_hostname: string;
+          status: string;
+        } | null;
+        error: unknown;
+      };
       parentSource = source;
     }
 
@@ -91,11 +91,11 @@ export const GET = apiHandler(
     let curatedByEmail: string | null = null;
     if (page.curated_by) {
       try {
-        const { data: userRow } = await (supabaseAdmin as any)
+        const { data: userRow } = (await (supabaseAdmin as any)
           .from('user')
           .select('email')
           .eq('id', page.curated_by)
-          .maybeSingle() as { data: { email: string } | null };
+          .maybeSingle()) as { data: { email: string } | null };
         curatedByEmail = userRow?.email ?? null;
       } catch {
         // Non-fatal — fall through to null
@@ -107,24 +107,28 @@ export const GET = apiHandler(
 );
 
 export const DELETE = apiHandler(
-  async (_request: NextRequest, context: { params: { id: string } }) => {
-    const session = await requireSystemAdmin();
-
-    const { id } = await Promise.resolve(context.params);
+  async (_request: NextRequest, context: { params: Promise<{ id: string }> }) => {
+    const { id } = await context.params;
 
     if (!id || typeof id !== 'string') {
       return errors.badRequest('Missing page id');
     }
 
+    const session = await requireSystemAdmin();
     // Fetch before delete so we can log with context
-    const { data: existing, error: fetchError } = await (supabaseAdmin as any)
+    const { data: existing, error: fetchError } = (await (supabaseAdmin as any)
       .from('vendor_wiki_pages')
       .select('id, app, screen, source_url')
       .eq('id', id)
-      .single() as {
-        data: { id: string; app: string; screen: string; source_url: string | null } | null;
-        error: { code?: string; message: string } | null;
-      };
+      .single()) as {
+      data: {
+        id: string;
+        app: string;
+        screen: string;
+        source_url: string | null;
+      } | null;
+      error: { code?: string; message: string } | null;
+    };
 
     if (fetchError || !existing) {
       return errors.notFound('Vendor wiki page');

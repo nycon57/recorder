@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useReducer, useRef, useEffect, useCallback } from 'react';
 import { X, ChevronDown, Check, Plus } from 'lucide-react';
 import debounce from 'lodash/debounce';
 
@@ -9,7 +9,6 @@ import { TAG_COLORS, getDefaultTagColor } from '@/lib/validations/tags';
 import { useToast } from '@/app/components/ui/use-toast';
 
 import { TagBadge } from './TagBadge';
-
 
 interface Tag {
   id: string;
@@ -30,14 +29,22 @@ interface TagInputProps {
   onLoadTags?: (search: string) => Promise<Tag[]>;
 }
 
+const EMPTY_TAGS: Tag[] = [];
+
 /**
  * TagInput - Multi-select tag input with autocomplete and create functionality
  */
-export function TagInput({
-  value = [],
+export function TagInput(
+  props: Parameters<typeof useTagInputImplementation>[0],
+) {
+  return useTagInputImplementation(props);
+}
+
+function useTagInputImplementation({
+  value = EMPTY_TAGS,
   onChange,
-  availableTags = [],
-  placeholder = 'Add tags...',
+  availableTags = EMPTY_TAGS,
+  placeholder = 'Add tags…',
   maxTags,
   allowCreate = true,
   disabled = false,
@@ -46,11 +53,33 @@ export function TagInput({
   onLoadTags,
 }: TagInputProps) {
   const { toast } = useToast();
-  const [inputValue, setInputValue] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<Tag[]>([]);
-  const [isCreating, setIsCreating] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        inputValue: string;
+        isOpen: boolean;
+        suggestions: Tag[];
+        isCreating: boolean;
+        highlightedIndex: number;
+      },
+      patch: Partial<{
+        inputValue: string;
+        isOpen: boolean;
+        suggestions: Tag[];
+        isCreating: boolean;
+        highlightedIndex: number;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      inputValue: '',
+      isOpen: false,
+      suggestions: [],
+      isCreating: false,
+      highlightedIndex: -1,
+    },
+  );
+  const { inputValue, isOpen, suggestions, isCreating, highlightedIndex } =
+    state;
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -60,13 +89,13 @@ export function TagInput({
       if (onLoadTags) {
         try {
           const tags = await onLoadTags(search);
-          setSuggestions(tags);
+          dispatch({ suggestions: tags });
         } catch (error) {
           console.error('Error loading tags:', error);
         }
       }
     }, 300),
-    [onLoadTags]
+    [onLoadTags],
   );
 
   // Filter suggestions based on input
@@ -81,16 +110,16 @@ export function TagInput({
         const filtered = tags.filter(
           (tag) =>
             tag.name.toLowerCase().includes(inputValue.toLowerCase()) &&
-            !value.some((selected) => selected.id === tag.id)
+            !value.some((selected) => selected.id === tag.id),
         );
-        setSuggestions(filtered);
+        dispatch({ suggestions: filtered });
       }
     } else {
-      setSuggestions(
-        tags.filter(
-          (tag) => !value.some((selected) => selected.id === tag.id)
-        )
-      );
+      dispatch({
+        suggestions: tags.filter(
+          (tag) => !value.some((selected) => selected.id === tag.id),
+        ),
+      });
     }
   }, [inputValue, availableTags, value, onLoadTags, debouncedLoadTags]);
 
@@ -102,7 +131,7 @@ export function TagInput({
         !dropdownRef.current.contains(event.target as Node) &&
         !inputRef.current?.contains(event.target as Node)
       ) {
-        setIsOpen(false);
+        dispatch({ isOpen: false });
       }
     }
 
@@ -119,8 +148,7 @@ export function TagInput({
       onChange([...value, tag]);
     }
 
-    setInputValue('');
-    setIsOpen(false);
+    dispatch({ inputValue: '', isOpen: false });
     inputRef.current?.focus();
   };
 
@@ -133,12 +161,14 @@ export function TagInput({
     if (!trimmedInput || !allowCreate) return;
 
     // Check if tag already exists in selected tags
-    if (value.some((t) => t.name.toLowerCase() === trimmedInput.toLowerCase())) {
-      setInputValue('');
+    if (
+      value.some((t) => t.name.toLowerCase() === trimmedInput.toLowerCase())
+    ) {
+      dispatch({ inputValue: '' });
       return;
     }
 
-    setIsCreating(true);
+    dispatch({ isCreating: true });
 
     try {
       let newTag: Tag | null = null;
@@ -162,11 +192,14 @@ export function TagInput({
       console.error('Error creating tag:', error);
       toast({
         title: 'Failed to create tag',
-        description: error instanceof Error ? error.message : 'An unexpected error occurred',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
         variant: 'destructive',
       });
     } finally {
-      setIsCreating(false);
+      dispatch({ isCreating: false });
     }
   };
 
@@ -181,7 +214,7 @@ export function TagInput({
         inputValue.trim() &&
         allowCreate &&
         !suggestions.some(
-          (s) => s.name.toLowerCase() === inputValue.trim().toLowerCase()
+          (s) => s.name.toLowerCase() === inputValue.trim().toLowerCase(),
         )
       ) {
         // Create new tag if no exact match
@@ -194,16 +227,20 @@ export function TagInput({
       // Remove last tag on backspace when input is empty
       handleRemoveTag(value[value.length - 1].id);
     } else if (e.key === 'Escape') {
-      setIsOpen(false);
-      setHighlightedIndex(-1);
+      dispatch({ isOpen: false, highlightedIndex: -1 });
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex((prev) =>
-        prev < suggestions.length - 1 ? prev + 1 : prev
-      );
+      dispatch({
+        highlightedIndex:
+          highlightedIndex < suggestions.length - 1
+            ? highlightedIndex + 1
+            : highlightedIndex,
+      });
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
+      dispatch({
+        highlightedIndex: highlightedIndex > 0 ? highlightedIndex - 1 : -1,
+      });
     }
   };
 
@@ -211,7 +248,7 @@ export function TagInput({
     allowCreate &&
     inputValue.trim() &&
     !suggestions.some(
-      (s) => s.name.toLowerCase() === inputValue.trim().toLowerCase()
+      (s) => s.name.toLowerCase() === inputValue.trim().toLowerCase(),
     );
 
   return (
@@ -220,9 +257,17 @@ export function TagInput({
         className={cn(
           'flex flex-wrap gap-1.5 min-h-[42px] p-2 border rounded-md bg-background',
           disabled && 'bg-muted cursor-not-allowed',
-          isOpen && 'ring-2 ring-primary ring-offset-0'
+          isOpen && 'ring-2 ring-primary ring-offset-0',
         )}
         onClick={() => !disabled && inputRef.current?.focus()}
+        onKeyDown={(event) => {
+          if (disabled) return;
+          if (event.key === 'Enter' || event.key === ' ') {
+            inputRef.current?.focus();
+          }
+        }}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
       >
         {value.map((tag) => (
           <TagBadge
@@ -238,14 +283,14 @@ export function TagInput({
           ref={inputRef}
           type="text"
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onFocus={() => !disabled && setIsOpen(true)}
+          onChange={(e) => dispatch({ inputValue: e.target.value })}
+          onFocus={() => !disabled && dispatch({ isOpen: true })}
           onKeyDown={handleKeyDown}
           disabled={disabled || (maxTags ? value.length >= maxTags : false)}
           placeholder={value.length === 0 ? placeholder : ''}
           className={cn(
             'flex-1 min-w-[120px] outline-none bg-transparent text-sm',
-            disabled && 'cursor-not-allowed'
+            disabled && 'cursor-not-allowed',
           )}
         />
         {value.length > 0 && !disabled && (
@@ -257,7 +302,7 @@ export function TagInput({
             }}
             className="ml-auto p-1 hover:bg-muted rounded transition-colors"
           >
-            <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+            <X className="size-4 text-muted-foreground hover:text-foreground" />
           </button>
         )}
       </div>
@@ -276,15 +321,18 @@ export function TagInput({
               className={cn(
                 'flex items-center gap-2 w-full px-3 py-2 text-sm text-left transition-colors',
                 'hover:bg-primary/20 hover:text-foreground',
-                highlightedIndex === -1 && 'bg-primary/20'
+                highlightedIndex === -1 && 'bg-primary/20',
               )}
             >
-              <Plus className="h-4 w-4 text-accent" />
+              <Plus className="size-4 text-accent" />
               <span>
-                Create "<strong className="text-accent">{inputValue.trim()}</strong>"
+                Create "
+                <strong className="text-accent">{inputValue.trim()}</strong>"
               </span>
               {isCreating && (
-                <span className="ml-auto text-xs text-muted-foreground">Creating...</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Creating…
+                </span>
               )}
             </button>
           )}
@@ -303,16 +351,16 @@ export function TagInput({
                   isSelected
                     ? 'opacity-50 cursor-not-allowed'
                     : 'hover:bg-primary/20',
-                  isHighlighted && !isSelected && 'bg-primary/20'
+                  isHighlighted && !isSelected && 'bg-primary/20',
                 )}
-                onMouseEnter={() => setHighlightedIndex(index)}
+                onMouseEnter={() => dispatch({ highlightedIndex: index })}
               >
                 <div
-                  className="w-4 h-4 rounded-full ring-1 ring-white/20"
+                  className="size-4 rounded-full ring-1 ring-white/20"
                   style={{ backgroundColor: tag.color }}
                 />
                 <span className="flex-1">{tag.name}</span>
-                {isSelected && <Check className="h-4 w-4 text-accent" />}
+                {isSelected && <Check className="size-4 text-accent" />}
               </button>
             );
           })}

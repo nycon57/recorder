@@ -31,14 +31,16 @@ type FeedbackSelectRow = {
 /** Fire-and-forget: integrate feedback into agent memory (non-blocking). */
 function processInBackground(feedbackId: string): void {
   processFeedback(feedbackId).catch((err) =>
-    console.error('[POST /api/agent-feedback] processFeedback failed:', err)
+    console.error('[POST /api/agent-feedback] processFeedback failed:', err),
   );
 }
 
 /** POST /api/agent-feedback - Submit feedback on an agent action or RAG response. */
 export const POST = apiHandler(async (request: NextRequest) => {
-  const { userId, orgId } = await requireOrg();
-  const body = await parseBody<z.infer<typeof feedbackSchema>>(request, feedbackSchema);
+  const [{ userId, orgId }, body] = await Promise.all([
+    requireOrg(),
+    parseBody<z.infer<typeof feedbackSchema>>(request, feedbackSchema),
+  ]);
 
   const supabase = createClient();
 
@@ -58,7 +60,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
       .maybeSingle();
 
     if (activityError) {
-      console.error('[POST /api/agent-feedback] Activity lookup error:', activityError);
+      console.error(
+        '[POST /api/agent-feedback] Activity lookup error:',
+        activityError,
+      );
       return errors.internalError();
     }
     if (!activity) return errors.notFound('Activity log entry not found');
@@ -74,7 +79,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
           feedback_type: body.feedback_type as FeedbackType,
           ...feedbackFields,
         },
-        { onConflict: 'agent_activity_log_id,user_id' }
+        { onConflict: 'agent_activity_log_id,user_id' },
       )
       .select(FEEDBACK_SELECT)
       .single();

@@ -5,6 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
+
 import { apiHandler, requireOrg, successResponse } from '@/lib/utils/api';
 import { createClient } from '@/lib/supabase/server';
 import { getMigrationStats } from '@/lib/workers/handlers/migrate-storage-tier';
@@ -16,8 +17,10 @@ import { getMigrationStats } from '@/lib/workers/handlers/migrate-storage-tier';
  * Includes tier distribution, cost breakdown, and migration statistics.
  */
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { orgId } = await requireOrg();
-  const supabase = await createClient();
+  const [{ orgId }, supabase] = await Promise.all([
+    requireOrg(),
+    createClient(),
+  ]);
 
   try {
     // 1. Get storage costs by tier using database function
@@ -25,11 +28,14 @@ export const GET = apiHandler(async (request: NextRequest) => {
       'calculate_storage_costs_by_tier',
       {
         p_org_id: orgId,
-      }
+      },
     );
 
     if (costsError) {
-      console.error('[storage-analytics] Error fetching costs by tier:', costsError);
+      console.error(
+        '[storage-analytics] Error fetching costs by tier:',
+        costsError,
+      );
     }
 
     // 2. Get migration savings estimate using database function
@@ -37,11 +43,14 @@ export const GET = apiHandler(async (request: NextRequest) => {
       'estimate_tier_migration_savings',
       {
         p_org_id: orgId,
-      }
+      },
     );
 
     if (savingsError) {
-      console.error('[storage-analytics] Error fetching savings estimate:', savingsError);
+      console.error(
+        '[storage-analytics] Error fetching savings estimate:',
+        savingsError,
+      );
     }
 
     // 3. Get migration statistics
@@ -56,7 +65,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
       .limit(20);
 
     if (migrationsError) {
-      console.error('[storage-analytics] Error fetching recent migrations:', migrationsError);
+      console.error(
+        '[storage-analytics] Error fetching recent migrations:',
+        migrationsError,
+      );
     }
 
     // 5. Get storage tier analytics view
@@ -66,7 +78,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
       .eq('org_id', orgId);
 
     if (tierError) {
-      console.error('[storage-analytics] Error fetching tier analytics:', tierError);
+      console.error(
+        '[storage-analytics] Error fetching tier analytics:',
+        tierError,
+      );
     }
 
     return successResponse({

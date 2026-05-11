@@ -29,6 +29,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+
 import { RequestDeduplication } from '@/lib/services/cache';
 
 /**
@@ -126,7 +127,7 @@ export function withDeduplication<T extends (request: NextRequest, ...args: any[
 /**
  * Common key generators for typical use cases
  */
-export const KeyGenerators = {
+const KeyGenerators = {
   /**
    * Generate key based on URL path and query params
    * Good for GET requests
@@ -179,14 +180,14 @@ export const KeyGenerators = {
 /**
  * Skip deduplication for mutating methods
  */
-export const skipMutatingMethods = (request: NextRequest): boolean => {
+const skipMutatingMethods = (request: NextRequest): boolean => {
   return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method);
 };
 
 /**
  * Example configurations for common scenarios
  */
-export const DedupConfigs = {
+const DedupConfigs = {
   /**
    * Deduplicate GET requests by URL
    */

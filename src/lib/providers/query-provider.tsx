@@ -18,7 +18,8 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { type ReactNode, useRef } from 'react';
+import { domAnimation, LazyMotion } from 'motion/react';
+import { type ReactNode, useState } from 'react';
 
 /**
  * Create query client with performance-optimized defaults
@@ -42,7 +43,11 @@ function makeQueryClient() {
         // Retry failed requests with exponential backoff
         retry: (failureCount, error: any) => {
           // Don't retry on 4xx client errors (except 429 rate limit)
-          if (error?.status >= 400 && error?.status < 500 && error?.status !== 429) {
+          if (
+            error?.status >= 400 &&
+            error?.status < 500 &&
+            error?.status !== 429
+          ) {
             return false;
           }
           // Retry up to 3 times for server errors or network issues
@@ -100,17 +105,11 @@ function makeQueryClient() {
  * ```
  */
 export function QueryProvider({ children }: { children: ReactNode }) {
-  // Use useRef to create a stable client instance across renders (React 19 compatible)
-  // This ensures the client is created once per component mount
-  const queryClientRef = useRef<QueryClient | null>(null);
-
-  if (!queryClientRef.current) {
-    queryClientRef.current = makeQueryClient();
-  }
+  const [queryClient] = useState(() => makeQueryClient());
 
   return (
-    <QueryClientProvider client={queryClientRef.current}>
-      {children}
+    <QueryClientProvider client={queryClient}>
+      <LazyMotion features={domAnimation}>{children}</LazyMotion>
       {/* ReactQueryDevtools temporarily disabled for React 19 compatibility */}
       {/* {process.env.NODE_ENV === 'development' && (
         <ReactQueryDevtools initialIsOpen={false} position="bottom" />
@@ -123,7 +122,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
  * Pre-configured Query Keys
  * Use these for consistent cache keys across the app
  */
-export const queryKeys = {
+const queryKeys = {
   // Organization queries
   organizations: {
     all: ['organizations'] as const,
@@ -147,9 +146,11 @@ export const queryKeys = {
   // Recording queries
   recordings: {
     all: ['recordings'] as const,
-    list: (filters?: Record<string, any>) => ['recordings', 'list', filters] as const,
+    list: (filters?: Record<string, any>) =>
+      ['recordings', 'list', filters] as const,
     detail: (recordingId: string) => ['recordings', recordingId] as const,
-    stats: (recordingId: string) => ['recordings', recordingId, 'stats'] as const,
+    stats: (recordingId: string) =>
+      ['recordings', recordingId, 'stats'] as const,
   },
 
   // Search queries
@@ -163,7 +164,8 @@ export const queryKeys = {
   chat: {
     all: ['chat'] as const,
     conversations: ['chat', 'conversations'] as const,
-    messages: (conversationId: string) => ['chat', conversationId, 'messages'] as const,
+    messages: (conversationId: string) =>
+      ['chat', conversationId, 'messages'] as const,
   },
 } as const;
 
@@ -176,14 +178,14 @@ export const queryKeys = {
  * await queryClient.invalidateQueries({ queryKey: queryKeys.recordings.all });
  * ```
  */
-export function invalidateOrganizationData(queryClient: QueryClient) {
+function invalidateOrganizationData(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: queryKeys.organizations.all });
 }
 
-export function invalidateRecordingData(queryClient: QueryClient) {
+function invalidateRecordingData(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: queryKeys.recordings.all });
 }
 
-export function invalidateUserData(queryClient: QueryClient) {
+function invalidateUserData(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
 }

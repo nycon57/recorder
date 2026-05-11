@@ -85,7 +85,7 @@ export default function AdminNavigation() {
       <div className="px-2">
         <p className="trbd-kicker">System Console</p>
         <h2 className="mt-2 flex items-center gap-2 text-base font-semibold tracking-tight">
-          <LayoutDashboard className="h-4 w-4" />
+          <LayoutDashboard className="size-4" />
           Admin Dashboard
         </h2>
       </div>
@@ -107,7 +107,7 @@ export default function AdminNavigation() {
             >
               <Icon
                 className={cn(
-                  'mt-0.5 h-4 w-4',
+                  'mt-0.5 size-4',
                   isActive ? 'text-primary' : 'text-muted-foreground',
                 )}
               />

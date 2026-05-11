@@ -1,10 +1,16 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useReducer, useCallback, useEffect, useRef } from 'react';
 import { Check } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/app/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import type { ContentType } from '@/lib/types/content';
 import type { AnalysisType } from '@/lib/services/analysis-templates';
@@ -59,6 +65,32 @@ interface UploadState {
   uploadCompleted?: boolean;
 }
 
+interface UploadWizardState {
+  currentStep: WizardStep;
+  fileData: FileUploadData | null;
+  uploadState: UploadState;
+  error: string | null;
+  isUploading: boolean;
+}
+
+type UploadWizardAction =
+  | Partial<UploadWizardState>
+  | ((state: UploadWizardState) => UploadWizardState);
+
+const initialUploadWizardState: UploadWizardState = {
+  currentStep: 'file_upload',
+  fileData: null,
+  uploadState: {},
+  error: null,
+  isUploading: false,
+};
+
+const uploadWizardReducer = (
+  state: UploadWizardState,
+  action: UploadWizardAction,
+): UploadWizardState =>
+  typeof action === 'function' ? action(state) : { ...state, ...action };
+
 /**
  * UploadWizard - Multi-step upload flow orchestrator
  *
@@ -73,24 +105,25 @@ interface UploadState {
  * - Step 2→3: POST /api/recordings/[id]/metadata (save metadata, start processing)
  * - Step 3: GET /api/recordings/[id]/upload/stream (SSE progress updates)
  */
-export default function UploadWizard({ open, onClose }: UploadWizardProps) {
-  const [currentStep, setCurrentStep] = useState<WizardStep>('file_upload');
-  const [fileData, setFileData] = useState<FileUploadData | null>(null);
-  const [metadataData, setMetadataData] = useState<MetadataData | null>(null);
-  const [uploadState, setUploadState] = useState<UploadState>({});
-  const [error, setError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+export default function UploadWizard(
+  props: Parameters<typeof useUploadWizardImplementation>[0],
+) {
+  return useUploadWizardImplementation(props);
+}
+
+function useUploadWizardImplementation({ open, onClose }: UploadWizardProps) {
+  const [
+    { currentStep, fileData, uploadState, error, isUploading },
+    updateWizardState,
+  ] = useReducer(uploadWizardReducer, initialUploadWizardState);
+  const metadataDataRef = useRef<MetadataData | null>(null);
 
   /**
    * Reset wizard state
    */
   const resetWizard = useCallback(() => {
-    setCurrentStep('file_upload');
-    setFileData(null);
-    setMetadataData(null);
-    setUploadState({});
-    setError(null);
-    setIsUploading(false);
+    metadataDataRef.current = null;
+    updateWizardState(initialUploadWizardState);
   }, []);
 
   /**
@@ -98,9 +131,10 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
    * This prevents accidental data loss if user closes browser/tab
    */
   useEffect(() => {
-    const shouldWarn = (currentStep === 'metadata' || currentStep === 'progress') &&
-                       uploadState.recordingId &&
-                       !uploadState.uploadCompleted;
+    const shouldWarn =
+      (currentStep === 'metadata' || currentStep === 'progress') &&
+      uploadState.recordingId &&
+      !uploadState.uploadCompleted;
 
     if (!shouldWarn) {
       return;
@@ -113,7 +147,9 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
       return '';
     };
 
-    console.log('[UploadWizard] 🔔 Adding beforeunload warning - upload in progress');
+    console.log(
+      '[UploadWizard] 🔔 Adding beforeunload warning - upload in progress',
+    );
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
@@ -128,11 +164,11 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
   useEffect(() => {
     console.log('[UploadWizard] 📍 Step changed:', currentStep, {
       hasFileData: !!fileData,
-      hasMetadataData: !!metadataData,
+      hasMetadataData: !!metadataDataRef.current,
       recordingId: uploadState.recordingId,
       isUploading,
     });
-  }, [currentStep, fileData, metadataData, uploadState.recordingId, isUploading]);
+  }, [currentStep, fileData, uploadState.recordingId, isUploading]);
 
   /**
    * Cleanup orphan recording if user closes modal after file upload but before completion
@@ -146,7 +182,10 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
       return; // No recording to cleanup
     }
 
-    console.log('[UploadWizard] 🧹 Cleaning up orphan recording (soft delete):', recordingId);
+    console.log(
+      '[UploadWizard] 🧹 Cleaning up orphan recording (soft delete):',
+      recordingId,
+    );
 
     try {
       // Use soft delete (no permanent flag) - moves to trash and releases quota
@@ -156,13 +195,21 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
       });
 
       if (response.ok) {
-        console.log('[UploadWizard] ✅ Orphan recording moved to trash (quota released)');
+        console.log(
+          '[UploadWizard] ✅ Orphan recording moved to trash (quota released)',
+        );
       } else {
         const errorText = await response.text();
-        console.warn('[UploadWizard] ⚠️ Failed to cleanup orphan recording:', errorText);
+        console.warn(
+          '[UploadWizard] ⚠️ Failed to cleanup orphan recording:',
+          errorText,
+        );
       }
     } catch (err) {
-      console.error('[UploadWizard] ❌ Error cleaning up orphan recording:', err);
+      console.error(
+        '[UploadWizard] ❌ Error cleaning up orphan recording:',
+        err,
+      );
     }
   }, [uploadState]);
 
@@ -170,7 +217,11 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
    * Handle wizard close
    */
   const handleClose = useCallback(async () => {
-    console.log('[UploadWizard] 🚪 Close requested', { currentStep, isUploading, recordingId: uploadState.recordingId });
+    console.log('[UploadWizard] 🚪 Close requested', {
+      currentStep,
+      isUploading,
+      recordingId: uploadState.recordingId,
+    });
 
     // Only allow close if not actively uploading
     if (isUploading) {
@@ -181,154 +232,182 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
     // If user is at metadata step (Step 2), they've uploaded a file but haven't completed the wizard
     // This leaves an orphan recording in the database - we should clean it up
     if (currentStep === 'metadata' && uploadState.recordingId) {
-      console.log('[UploadWizard] 🗑️ User closing modal at metadata step - cleaning up orphan recording');
+      console.log(
+        '[UploadWizard] 🗑️ User closing modal at metadata step - cleaning up orphan recording',
+      );
       await cleanupOrphanRecording();
     }
 
     console.log('[UploadWizard] ✅ Closing wizard and resetting state');
     resetWizard();
     onClose();
-  }, [isUploading, currentStep, uploadState.recordingId, cleanupOrphanRecording, resetWizard, onClose]);
+  }, [
+    isUploading,
+    currentStep,
+    uploadState.recordingId,
+    cleanupOrphanRecording,
+    resetWizard,
+    onClose,
+  ]);
 
   /**
    * Step 1 Complete: Initialize upload and upload file
    */
-  const handleFileUploadComplete = useCallback(
-    async (data: FileUploadData) => {
-      console.log('[UploadWizard] File upload step complete', {
-        fileName: data.file.name,
-        fileSize: data.file.size,
-        contentType: data.contentType,
+  const handleFileUploadComplete = useCallback(async (data: FileUploadData) => {
+    console.log('[UploadWizard] File upload step complete', {
+      fileName: data.file.name,
+      fileSize: data.file.size,
+      contentType: data.contentType,
+    });
+
+    updateWizardState({
+      fileData: data,
+      error: null,
+      isUploading: true,
+    });
+    let initializedRecordingId: string | undefined;
+
+    try {
+      // Step 1: Initialize upload (create recording entry, get presigned URLs)
+      console.log('[UploadWizard] Initializing upload...');
+
+      const initResponse = await fetch('/api/recordings/upload/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: data.file.name,
+          mimeType: data.file.type,
+          fileSize: data.file.size,
+          durationSec: data.durationSec,
+        }),
       });
 
-      setFileData(data);
-      setError(null);
-      setIsUploading(true);
-
-      try {
-        // Step 1: Initialize upload (create recording entry, get presigned URLs)
-        console.log('[UploadWizard] Initializing upload...');
-
-        const initResponse = await fetch('/api/recordings/upload/init', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filename: data.file.name,
-            mimeType: data.file.type,
-            fileSize: data.file.size,
-            durationSec: data.durationSec,
-          }),
-        });
-
-        if (!initResponse.ok) {
-          const errorData = await initResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to initialize upload');
-        }
-
-        const initData = await initResponse.json();
-        const {
-          recordingId,
-          uploadUrl,
-          uploadPath,
-          thumbnailUploadUrl,
-          thumbnailPath,
-        } = initData.data;
-
-        console.log('[UploadWizard] Upload initialized', { recordingId });
-
-        setUploadState({
-          recordingId,
-          uploadUrl,
-          uploadPath,
-          thumbnailUploadUrl,
-          thumbnailPath,
-        });
-
-        // Step 2: Upload file to Supabase Storage
-        console.log('[UploadWizard] Uploading file to storage...');
-
-        const fileUploadResponse = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: data.file,
-          headers: {
-            'Content-Type': data.file.type,
-            'x-upsert': 'true',
-          },
-        });
-
-        if (!fileUploadResponse.ok) {
-          throw new Error('Failed to upload file to storage');
-        }
-
-        console.log('[UploadWizard] File uploaded successfully');
-
-        // Step 3: Upload thumbnail if available
-        if (data.thumbnail && thumbnailUploadUrl) {
-          console.log('[UploadWizard] Uploading auto-generated thumbnail...');
-
-          try {
-            // Detect thumbnail format and handle appropriately
-            let thumbnailBlob: Blob;
-
-            if (data.thumbnail.startsWith('data:')) {
-              // Data URL - fetch to convert to blob
-              thumbnailBlob = await (await fetch(data.thumbnail)).blob();
-            } else if (data.thumbnail.startsWith('blob:')) {
-              // Blob URL - fetch to get blob
-              thumbnailBlob = await (await fetch(data.thumbnail)).blob();
-            } else if (data.thumbnail.startsWith('http://') || data.thumbnail.startsWith('https://')) {
-              // Remote URL - fetch to get blob
-              thumbnailBlob = await (await fetch(data.thumbnail)).blob();
-            } else {
-              // Unknown format - skip upload
-              console.warn('[UploadWizard] Unknown thumbnail format, skipping upload');
-              thumbnailBlob = new Blob(); // Empty blob to skip upload
-            }
-
-            if (thumbnailBlob.size > 0) {
-              const thumbnailResponse = await fetch(thumbnailUploadUrl, {
-                method: 'PUT',
-                body: thumbnailBlob,
-                headers: {
-                  'Content-Type': 'image/jpeg',
-                  'x-upsert': 'true',
-                },
-              });
-
-              if (thumbnailResponse.ok) {
-                console.log('[UploadWizard] Thumbnail uploaded successfully');
-              }
-            }
-          } catch (err) {
-            console.warn('[UploadWizard] Thumbnail upload failed (non-fatal):', err);
-          }
-        }
-
-        // Proceed to metadata collection step
-        setCurrentStep('metadata');
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error('[UploadWizard] Upload initialization failed:', err);
-        setError(message);
-
-        // Cleanup: Delete orphan recording if it was created
-        if (uploadState.recordingId) {
-          console.log('[UploadWizard] Cleaning up orphan recording:', uploadState.recordingId);
-          try {
-            await fetch(`/api/recordings/${uploadState.recordingId}`, {
-              method: 'DELETE',
-            });
-            console.log('[UploadWizard] Orphan recording cleaned up successfully');
-          } catch (cleanupErr) {
-            console.error('[UploadWizard] Failed to cleanup orphan recording:', cleanupErr);
-          }
-        }
-      } finally {
-        setIsUploading(false);
+      if (!initResponse.ok) {
+        const errorData = await initResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to initialize upload');
       }
-    },
-    [uploadState.recordingId]
-  );
+
+      const initData = await initResponse.json();
+      const {
+        recordingId,
+        uploadUrl,
+        uploadPath,
+        thumbnailUploadUrl,
+        thumbnailPath,
+      } = initData.data;
+      initializedRecordingId = recordingId;
+
+      console.log('[UploadWizard] Upload initialized', { recordingId });
+
+      updateWizardState({
+        uploadState: {
+          recordingId,
+          uploadUrl,
+          uploadPath,
+          thumbnailUploadUrl,
+          thumbnailPath,
+        },
+      });
+
+      // Step 2: Upload file to Supabase Storage
+      console.log('[UploadWizard] Uploading file to storage...');
+
+      const fileUploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: data.file,
+        headers: {
+          'Content-Type': data.file.type,
+          'x-upsert': 'true',
+        },
+      });
+
+      if (!fileUploadResponse.ok) {
+        throw new Error('Failed to upload file to storage');
+      }
+
+      console.log('[UploadWizard] File uploaded successfully');
+
+      // Step 3: Upload thumbnail if available
+      if (data.thumbnail && thumbnailUploadUrl) {
+        console.log('[UploadWizard] Uploading auto-generated thumbnail...');
+
+        try {
+          // Detect thumbnail format and handle appropriately
+          let thumbnailBlob: Blob;
+
+          if (data.thumbnail.startsWith('data:')) {
+            // Data URL - fetch to convert to blob
+            thumbnailBlob = await (await fetch(data.thumbnail)).blob();
+          } else if (data.thumbnail.startsWith('blob:')) {
+            // Blob URL - fetch to get blob
+            thumbnailBlob = await (await fetch(data.thumbnail)).blob();
+          } else if (
+            data.thumbnail.startsWith('http://') ||
+            data.thumbnail.startsWith('https://')
+          ) {
+            // Remote URL - fetch to get blob
+            thumbnailBlob = await (await fetch(data.thumbnail)).blob();
+          } else {
+            // Unknown format - skip upload
+            console.warn(
+              '[UploadWizard] Unknown thumbnail format, skipping upload',
+            );
+            thumbnailBlob = new Blob(); // Empty blob to skip upload
+          }
+
+          if (thumbnailBlob.size > 0) {
+            const thumbnailResponse = await fetch(thumbnailUploadUrl, {
+              method: 'PUT',
+              body: thumbnailBlob,
+              headers: {
+                'Content-Type': 'image/jpeg',
+                'x-upsert': 'true',
+              },
+            });
+
+            if (thumbnailResponse.ok) {
+              console.log('[UploadWizard] Thumbnail uploaded successfully');
+            }
+          }
+        } catch (err) {
+          console.warn(
+            '[UploadWizard] Thumbnail upload failed (non-fatal):',
+            err,
+          );
+        }
+      }
+
+      // Proceed to metadata collection step
+      updateWizardState({ currentStep: 'metadata' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[UploadWizard] Upload initialization failed:', err);
+      updateWizardState({ error: message });
+
+      // Cleanup: Delete orphan recording if it was created
+      if (initializedRecordingId) {
+        console.log(
+          '[UploadWizard] Cleaning up orphan recording:',
+          initializedRecordingId,
+        );
+        try {
+          await fetch(`/api/recordings/${initializedRecordingId}`, {
+            method: 'DELETE',
+          });
+          console.log(
+            '[UploadWizard] Orphan recording cleaned up successfully',
+          );
+        } catch (cleanupErr) {
+          console.error(
+            '[UploadWizard] Failed to cleanup orphan recording:',
+            cleanupErr,
+          );
+        }
+      }
+    } finally {
+      updateWizardState({ isUploading: false });
+    }
+  }, []);
 
   /**
    * Step 2 Complete: Save metadata and start processing
@@ -341,9 +420,11 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
         hasCustomThumbnail: !!data.thumbnailFile,
       });
 
-      setMetadataData(data);
-      setError(null);
-      setIsUploading(true);
+      metadataDataRef.current = data;
+      updateWizardState({
+        error: null,
+        isUploading: true,
+      });
 
       try {
         const { recordingId, uploadPath } = uploadState;
@@ -366,9 +447,11 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
 
           try {
             // Get fresh presigned URL (original URL may have expired)
-            console.log('[UploadWizard] Requesting fresh thumbnail upload URL...');
+            console.log(
+              '[UploadWizard] Requesting fresh thumbnail upload URL...',
+            );
             const urlResponse = await fetch(
-              `/api/recordings/${recordingId}/thumbnail/upload-url?contentType=${encodeURIComponent(data.thumbnailFile.type)}`
+              `/api/recordings/${recordingId}/thumbnail/upload-url?contentType=${encodeURIComponent(data.thumbnailFile.type)}`,
             );
 
             if (!urlResponse.ok) {
@@ -386,17 +469,25 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
               typeof urlData.data.uploadUrl !== 'string' ||
               !urlData.data.uploadUrl
             ) {
-              console.error('[UploadWizard] Invalid thumbnail upload URL response:', urlData);
-              throw new Error('Invalid response from thumbnail upload URL endpoint');
+              console.error(
+                '[UploadWizard] Invalid thumbnail upload URL response:',
+                urlData,
+              );
+              throw new Error(
+                'Invalid response from thumbnail upload URL endpoint',
+              );
             }
 
             const freshUploadUrl = urlData.data.uploadUrl;
             thumbnailPath = urlData.data.path; // Capture the storage path
 
-            console.log('[UploadWizard] Got fresh upload URL, uploading thumbnail...', {
-              thumbnailPath,
-              uploadUrlPreview: freshUploadUrl?.substring(0, 100) + '...',
-            });
+            console.log(
+              '[UploadWizard] Got fresh upload URL, uploading thumbnail...',
+              {
+                thumbnailPath,
+                uploadUrlPreview: freshUploadUrl?.substring(0, 100) + '...',
+              },
+            );
 
             // Upload thumbnail with fresh URL
             console.log('[UploadWizard] Starting PUT request to storage...');
@@ -417,9 +508,14 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
 
             if (thumbnailResponse.ok) {
               thumbnailUploaded = true;
-              console.log('[UploadWizard] Custom thumbnail uploaded successfully', { thumbnailPath });
+              console.log(
+                '[UploadWizard] Custom thumbnail uploaded successfully',
+                { thumbnailPath },
+              );
             } else {
-              const errorText = await thumbnailResponse.text().catch(() => 'Unable to read error');
+              const errorText = await thumbnailResponse
+                .text()
+                .catch(() => 'Unable to read error');
               console.warn('[UploadWizard] Thumbnail upload failed:', {
                 status: thumbnailResponse.status,
                 statusText: thumbnailResponse.statusText,
@@ -428,18 +524,24 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
               thumbnailPath = undefined; // Clear path on failure
             }
           } catch (err) {
-            console.warn('[UploadWizard] Custom thumbnail upload failed (non-fatal):', err);
+            console.warn(
+              '[UploadWizard] Custom thumbnail upload failed (non-fatal):',
+              err,
+            );
             thumbnailPath = undefined; // Clear path on failure
           }
         }
 
         // Save metadata and trigger processing
-        console.log('[UploadWizard] Saving metadata and starting processing...', {
-          analysisType: data.analysisType,
-          skipAnalysis: data.skipAnalysis,
-          thumbnailUploaded,
-          thumbnailPath,
-        });
+        console.log(
+          '[UploadWizard] Saving metadata and starting processing...',
+          {
+            analysisType: data.analysisType,
+            skipAnalysis: data.skipAnalysis,
+            thumbnailUploaded,
+            thumbnailPath,
+          },
+        );
 
         const metadataResponse = await fetch(
           `/api/recordings/${recordingId}/metadata`,
@@ -457,7 +559,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
               analysisType: data.analysisType,
               skipAnalysis: data.skipAnalysis,
             }),
-          }
+          },
         );
 
         if (!metadataResponse.ok) {
@@ -468,21 +570,28 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
         const metadataResult = await metadataResponse.json();
         const { streamUrl } = metadataResult.data;
 
-        console.log('[UploadWizard] Metadata saved, processing started', { streamUrl });
+        console.log('[UploadWizard] Metadata saved, processing started', {
+          streamUrl,
+        });
 
-        setUploadState((prev) => ({ ...prev, streamUrl }));
+        updateWizardState({
+          uploadState: {
+            ...uploadState,
+            streamUrl,
+          },
+        });
 
         // Proceed to progress step
-        setCurrentStep('progress');
+        updateWizardState({ currentStep: 'progress' });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         console.error('[UploadWizard] Metadata save failed:', err);
-        setError(message);
+        updateWizardState({ error: message });
       } finally {
-        setIsUploading(false);
+        updateWizardState({ isUploading: false });
       }
     },
-    [uploadState]
+    [uploadState],
   );
 
   /**
@@ -494,15 +603,21 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
     // User is going back from Step 2 to Step 1
     // This means they want to select a different file, so we should cleanup the current orphan recording
     if (uploadState.recordingId) {
-      console.log('[UploadWizard] 🗑️ Cleaning up current recording before going back');
+      console.log(
+        '[UploadWizard] 🗑️ Cleaning up current recording before going back',
+      );
       await cleanupOrphanRecording();
     }
 
-    console.log('[UploadWizard] 📍 Returning to file upload step (preserving file data)');
-    setCurrentStep('file_upload');
-    setMetadataData(null);
+    console.log(
+      '[UploadWizard] 📍 Returning to file upload step (preserving file data)',
+    );
+    metadataDataRef.current = null;
     // Reset upload state since we're starting over
-    setUploadState({});
+    updateWizardState({
+      currentStep: 'file_upload',
+      uploadState: {},
+    });
     // NOTE: We keep fileData so the uploaded file is still visible
   }, [uploadState.recordingId, cleanupOrphanRecording]);
 
@@ -530,20 +645,22 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
       {
         label: 'Upload',
         description: 'Select your file',
-        loadingText: 'Uploading file...'
+        loadingText: 'Uploading file...',
       },
       {
         label: 'Details',
         description: 'Add information',
-        loadingText: 'Saving metadata...'
+        loadingText: 'Saving metadata...',
       },
       {
         label: 'Processing',
         description: 'Finalizing upload',
-        loadingText: 'Processing...'
+        loadingText: 'Processing...',
       },
     ];
-    const stepIndex = ['file_upload', 'metadata', 'progress'].indexOf(currentStep);
+    const stepIndex = ['file_upload', 'metadata', 'progress'].indexOf(
+      currentStep,
+    );
 
     return (
       <div className="w-full max-w-2xl mx-auto mb-8 px-4">
@@ -551,7 +668,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
         {isUploading && (
           <div className="mb-4 text-center animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
-              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <div className="size-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               <span className="text-sm font-medium text-primary">
                 {steps[stepIndex]?.loadingText || 'Processing...'}
               </span>
@@ -573,23 +690,26 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                   {/* Step Circle */}
                   <div
                     className={cn(
-                      'relative flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all duration-200',
+                      'relative flex items-center justify-center size-8 rounded-full border-2 transition-all duration-200',
                       isCompleted && 'bg-muted border-muted',
-                      isActive && !isUploading && 'bg-foreground border-foreground ring-2 ring-foreground/20',
-                      isActiveAndLoading && 'bg-primary border-primary ring-2 ring-primary/20',
-                      isPending && 'bg-transparent border-border'
+                      isActive &&
+                        !isUploading &&
+                        'bg-foreground border-foreground ring-2 ring-foreground/20',
+                      isActiveAndLoading &&
+                        'bg-primary border-primary ring-2 ring-primary/20',
+                      isPending && 'bg-transparent border-border',
                     )}
                   >
                     {isCompleted ? (
-                      <Check className="w-4 h-4 text-background" />
+                      <Check className="size-4 text-background" />
                     ) : isActiveAndLoading ? (
-                      <div className="w-4 h-4 border-2 border-background border-t-transparent rounded-full animate-spin" />
+                      <div className="size-4 border-2 border-background border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <span
                         className={cn(
                           'text-sm font-medium',
                           isActive && 'text-background',
-                          isPending && 'text-muted-foreground'
+                          isPending && 'text-muted-foreground',
                         )}
                       >
                         {index + 1}
@@ -609,7 +729,7 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                         isCompleted && 'text-foreground',
                         isActive && 'text-foreground',
                         isActiveAndLoading && 'text-primary',
-                        isPending && 'text-muted-foreground'
+                        isPending && 'text-muted-foreground',
                       )}
                     >
                       {step.label}
@@ -629,13 +749,13 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
                     <div
                       className={cn(
                         'absolute top-0 left-0 h-0.5 transition-all duration-500',
-                        index < stepIndex ? 'w-full bg-muted' : 'w-0'
+                        index < stepIndex ? 'w-full bg-muted' : 'w-0',
                       )}
                     />
                     {/* Animated fill for current step when uploading */}
                     {isActiveAndLoading && index === stepIndex && (
                       <div className="absolute top-0 left-0 h-0.5 w-full overflow-hidden">
-                        <div className="h-full w-full bg-primary/50 animate-pulse origin-left" />
+                        <div className="size-full bg-primary/50 animate-pulse origin-left" />
                       </div>
                     )}
                   </div>
@@ -689,15 +809,25 @@ export default function UploadWizard({ open, onClose }: UploadWizardProps) {
           )}
 
           {/* Step 3: Upload Progress */}
-          {currentStep === 'progress' && uploadState.recordingId && uploadState.streamUrl && (
-            <UploadProgressStep
-              recordingId={uploadState.recordingId}
-              streamUrl={uploadState.streamUrl}
-              onRetry={handleProgressRetry}
-              onCancel={handleProgressCancel}
-              onComplete={() => setUploadState((prev) => ({ ...prev, uploadCompleted: true }))}
-            />
-          )}
+          {currentStep === 'progress' &&
+            uploadState.recordingId &&
+            uploadState.streamUrl && (
+              <UploadProgressStep
+                recordingId={uploadState.recordingId}
+                streamUrl={uploadState.streamUrl}
+                onRetry={handleProgressRetry}
+                onCancel={handleProgressCancel}
+                onComplete={() =>
+                  updateWizardState((state) => ({
+                    ...state,
+                    uploadState: {
+                      ...state.uploadState,
+                      uploadCompleted: true,
+                    },
+                  }))
+                }
+              />
+            )}
 
           {/* Global Error Display */}
           {error && currentStep !== 'progress' && (

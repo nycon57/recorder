@@ -71,9 +71,10 @@ export class CitationTracker {
     const subQueryIds = this.citationMap.get(chunkId);
     if (!subQueryIds) return [];
 
-    return Array.from(subQueryIds)
-      .map((id) => this.subQueryMap.get(id))
-      .filter((sq): sq is SubQuery => sq !== undefined);
+    return Array.from(subQueryIds).flatMap((__item, __index, __array) => {
+      const __mapped = this.subQueryMap.get(__item);
+      return __mapped !== undefined ? [__mapped] : [];
+    });
   }
 
   /**
@@ -113,9 +114,12 @@ export class CitationTracker {
       const chunk = this.chunkMap.get(chunkId);
       if (!chunk) continue;
 
-      const subQueries = Array.from(subQueryIds)
-        .map((id) => this.subQueryMap.get(id))
-        .filter((sq): sq is SubQuery => sq !== undefined);
+      const subQueries = Array.from(subQueryIds).flatMap(
+        (__item, __index, __array) => {
+          const __mapped = this.subQueryMap.get(__item);
+          return __mapped !== undefined ? [__mapped] : [];
+        },
+      );
 
       citations.push({
         chunkId,
@@ -141,7 +145,7 @@ export class CitationTracker {
     maxCitationsPerChunk: number;
   } {
     const citationCounts = Array.from(this.citationMap.values()).map(
-      (set) => set.size
+      (set) => set.size,
     );
 
     return {
@@ -165,7 +169,7 @@ export class CitationTracker {
     lines.push(`Total Chunks: ${stats.totalChunks}`);
     lines.push(`Total Sub-Queries: ${stats.totalSubQueries}`);
     lines.push(
-      `Average Citations per Chunk: ${stats.avgCitationsPerChunk.toFixed(2)}`
+      `Average Citations per Chunk: ${stats.avgCitationsPerChunk.toFixed(2)}`,
     );
     lines.push('');
 
@@ -186,9 +190,7 @@ export class CitationTracker {
 
       for (const citation of citations.slice(0, 3)) {
         lines.push(`  - ${citation.chunkText.slice(0, 60)}...`);
-        lines.push(
-          `    Retrieved by: ${citation.subQueryTexts.join(', ')}`
-        );
+        lines.push(`    Retrieved by: ${citation.subQueryTexts.join(', ')}`);
       }
 
       if (citations.length > 3) {

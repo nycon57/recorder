@@ -2,6 +2,8 @@ import { beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals
 
 const fromMock = jest.fn();
 const requireAdminMock = jest.fn();
+const requireAuthMock = jest.fn();
+const requireAdminForUserMock = jest.fn();
 const generateOrgWikiPageEmbeddingBestEffortMock = jest.fn();
 const revalidatePathMock = jest.fn();
 const updateTagMock = jest.fn();
@@ -28,6 +30,8 @@ jest.mock('@/lib/supabase/admin', () => ({
 
 jest.mock('@/lib/utils/api', () => ({
   requireAdmin: requireAdminMock,
+  requireAuth: requireAuthMock,
+  requireAdminForUser: requireAdminForUserMock,
 }));
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -204,6 +208,8 @@ describe('wiki review actions embedding freshness', () => {
     jest.clearAllMocks();
     fromMock.mockReset();
     requireAdminMock.mockResolvedValue({ userId: 'user-1', orgId: 'org-1' } as never);
+    requireAuthMock.mockResolvedValue({ userId: 'user-1', orgId: 'org-1' } as never);
+    requireAdminForUserMock.mockResolvedValue({ userId: 'user-1', orgId: 'org-1' } as never);
     generateOrgWikiPageEmbeddingBestEffortMock.mockResolvedValue(true as never);
     recordKnowledgeTelemetryEventMock.mockResolvedValue(undefined as never);
     reviewApprovalMock.mockResolvedValue({ id: 'approval-1', status: 'approved' } as never);
@@ -280,6 +286,8 @@ describe('wiki routing review actions', () => {
     jest.clearAllMocks();
     fromMock.mockReset();
     requireAdminMock.mockResolvedValue({ userId: 'user-1', orgId: 'org-1' } as never);
+    requireAuthMock.mockResolvedValue({ userId: 'user-1', orgId: 'org-1' } as never);
+    requireAdminForUserMock.mockResolvedValue({ userId: 'user-1', orgId: 'org-1' } as never);
     reviewApprovalMock.mockResolvedValue({ id: 'approval-1', status: 'approved' } as never);
     determineRoutingReviewDecisionActionMock.mockReturnValue('approve');
     enqueueRoutingCompileWikiJobMock.mockResolvedValue(undefined as never);

@@ -29,9 +29,10 @@ type OnboardingPlanUpdateRow = Pick<
  * Body: { contentId: string, completed?: boolean }
  */
 export const PATCH = apiHandler(async (request: NextRequest) => {
-  const { userId, orgId } = await requireOrg();
-
-  const body = await request.json();
+  const [{ userId, orgId }, body] = await Promise.all([
+    requireOrg(),
+    request.json(),
+  ]);
   const { contentId, completed = true } = body;
 
   if (!contentId || typeof contentId !== 'string') {
@@ -40,7 +41,9 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
   const { data: plan, error: fetchError } = await supabaseAdmin
     .from('agent_onboarding_plans')
-    .select('id, learning_path, completed_items, total_items, plan_status, engagement_data, user_role')
+    .select(
+      'id, learning_path, completed_items, total_items, plan_status, engagement_data, user_role',
+    )
     .eq('org_id', orgId)
     .eq('user_id', userId)
     .eq('plan_status', 'active')
@@ -57,8 +60,11 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
     return errors.notFound('Active onboarding plan');
   }
 
-  const learningPath = (plan.learning_path ?? []) as unknown as LearningPathItem[];
-  const itemIndex = learningPath.findIndex((item) => item.contentId === contentId);
+  const learningPath = (plan.learning_path ??
+    []) as unknown as LearningPathItem[];
+  const itemIndex = learningPath.findIndex(
+    (item) => item.contentId === contentId,
+  );
 
   if (itemIndex === -1) {
     return errors.notFound('Learning path item');
@@ -72,7 +78,8 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
 
   const completedItems = learningPath.filter((item) => item.completed).length;
   const totalItems = plan.total_items ?? learningPath.length;
-  const newStatus = totalItems > 0 && completedItems >= totalItems ? 'completed' : 'active';
+  const newStatus =
+    totalItems > 0 && completedItems >= totalItems ? 'completed' : 'active';
 
   const { data: updated, error: updateError } = await supabaseAdmin
     .from('agent_onboarding_plans')
@@ -93,7 +100,10 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   const updatedPlan = (updated ?? null) as OnboardingPlanUpdateRow | null;
 
   // Trigger engagement analysis when the DB confirms status transitioned to completed
-  if (updatedPlan?.plan_status === 'completed' && plan.plan_status !== 'completed') {
+  if (
+    updatedPlan?.plan_status === 'completed' &&
+    plan.plan_status !== 'completed'
+  ) {
     const engagement = (plan.engagement_data ?? {}) as Partial<EngagementData>;
     analyzeOnboardingEngagement({
       orgId,

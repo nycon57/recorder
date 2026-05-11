@@ -9,7 +9,7 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger({ service: 'streaming-processor' });
 
-export type StreamEventType =
+type StreamEventType =
   | 'progress'
   | 'log'
   | 'transcript_chunk'
@@ -18,9 +18,9 @@ export type StreamEventType =
   | 'complete'
   | 'heartbeat';
 
-export type ProcessingStep = 'transcribe' | 'document' | 'embeddings' | 'all';
+type ProcessingStep = 'transcribe' | 'document' | 'embeddings' | 'all';
 
-export interface StreamEvent {
+interface StreamEvent {
   type: StreamEventType;
   step?: ProcessingStep;
   progress?: number; // 0-100
@@ -29,7 +29,7 @@ export interface StreamEvent {
   timestamp: string;
 }
 
-export interface StreamConnection {
+interface StreamConnection {
   recordingId: string;
   controller: ReadableStreamDefaultController;
   connected: boolean;

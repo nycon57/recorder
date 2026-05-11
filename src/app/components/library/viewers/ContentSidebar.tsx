@@ -13,11 +13,21 @@ import { toast } from 'sonner';
 
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Separator } from '@/app/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { formatFileSize } from '@/lib/types/content';
-import type { ContentType, FileType, RecordingStatus, Tag } from '@/lib/types/database';
+import type {
+  ContentType,
+  FileType,
+  RecordingStatus,
+  Tag,
+} from '@/lib/types/database';
 import {
   getKnowledgeStatusMeta,
   type KnowledgeStatus,
@@ -37,7 +47,13 @@ interface Document {
 interface ContentConcept {
   id: string;
   name: string;
-  conceptType: 'tool' | 'process' | 'person' | 'organization' | 'technical_term' | 'general';
+  conceptType:
+    | 'tool'
+    | 'process'
+    | 'person'
+    | 'organization'
+    | 'technical_term'
+    | 'general';
   mentionCount?: number;
 }
 
@@ -77,6 +93,9 @@ interface ContentSidebarProps {
   onPublish?: () => void;
 }
 
+const EMPTY_TAGS: Tag[] = [];
+const EMPTY_CONCEPTS: ContentConcept[] = [];
+
 export default function ContentSidebar({
   contentType,
   fileType,
@@ -88,8 +107,8 @@ export default function ContentSidebar({
   completedAt,
   originalFilename,
   deletedAt,
-  tags = [],
-  concepts = [],
+  tags = EMPTY_TAGS,
+  concepts = EMPTY_CONCEPTS,
   onConceptClick,
   textContent,
   onEdit,
@@ -173,10 +192,15 @@ export default function ContentSidebar({
           {/* Knowledge Status */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground">Knowledge status</span>
+              <span className="text-sm text-muted-foreground">
+                Knowledge status
+              </span>
               <Badge
                 variant={knowledgeStatusMeta.badgeVariant}
-                className={cn('shrink-0 border', knowledgeStatusMeta.badgeClassName)}
+                className={cn(
+                  'shrink-0 border',
+                  knowledgeStatusMeta.badgeClassName,
+                )}
               >
                 {knowledgeStatusMeta.label}
               </Badge>
@@ -202,7 +226,12 @@ export default function ContentSidebar({
               <span className="text-sm text-muted-foreground">Tags</span>
               <div className="flex flex-wrap gap-1.5">
                 {tags.map((tag) => (
-                  <TagBadge key={tag.id} name={tag.name} color={tag.color} size="sm" />
+                  <TagBadge
+                    key={tag.id}
+                    name={tag.name}
+                    color={tag.color}
+                    size="sm"
+                  />
                 ))}
               </div>
             </div>
@@ -212,7 +241,9 @@ export default function ContentSidebar({
           {duration != null && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Duration</span>
-              <span className="text-sm font-medium">{formatDuration(duration)}</span>
+              <span className="text-sm font-medium">
+                {formatDuration(duration)}
+              </span>
             </div>
           )}
 
@@ -220,14 +251,18 @@ export default function ContentSidebar({
           {fileSize != null && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">File Size</span>
-              <span className="text-sm font-medium">{formatFileSize(fileSize)}</span>
+              <span className="text-sm font-medium">
+                {formatFileSize(fileSize)}
+              </span>
             </div>
           )}
 
           {/* Original Filename */}
           {originalFilename && (
             <div className="space-y-1">
-              <span className="text-sm text-muted-foreground">Original File</span>
+              <span className="text-sm text-muted-foreground">
+                Original File
+              </span>
               <p className="text-xs font-mono text-foreground/80 break-all">
                 {originalFilename}
               </p>
@@ -239,14 +274,18 @@ export default function ContentSidebar({
           {/* Created Date */}
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Created</span>
-            <span className="text-xs text-foreground/70">{formatDate(createdAt)}</span>
+            <span className="text-xs text-foreground/70">
+              {formatDate(createdAt)}
+            </span>
           </div>
 
           {/* Completed Date */}
           {completedAt && (
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Completed</span>
-              <span className="text-xs text-foreground/70">{formatDate(completedAt)}</span>
+              <span className="text-xs text-foreground/70">
+                {formatDate(completedAt)}
+              </span>
             </div>
           )}
         </CardContent>
@@ -277,7 +316,7 @@ export default function ContentSidebar({
               className="w-full justify-start"
               onClick={onDownload}
             >
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="size-4 mr-2" />
               Download
             </Button>
           )}
@@ -288,7 +327,7 @@ export default function ContentSidebar({
               className="w-full justify-start"
               onClick={handleCopy}
             >
-              <Copy className="h-4 w-4 mr-2" />
+              <Copy className="size-4 mr-2" />
               Copy
             </Button>
           )}
@@ -299,7 +338,7 @@ export default function ContentSidebar({
               className="w-full justify-start"
               onClick={onEdit}
             >
-              <Edit className="h-4 w-4 mr-2" />
+              <Edit className="size-4 mr-2" />
               Edit Details
             </Button>
           )}
@@ -310,7 +349,7 @@ export default function ContentSidebar({
               className="w-full justify-start"
               onClick={onShare}
             >
-              <Share2 className="h-4 w-4 mr-2" />
+              <Share2 className="size-4 mr-2" />
               Share
             </Button>
           )}
@@ -321,7 +360,7 @@ export default function ContentSidebar({
               className="w-full justify-start"
               onClick={onPublish}
             >
-              <FileUp className="h-4 w-4 mr-2" />
+              <FileUp className="size-4 mr-2" />
               Publish
             </Button>
           )}
@@ -332,7 +371,7 @@ export default function ContentSidebar({
               className="w-full justify-start"
               onClick={onReprocess}
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw className="size-4 mr-2" />
               Reprocess
             </Button>
           )}
@@ -343,7 +382,7 @@ export default function ContentSidebar({
               className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
               onClick={onDelete}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              <Trash2 className="size-4 mr-2" />
               {isTrashed ? 'Delete Forever' : 'Move to Trash'}
             </Button>
           )}

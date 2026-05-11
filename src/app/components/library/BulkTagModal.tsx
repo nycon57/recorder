@@ -1,6 +1,7 @@
-"use client"
+'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Tag, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -62,37 +63,32 @@ export function BulkTagModal({
   selectedIds,
 }: BulkTagModalProps) {
   const [selectedTags, setSelectedTags] = useState<TagData[]>([]);
-  const [availableTags, setAvailableTags] = useState<TagData[]>([]);
   const [isAssigning, setIsAssigning] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const queryClient = useQueryClient();
 
-  // Load available tags when modal opens
-  useEffect(() => {
-    if (open) {
-      loadAvailableTags();
-    } else {
-      // Reset state when modal closes
-      setSelectedTags([]);
-    }
-  }, [open]);
-
-  const loadAvailableTags = async () => {
-    try {
-      setIsLoading(true);
+  const { data: availableTags = [], isLoading: isTagListLoading } = useQuery({
+    queryKey: ['tags', 'bulk-tag-modal'],
+    enabled: open,
+    queryFn: async () => {
       const response = await fetch('/api/tags?limit=100');
       if (!response.ok) throw new Error('Failed to load tags');
 
       const data = (await response.json()) as TagResponse;
-      setAvailableTags(data.data?.tags || []);
-    } catch (error) {
-      console.error('Error loading tags:', error);
-      toast.error('Failed to load tags');
-    } finally {
-      setIsLoading(false);
+      return data.data?.tags || [];
+    },
+  });
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setSelectedTags([]);
     }
+    onOpenChange(nextOpen);
   };
 
-  const handleCreateTag = async (name: string, color: string): Promise<TagData | null> => {
+  const handleCreateTag = async (
+    name: string,
+    color: string,
+  ): Promise<TagData | null> => {
     try {
       const response = await fetch('/api/tags', {
         method: 'POST',
@@ -109,11 +105,16 @@ export function BulkTagModal({
       const newTag = data.data;
 
       // Add to available tags
-      setAvailableTags(prev => [...prev, newTag]);
+      queryClient.setQueryData<TagData[]>(
+        ['tags', 'bulk-tag-modal'],
+        (prev = []) => [...prev, newTag],
+      );
 
       return newTag;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create tag');
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to create tag',
+      );
       return null;
     }
   };
@@ -128,23 +129,25 @@ export function BulkTagModal({
       setIsAssigning(true);
 
       // Assign tags to each selected item
-      const tagIds = selectedTags.map(t => t.id);
-      const promises = selectedIds.map(itemId =>
+      const tagIds = selectedTags.map((t) => t.id);
+      const promises = selectedIds.map((itemId) =>
         fetch(`/api/library/${itemId}/tags`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tagIds }),
-        })
+        }),
       );
 
       const results = await Promise.allSettled(promises);
-      const successCount = results.filter(r => r.status === 'fulfilled').length;
-      const failCount = results.filter(r => r.status === 'rejected').length;
+      const successCount = results.filter(
+        (r) => r.status === 'fulfilled',
+      ).length;
+      const failCount = results.filter((r) => r.status === 'rejected').length;
 
       if (successCount > 0) {
         toast.success(
           `Tags assigned to ${successCount} ${successCount === 1 ? 'item' : 'items'}` +
-          (failCount > 0 ? `, ${failCount} failed` : '')
+            (failCount > 0 ? `, ${failCount} failed` : ''),
         );
       }
 
@@ -165,15 +168,16 @@ export function BulkTagModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Tag className="h-5 w-5" />
+            <Tag className="size-5" />
             Add Tags
           </DialogTitle>
           <DialogDescription>
-            Assign tags to {selectedCount} {selectedCount === 1 ? 'item' : 'items'}
+            Assign tags to {selectedCount}{' '}
+            {selectedCount === 1 ? 'item' : 'items'}
           </DialogDescription>
         </DialogHeader>
 
@@ -181,9 +185,9 @@ export function BulkTagModal({
           {/* Tag input */}
           <div className="space-y-2">
             <Label>Select or create tags</Label>
-            {isLoading ? (
+            {isTagListLoading ? (
               <div className="flex items-center justify-center h-[42px]">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
               </div>
             ) : (
               <TagInput
@@ -201,7 +205,8 @@ export function BulkTagModal({
           {/* Selected tags count */}
           {selectedTags.length > 0 && (
             <div className="text-sm text-muted-foreground">
-              {selectedTags.length} tag{selectedTags.length !== 1 ? 's' : ''} selected
+              {selectedTags.length} tag{selectedTags.length !== 1 ? 's' : ''}{' '}
+              selected
             </div>
           )}
         </div>
@@ -218,7 +223,7 @@ export function BulkTagModal({
             onClick={handleAssign}
             disabled={isAssigning || selectedTags.length === 0}
           >
-            {isAssigning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isAssigning && <Loader2 className="mr-2 size-4 animate-spin" />}
             {isAssigning ? 'Assigning...' : `Assign Tags`}
           </Button>
         </DialogFooter>

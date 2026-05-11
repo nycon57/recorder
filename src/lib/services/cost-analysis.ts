@@ -6,13 +6,18 @@
  */
 
 import { createClient } from '@/lib/supabase/admin';
-import { getStorageMetrics, getStorageTrends, type StorageMetrics } from './storage-metrics';
 import type { StorageTier, StorageProvider } from '@/lib/types/database';
+
+import {
+  getStorageMetrics,
+  getStorageTrends,
+  type StorageMetrics,
+} from './storage-metrics';
 
 /**
  * Storage cost rates (per GB per month)
  */
-export const COST_RATES = {
+const COST_RATES = {
   supabase: 0.021, // $0.021/GB/month
   r2: {
     hot: 0.015, // $0.015/GB/month
@@ -25,7 +30,7 @@ export const COST_RATES = {
 /**
  * Retrieval cost rates (per GB)
  */
-export const RETRIEVAL_RATES = {
+const RETRIEVAL_RATES = {
   supabase: 0.09, // $0.09/GB egress
   r2: {
     hot: 0, // Free
@@ -86,7 +91,7 @@ export interface CostBreakdown {
 /**
  * Cost optimization recommendation
  */
-export interface CostOptimizationRecommendation {
+interface CostOptimizationRecommendation {
   type:
     | 'tier_migration'
     | 'deduplication'
@@ -148,7 +153,9 @@ export interface WhatIfScenario {
 /**
  * Calculate detailed cost breakdown for an organization
  */
-export async function calculateCostBreakdown(orgId: string): Promise<CostBreakdown> {
+export async function calculateCostBreakdown(
+  orgId: string,
+): Promise<CostBreakdown> {
   const metrics = await getStorageMetrics(orgId);
 
   // Calculate current monthly costs
@@ -178,18 +185,26 @@ export async function calculateCostBreakdown(orgId: string): Promise<CostBreakdo
   const annualWithGrowth = currentMonthlyTotal * 12 * (1 + growthRate / 100);
 
   // Calculate potential savings from optimization
-  const optimizationRecommendations = await generateOptimizationRecommendations(metrics);
+  const optimizationRecommendations =
+    await generateOptimizationRecommendations(metrics);
   const potentialMonthlySavings = optimizationRecommendations.reduce(
     (sum, rec) => sum + rec.estimatedSavings,
-    0
+    0,
   );
-  const annualWithOptimization = (currentMonthlyTotal - potentialMonthlySavings) * 12;
+  const annualWithOptimization =
+    (currentMonthlyTotal - potentialMonthlySavings) * 12;
 
   // Cost per file/GB metrics
-  const costPerFile = metrics.totalFiles > 0 ? currentMonthlyTotal / metrics.totalFiles : 0;
-  const costPerGB = metrics.totalStorageGB > 0 ? currentMonthlyTotal / metrics.totalStorageGB : 0;
+  const costPerFile =
+    metrics.totalFiles > 0 ? currentMonthlyTotal / metrics.totalFiles : 0;
+  const costPerGB =
+    metrics.totalStorageGB > 0
+      ? currentMonthlyTotal / metrics.totalStorageGB
+      : 0;
   const effectiveRate =
-    metrics.totalStorageGB > 0 ? totalStorage / metrics.totalStorageGB : COST_RATES.supabase;
+    metrics.totalStorageGB > 0
+      ? totalStorage / metrics.totalStorageGB
+      : COST_RATES.supabase;
 
   return {
     orgId: metrics.orgId,
@@ -228,10 +243,12 @@ export async function calculateCostBreakdown(orgId: string): Promise<CostBreakdo
  */
 export async function generateCostForecast(
   orgId: string,
-  period: '30d' | '90d' | '180d' | '365d' = '90d'
+  period: '30d' | '90d' | '180d' | '365d' = '90d',
 ): Promise<CostForecast> {
-  const metrics = await getStorageMetrics(orgId);
-  const trends = await getStorageTrends(orgId, 90);
+  const [metrics, trends] = await Promise.all([
+    getStorageMetrics(orgId),
+    getStorageTrends(orgId, 90),
+  ]);
 
   const currentCost =
     calculateProviderCost(metrics, 'supabase') +
@@ -244,7 +261,14 @@ export async function generateCostForecast(
   const growthRate = calculateGrowthRate(trends);
 
   // Generate forecasts
-  const days = period === '30d' ? 30 : period === '90d' ? 90 : period === '180d' ? 180 : 365;
+  const days =
+    period === '30d'
+      ? 30
+      : period === '90d'
+        ? 90
+        : period === '180d'
+          ? 180
+          : 365;
   const forecasts = [];
 
   for (let i = 1; i <= Math.min(days / 30, 12); i++) {
@@ -259,14 +283,17 @@ export async function generateCostForecast(
     if (monthsAhead > 6) confidence = 'low';
 
     forecasts.push({
-      date: new Date(Date.now() + monthsAhead * 30 * 24 * 60 * 60 * 1000).toISOString(),
+      date: new Date(
+        Date.now() + monthsAhead * 30 * 24 * 60 * 60 * 1000,
+      ).toISOString(),
       estimatedCost,
       estimatedStorageGB,
       confidence,
     });
   }
 
-  const projectedCost = forecasts[forecasts.length - 1]?.estimatedCost || currentCost;
+  const projectedCost =
+    forecasts[forecasts.length - 1]?.estimatedCost || currentCost;
 
   return {
     orgId,
@@ -286,7 +313,7 @@ export async function generateCostForecast(
  */
 export async function runWhatIfScenario(
   orgId: string,
-  scenario: WhatIfScenario['assumptions']
+  scenario: WhatIfScenario['assumptions'],
 ): Promise<WhatIfScenario> {
   const metrics = await getStorageMetrics(orgId);
   const currentCost =
@@ -318,13 +345,17 @@ export async function runWhatIfScenario(
   if (scenario.tierDistribution) {
     const distribution = scenario.tierDistribution;
     projectedCost +=
-      (projectedStorage * (distribution.hot || 0)) / 100 * (COST_RATES.r2.hot || 0);
+      ((projectedStorage * (distribution.hot || 0)) / 100) *
+      (COST_RATES.r2.hot || 0);
     projectedCost +=
-      (projectedStorage * (distribution.warm || 0)) / 100 * (COST_RATES.r2.warm || 0);
+      ((projectedStorage * (distribution.warm || 0)) / 100) *
+      (COST_RATES.r2.warm || 0);
     projectedCost +=
-      (projectedStorage * (distribution.cold || 0)) / 100 * (COST_RATES.r2.cold || 0);
+      ((projectedStorage * (distribution.cold || 0)) / 100) *
+      (COST_RATES.r2.cold || 0);
     projectedCost +=
-      (projectedStorage * (distribution.glacier || 0)) / 100 * (COST_RATES.r2.glacier || 0);
+      ((projectedStorage * (distribution.glacier || 0)) / 100) *
+      (COST_RATES.r2.glacier || 0);
   } else {
     // Use current rate
     projectedCost = projectedStorage * (currentCost / metrics.totalStorageGB);
@@ -351,7 +382,7 @@ export async function runWhatIfScenario(
  * Generate optimization recommendations
  */
 async function generateOptimizationRecommendations(
-  metrics: StorageMetrics
+  metrics: StorageMetrics,
 ): Promise<CostOptimizationRecommendation[]> {
   const recommendations: CostOptimizationRecommendation[] = [];
 
@@ -359,7 +390,8 @@ async function generateOptimizationRecommendations(
   const hotTierPercentage =
     metrics.tierBreakdown.find((t) => t.tier === 'hot')?.percentage || 0;
   if (hotTierPercentage > 50) {
-    const hotTierGB = metrics.tierBreakdown.find((t) => t.tier === 'hot')?.storageGB || 0;
+    const hotTierGB =
+      metrics.tierBreakdown.find((t) => t.tier === 'hot')?.storageGB || 0;
     const potentialMigrationGB = hotTierGB * 0.5; // Migrate 50% to warm
     const currentCost = potentialMigrationGB * COST_RATES.r2.hot;
     const newCost = potentialMigrationGB * COST_RATES.r2.warm;
@@ -435,10 +467,12 @@ async function generateOptimizationRecommendations(
 
   // Check for provider switch opportunities
   const supabasePercentage =
-    metrics.providerBreakdown.find((p) => p.provider === 'supabase')?.percentage || 0;
+    metrics.providerBreakdown.find((p) => p.provider === 'supabase')
+      ?.percentage || 0;
   if (supabasePercentage > 50) {
     const supabaseGB =
-      metrics.providerBreakdown.find((p) => p.provider === 'supabase')?.storageGB || 0;
+      metrics.providerBreakdown.find((p) => p.provider === 'supabase')
+        ?.storageGB || 0;
     const currentCost = supabaseGB * COST_RATES.supabase;
     const r2Cost = supabaseGB * COST_RATES.r2.warm;
     const savings = currentCost - r2Cost;
@@ -468,14 +502,21 @@ async function generateOptimizationRecommendations(
   }
 
   // Sort by estimated annual savings (descending)
-  return recommendations.sort((a, b) => b.estimatedAnnualSavings - a.estimatedAnnualSavings);
+  return recommendations.sort(
+    (a, b) => b.estimatedAnnualSavings - a.estimatedAnnualSavings,
+  );
 }
 
 /**
  * Helper: Calculate provider-specific costs
  */
-function calculateProviderCost(metrics: StorageMetrics, provider: StorageProvider): number {
-  const providerData = metrics.providerBreakdown.find((p) => p.provider === provider);
+function calculateProviderCost(
+  metrics: StorageMetrics,
+  provider: StorageProvider,
+): number {
+  const providerData = metrics.providerBreakdown.find(
+    (p) => p.provider === provider,
+  );
   if (!providerData) return 0;
 
   if (provider === 'supabase') {
@@ -491,7 +532,7 @@ function calculateProviderCost(metrics: StorageMetrics, provider: StorageProvide
 function calculateTierCost(
   metrics: StorageMetrics,
   provider: StorageProvider,
-  tier: StorageTier
+  tier: StorageTier,
 ): number {
   const tierData = metrics.tierBreakdown.find((t) => t.tier === tier);
   if (!tierData) return 0;
@@ -507,7 +548,7 @@ function calculateTierCost(
  * Helper: Calculate growth rate from trends
  */
 function calculateGrowthRate(
-  trends: { date: string; totalStorageGB: number; netGrowthGB: number }[]
+  trends: { date: string; totalStorageGB: number; netGrowthGB: number }[],
 ): number {
   if (trends.length < 2) return 0;
 
@@ -518,14 +559,17 @@ function calculateGrowthRate(
     return ((t.totalStorageGB - previous) / previous) * 100;
   });
 
-  const avgGrowth = growthRates.reduce((sum, rate) => sum + rate, 0) / growthRates.length;
+  const avgGrowth =
+    growthRates.reduce((sum, rate) => sum + rate, 0) / growthRates.length;
   return avgGrowth;
 }
 
 /**
  * Helper: Generate scenario description
  */
-function generateScenarioDescription(scenario: WhatIfScenario['assumptions']): string {
+function generateScenarioDescription(
+  scenario: WhatIfScenario['assumptions'],
+): string {
   const parts: string[] = [];
 
   if (scenario.monthlyGrowthRate) {
@@ -563,24 +607,25 @@ export async function generateComparisonReport(orgId: string): Promise<{
     timeframe: string;
   }[];
 }> {
-  const current = await calculateCostBreakdown(orgId);
-
-  // Calculate optimized scenario
-  const optimized = await runWhatIfScenario(orgId, {
-    deduplicationRate: 30,
-    compressionRatio: 25,
-    tierDistribution: {
-      hot: 20,
-      warm: 50,
-      cold: 25,
-      glacier: 5,
-    },
-  });
+  const [current, optimized] = await Promise.all([
+    calculateCostBreakdown(orgId),
+    runWhatIfScenario(orgId, {
+      deduplicationRate: 30,
+      compressionRatio: 25,
+      tierDistribution: {
+        hot: 20,
+        warm: 50,
+        cold: 25,
+        glacier: 5,
+      },
+    }),
+  ]);
 
   // Break down savings by optimization type
   const tierMigrationSavings =
-    current.optimization.recommendations.find((r) => r.type === 'tier_migration')
-      ?.estimatedSavings || 0;
+    current.optimization.recommendations.find(
+      (r) => r.type === 'tier_migration',
+    )?.estimatedSavings || 0;
   const deduplicationSavings =
     current.optimization.recommendations.find((r) => r.type === 'deduplication')
       ?.estimatedSavings || 0;

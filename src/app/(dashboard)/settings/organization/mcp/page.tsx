@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Server,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
 
 import {
   Table,
@@ -36,6 +35,7 @@ import { Label } from '@/app/components/ui/label';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { useToast } from '@/app/components/ui/use-toast';
 import { ConfirmationDialog } from '@/app/components/ui/confirmation-dialog';
+import { formatStableDateTime } from '@/lib/utils/formatting';
 
 interface McpKey {
   id: string;
@@ -50,11 +50,37 @@ interface McpKey {
 }
 
 export default function McpSettingsPage() {
-  const [isGenerateOpen, setIsGenerateOpen] = useState(false);
-  const [keyToRevoke, setKeyToRevoke] = useState<string | null>(null);
-  const [newKeyName, setNewKeyName] = useState('');
-  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  return useMcpSettingsPageImplementation();
+}
+
+function useMcpSettingsPageImplementation() {
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        isGenerateOpen: boolean;
+        keyToRevoke: string | null;
+        newKeyName: string;
+        generatedKey: string | null;
+        copied: boolean;
+      },
+      patch: Partial<{
+        isGenerateOpen: boolean;
+        keyToRevoke: string | null;
+        newKeyName: string;
+        generatedKey: string | null;
+        copied: boolean;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      isGenerateOpen: false,
+      keyToRevoke: null,
+      newKeyName: '',
+      generatedKey: null,
+      copied: false,
+    },
+  );
+  const { isGenerateOpen, keyToRevoke, newKeyName, generatedKey, copied } =
+    state;
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -85,7 +111,7 @@ export default function McpSettingsPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      setGeneratedKey(data.data.key);
+      dispatch({ generatedKey: data.data.key });
       queryClient.invalidateQueries({ queryKey: ['mcp-keys'] });
     },
     onError: () => {
@@ -129,8 +155,8 @@ export default function McpSettingsPage() {
     if (!generatedKey) return;
     try {
       await navigator.clipboard.writeText(generatedKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      dispatch({ copied: true });
+      setTimeout(() => dispatch({ copied: false }), 2000);
       toast({ title: 'Copied', description: 'Key copied to clipboard.' });
     } catch {
       toast({
@@ -142,11 +168,9 @@ export default function McpSettingsPage() {
   };
 
   const handleCloseGenerate = () => {
-    setIsGenerateOpen(false);
+    dispatch({ isGenerateOpen: false });
     setTimeout(() => {
-      setNewKeyName('');
-      setGeneratedKey(null);
-      setCopied(false);
+      dispatch({ newKeyName: '', generatedKey: null, copied: false });
     }, 200);
   };
 
@@ -156,8 +180,8 @@ export default function McpSettingsPage() {
         className="trbd-stack flex items-center justify-center py-12"
         role="status"
       >
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <span className="sr-only">Loading MCP keys...</span>
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        <span className="sr-only">Loading MCP keys…</span>
       </div>
     );
   }
@@ -165,13 +189,13 @@ export default function McpSettingsPage() {
   if (error) {
     return (
       <div className="trbd-stack text-center py-12" role="alert">
-        <Server className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <Server className="size-12 text-muted-foreground mx-auto mb-4" />
         <h3 className="text-lg font-semibold mb-2">Failed to load MCP keys</h3>
         <p className="text-muted-foreground mb-4">
           {error instanceof Error ? error.message : 'An error occurred'}
         </p>
         <Button onClick={() => refetch()}>
-          <RefreshCw className="h-4 w-4 mr-2" />
+          <RefreshCw className="size-4 mr-2" />
           Retry
         </Button>
       </div>
@@ -191,7 +215,7 @@ export default function McpSettingsPage() {
           </p>
         </div>
         <div className="trbd-icon-chip" aria-hidden="true">
-          <Server className="h-5 w-5" />
+          <Server className="size-5" />
         </div>
       </div>
 
@@ -237,21 +261,24 @@ export default function McpSettingsPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium">API Keys</h3>
-          <Button size="sm" onClick={() => setIsGenerateOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+          <Button size="sm" onClick={() => dispatch({ isGenerateOpen: true })}>
+            <Plus className="size-4 mr-2" />
             Generate New Key
           </Button>
         </div>
 
         {!hasKeys ? (
           <div className="text-center py-10 bg-muted/10 rounded-lg border-2 border-dashed">
-            <Key className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+            <Key className="size-10 text-muted-foreground mx-auto mb-3" />
             <h3 className="text-sm font-semibold mb-1">No MCP keys yet</h3>
             <p className="text-sm text-muted-foreground mb-4">
               Generate a key to connect AI agents to your knowledge base.
             </p>
-            <Button size="sm" onClick={() => setIsGenerateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
+            <Button
+              size="sm"
+              onClick={() => dispatch({ isGenerateOpen: true })}
+            >
+              <Plus className="size-4 mr-2" />
               Generate New Key
             </Button>
           </div>
@@ -273,15 +300,13 @@ export default function McpSettingsPage() {
                     <TableCell className="font-medium">{k.name}</TableCell>
                     <TableCell>
                       <code className="text-xs bg-muted px-2 py-1 rounded">
-                        {k.key_prefix}...
+                        {k.key_prefix}…
                       </code>
                     </TableCell>
                     <TableCell>{k.request_count.toLocaleString()}</TableCell>
                     <TableCell>
                       {k.last_used_at
-                        ? formatDistanceToNow(new Date(k.last_used_at), {
-                            addSuffix: true,
-                          })
+                        ? formatStableDateTime(k.last_used_at)
                         : 'Never'}
                     </TableCell>
                     <TableCell className="text-right">
@@ -289,10 +314,10 @@ export default function McpSettingsPage() {
                         variant="ghost"
                         size="sm"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => setKeyToRevoke(k.id)}
+                        onClick={() => dispatch({ keyToRevoke: k.id })}
                         aria-label={`Revoke key ${k.name}`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="size-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -317,10 +342,9 @@ export default function McpSettingsPage() {
                 <Label htmlFor="key-name">Name</Label>
                 <Input
                   id="key-name"
-                  autoFocus
                   placeholder="e.g., Cursor Integration"
                   value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
+                  onChange={(e) => dispatch({ newKeyName: e.target.value })}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleGenerate();
                   }}
@@ -335,7 +359,7 @@ export default function McpSettingsPage() {
                   disabled={!newKeyName.trim() || generateMutation.isPending}
                 >
                   {generateMutation.isPending && (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="size-4 mr-2 animate-spin" />
                   )}
                   Generate
                 </Button>
@@ -345,13 +369,13 @@ export default function McpSettingsPage() {
             <>
               <DialogHeader>
                 <div className="flex items-center gap-2">
-                  <Key className="h-5 w-5 text-green-600" />
+                  <Key className="size-5 text-green-600" />
                   <DialogTitle>Key Generated</DialogTitle>
                 </div>
               </DialogHeader>
               <div className="space-y-4">
                 <Alert>
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="size-4" />
                   <AlertDescription>
                     This key will only be shown once. Copy it now.
                   </AlertDescription>
@@ -368,7 +392,7 @@ export default function McpSettingsPage() {
                       onClick={handleCopy}
                       aria-label="Copy API key to clipboard"
                     >
-                      <Copy className="h-4 w-4" />
+                      <Copy className="size-4" />
                     </Button>
                   </div>
                   {copied && (
@@ -379,7 +403,7 @@ export default function McpSettingsPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={handleCloseGenerate}>Done</Button>
+                <Button onClick={handleCloseGenerate}>Close key dialog</Button>
               </DialogFooter>
             </>
           )}
@@ -388,7 +412,7 @@ export default function McpSettingsPage() {
 
       <ConfirmationDialog
         open={!!keyToRevoke}
-        onOpenChange={(open) => !open && setKeyToRevoke(null)}
+        onOpenChange={(open) => !open && dispatch({ keyToRevoke: null })}
         title="Revoke MCP Key"
         description="Are you sure? Any MCP connections using this key will immediately lose access. This cannot be undone."
         confirmText="Revoke Key"
@@ -397,7 +421,7 @@ export default function McpSettingsPage() {
         onConfirm={() => {
           if (keyToRevoke) {
             revokeMutation.mutate(keyToRevoke, {
-              onSettled: () => setKeyToRevoke(null),
+              onSettled: () => dispatch({ keyToRevoke: null }),
             });
           }
         }}

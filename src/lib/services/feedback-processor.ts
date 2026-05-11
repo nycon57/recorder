@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 import 'server-only';
 
 /**
@@ -6,8 +8,6 @@ import 'server-only';
  * Converts user feedback (thumbs, corrections, ratings) into agent memory
  * entries so agents learn from corrections and reinforce good patterns.
  */
-
-import { createHash } from 'crypto';
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { storeMemory, recallMemory } from '@/lib/services/agent-memory';

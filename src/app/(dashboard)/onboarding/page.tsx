@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   ExternalLink,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 
 import { Progress } from '@/app/components/ui/progress';
 import { Checkbox } from '@/app/components/ui/checkbox';
@@ -63,7 +63,6 @@ interface OnboardingPlan {
 
 export default function OnboardingPage() {
   const [plan, setPlan] = useState<OnboardingPlan | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
   const activeControllerRef = useRef<AbortController | null>(null);
@@ -86,10 +85,6 @@ export default function OnboardingPage() {
         setError(
           err instanceof Error ? err.message : 'Failed to load onboarding plan',
         );
-      }
-    } finally {
-      if (!signal.aborted) {
-        setLoading(false);
       }
     }
   }, []);
@@ -182,7 +177,7 @@ export default function OnboardingPage() {
     [plan],
   );
 
-  if (loading) {
+  if (!plan && !error) {
     return (
       <div className="trbd-page">
         <div
@@ -191,7 +186,7 @@ export default function OnboardingPage() {
           aria-live="polite"
         >
           <Loader2
-            className="h-8 w-8 animate-spin text-muted-foreground"
+            className="size-8 animate-spin text-muted-foreground"
             aria-hidden="true"
           />
           <span className="sr-only">Loading your onboarding plan</span>
@@ -204,7 +199,7 @@ export default function OnboardingPage() {
     return (
       <div className="trbd-page">
         <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="size-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
@@ -219,14 +214,14 @@ export default function OnboardingPage() {
   const completedItems = plan.completed_items ?? 0;
   const progressPercent =
     totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-  const sortedPath = [...plan.learning_path].sort((a, b) => a.order - b.order);
+  const sortedPath = plan.learning_path.toSorted((a, b) => a.order - b.order);
 
   return (
     <div className="trbd-page">
       <div className="space-y-2">
         <h1 className="trbd-page-title tracking-tight flex items-center gap-3">
           <GraduationCap
-            className="h-7 w-7 sm:h-8 sm:w-8 text-primary"
+            className="size-7 sm:size-8 text-primary"
             aria-hidden="true"
           />
           Onboarding
@@ -253,13 +248,13 @@ export default function OnboardingPage() {
             className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400"
             role="status"
           >
-            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            <CheckCircle2 className="size-4" aria-hidden="true" />
             Onboarding complete!
           </div>
         )}
       </div>
 
-      <motion.div
+      <m.div
         variants={withReducedMotion(staggerContainer)}
         initial="hidden"
         animate="show"
@@ -276,7 +271,7 @@ export default function OnboardingPage() {
             const isUpdating = updatingItems.has(item.contentId);
 
             return (
-              <motion.div
+              <m.div
                 key={item.contentId}
                 variants={withReducedMotion(staggerItem)}
                 role="listitem"
@@ -312,14 +307,14 @@ export default function OnboardingPage() {
                     </Link>
                     <Badge variant="outline" className="text-xs gap-1 shrink-0">
                       <Icon
-                        className={`h-3 w-3 ${colorClass}`}
+                        className={`size-3 ${colorClass}`}
                         aria-hidden="true"
                       />
                       {label}
                     </Badge>
                     {item.estimatedMinutes > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                        <Clock className="h-3 w-3" aria-hidden="true" />
+                        <Clock className="size-3" aria-hidden="true" />
                         {item.estimatedMinutes} min
                       </span>
                     )}
@@ -344,15 +339,15 @@ export default function OnboardingPage() {
                   aria-label={`View ${item.title}`}
                 >
                   <ExternalLink
-                    className="h-4 w-4 text-muted-foreground"
+                    className="size-4 text-muted-foreground"
                     aria-hidden="true"
                   />
                 </Link>
-              </motion.div>
+              </m.div>
             );
           })}
         </AnimatePresence>
-      </motion.div>
+      </m.div>
     </div>
   );
 }
@@ -363,14 +358,14 @@ function EmptyState() {
       <div className="space-y-2 mb-8">
         <h1 className="trbd-page-title tracking-tight flex items-center gap-3">
           <GraduationCap
-            className="h-7 w-7 sm:h-8 sm:w-8 text-primary"
+            className="size-7 sm:size-8 text-primary"
             aria-hidden="true"
           />
           Onboarding
         </h1>
       </div>
 
-      <motion.div
+      <m.div
         variants={withReducedMotion(fadeIn)}
         initial="hidden"
         animate="show"
@@ -378,7 +373,7 @@ function EmptyState() {
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
           <div className="bg-primary/5 rounded-full p-6 mb-6">
             <GraduationCap
-              className="h-12 w-12 text-primary"
+              className="size-12 text-primary"
               aria-hidden="true"
             />
           </div>
@@ -388,7 +383,7 @@ function EmptyState() {
             team lead to generate one for you.
           </p>
         </div>
-      </motion.div>
+      </m.div>
     </div>
   );
 }

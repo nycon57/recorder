@@ -1,9 +1,15 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { useSession } from "@/lib/auth/auth-client";
-import { Building2, ChevronRight, Check, AlertCircle, Info, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { useReducer } from 'react';
+import {
+  Building2,
+  ChevronRight,
+  Check,
+  AlertCircle,
+  Info,
+  Loader2,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 import {
   Dialog,
@@ -11,33 +17,33 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/app/components/ui/dialog";
-import { Button } from "@/app/components/ui/button";
-import { Input } from "@/app/components/ui/input";
-import { Label } from "@/app/components/ui/label";
-import { Textarea } from "@/app/components/ui/textarea";
+} from '@/app/components/ui/dialog';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import { Label } from '@/app/components/ui/label';
+import { Textarea } from '@/app/components/ui/textarea';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/app/components/ui/select";
-import { Alert, AlertDescription } from "@/app/components/ui/alert";
+} from '@/app/components/ui/select';
+import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import {
   Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
-} from "@/app/components/ui/command";
+} from '@/app/components/ui/command';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/app/components/ui/popover";
-import { Department } from "@/lib/validations/departments";
-import { cn } from "@/lib/utils/cn";
+} from '@/app/components/ui/popover';
+import { Department } from '@/lib/validations/departments';
+import { cn } from '@/lib/utils/cn';
 
 interface EditDepartmentModalProps {
   open: boolean;
@@ -49,53 +55,149 @@ interface EditDepartmentModalProps {
 
 const visibilityOptions = [
   {
-    value: "private",
-    label: "Private",
-    description: "Only department members can access",
+    value: 'private',
+    label: 'Private',
+    description: 'Only department members can access',
   },
   {
-    value: "department",
-    label: "Department",
-    description: "Department and sub-departments can access",
+    value: 'department',
+    label: 'Department',
+    description: 'Department and sub-departments can access',
   },
   {
-    value: "org",
-    label: "Organization",
-    description: "All organization members can access",
+    value: 'org',
+    label: 'Organization',
+    description: 'All organization members can access',
   },
   {
-    value: "public",
-    label: "Public",
-    description: "Anyone with the link can access",
+    value: 'public',
+    label: 'Public',
+    description: 'Anyone with the link can access',
   },
 ];
 
-export function EditDepartmentModal({
+type DepartmentVisibility = Department['defaultVisibility'];
+
+interface EditDepartmentDraft {
+  name: string;
+  description: string;
+  selectedParentId: string | null;
+  visibility: DepartmentVisibility;
+}
+
+interface EditDepartmentState {
+  loading: boolean;
+  draft: EditDepartmentDraft | null;
+  parentSelectorOpen: boolean;
+}
+
+type EditDepartmentAction =
+  | { type: 'reset' }
+  | { type: 'set-loading'; loading: boolean }
+  | { type: 'set-name'; value: string; fallback: EditDepartmentDraft }
+  | { type: 'set-description'; value: string; fallback: EditDepartmentDraft }
+  | {
+      type: 'set-parent';
+      value: string | null;
+      fallback: EditDepartmentDraft;
+    }
+  | {
+      type: 'set-visibility';
+      value: DepartmentVisibility;
+      fallback: EditDepartmentDraft;
+    }
+  | { type: 'set-parent-selector-open'; open: boolean };
+
+function getDepartmentDraft(department: Department): EditDepartmentDraft {
+  return {
+    name: department.name,
+    description: department.description || '',
+    selectedParentId: department.parentId,
+    visibility: department.defaultVisibility,
+  };
+}
+
+function editDepartmentReducer(
+  state: EditDepartmentState,
+  action: EditDepartmentAction,
+): EditDepartmentState {
+  switch (action.type) {
+    case 'reset':
+      return {
+        loading: false,
+        draft: null,
+        parentSelectorOpen: false,
+      };
+    case 'set-loading':
+      return {
+        ...state,
+        loading: action.loading,
+      };
+    case 'set-name':
+      return {
+        ...state,
+        draft: { ...(state.draft ?? action.fallback), name: action.value },
+      };
+    case 'set-description':
+      return {
+        ...state,
+        draft: {
+          ...(state.draft ?? action.fallback),
+          description: action.value,
+        },
+      };
+    case 'set-parent':
+      return {
+        ...state,
+        draft: {
+          ...(state.draft ?? action.fallback),
+          selectedParentId: action.value,
+        },
+      };
+    case 'set-visibility':
+      return {
+        ...state,
+        draft: {
+          ...(state.draft ?? action.fallback),
+          visibility: action.value,
+        },
+      };
+    case 'set-parent-selector-open':
+      return {
+        ...state,
+        parentSelectorOpen: action.open,
+      };
+    default:
+      return state;
+  }
+}
+
+const INITIAL_EDIT_DEPARTMENT_STATE: EditDepartmentState = {
+  loading: false,
+  draft: null,
+  parentSelectorOpen: false,
+};
+
+export function EditDepartmentModal(
+  props: Parameters<typeof useEditDepartmentModalImplementation>[0],
+) {
+  return useEditDepartmentModalImplementation(props);
+}
+
+function useEditDepartmentModalImplementation({
   open,
   onOpenChange,
   department,
   allDepartments,
   onSuccess,
 }: EditDepartmentModalProps) {
-  const { data: session } = useSession();
-  const [loading, setLoading] = useState(false);
-  const [name, setName] = useState(department.name);
-  const [description, setDescription] = useState(department.description || "");
-  const [selectedParentId, setSelectedParentId] = useState<string | null>(
-    department.parentId
+  const [state, dispatch] = useReducer(
+    editDepartmentReducer,
+    INITIAL_EDIT_DEPARTMENT_STATE,
   );
-  const [visibility, setVisibility] = useState(department.defaultVisibility);
-  const [parentSelectorOpen, setParentSelectorOpen] = useState(false);
-
-  // Update form when department changes
-  useEffect(() => {
-    if (department) {
-      setName(department.name);
-      setDescription(department.description || "");
-      setSelectedParentId(department.parentId);
-      setVisibility(department.defaultVisibility);
-    }
-  }, [department]);
+  const fallbackDraft = getDepartmentDraft(department);
+  const draft = state.draft ?? fallbackDraft;
+  const { loading, parentSelectorOpen } = state;
 
   // Get all descendant IDs to prevent circular references
   const getDescendantIds = (dept: Department): string[] => {
@@ -114,9 +216,13 @@ export function EditDepartmentModal({
   const buildFlatList = (
     deps: Department[],
     level = 0,
-    parentPath: string[] = []
-  ): Array<Department & { level: number; path: string[]; disabled: boolean }> => {
-    let result: Array<Department & { level: number; path: string[]; disabled: boolean }> = [];
+    parentPath: string[] = [],
+  ): Array<
+    Department & { level: number; path: string[]; disabled: boolean }
+  > => {
+    let result: Array<
+      Department & { level: number; path: string[]; disabled: boolean }
+    > = [];
 
     deps.forEach((dept) => {
       const currentPath = [...parentPath, dept.name];
@@ -125,7 +231,9 @@ export function EditDepartmentModal({
       result.push({ ...dept, level, path: currentPath, disabled });
 
       if (dept.children && dept.children.length > 0) {
-        result = result.concat(buildFlatList(dept.children, level + 1, currentPath));
+        result = result.concat(
+          buildFlatList(dept.children, level + 1, currentPath),
+        );
       }
     });
 
@@ -135,71 +243,86 @@ export function EditDepartmentModal({
   const flatDepartments = buildFlatList(allDepartments);
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
-      toast.error("Department name is required");
+    if (!draft.name.trim()) {
+      toast.error('Department name is required');
       return;
     }
 
     // Check for circular reference
-    if (selectedParentId && descendantIds.includes(selectedParentId)) {
-      toast.error("Cannot set a child department as parent (circular reference)");
+    if (
+      draft.selectedParentId &&
+      descendantIds.includes(draft.selectedParentId)
+    ) {
+      toast.error(
+        'Cannot set a child department as parent (circular reference)',
+      );
       return;
     }
 
-    setLoading(true);
+    dispatch({ type: 'set-loading', loading: true });
 
     try {
       // Only send changed fields
       const updates: any = {};
-      if (name !== department.name) updates.name = name.trim();
-      if (description !== (department.description || "")) {
-        updates.description = description.trim() || null;
+      if (draft.name !== department.name) updates.name = draft.name.trim();
+      if (draft.description !== (department.description || '')) {
+        updates.description = draft.description.trim() || null;
       }
-      if (selectedParentId !== department.parentId) {
-        updates.parentId = selectedParentId;
+      if (draft.selectedParentId !== department.parentId) {
+        updates.parentId = draft.selectedParentId;
       }
-      if (visibility !== department.defaultVisibility) {
-        updates.defaultVisibility = visibility;
+      if (draft.visibility !== department.defaultVisibility) {
+        updates.defaultVisibility = draft.visibility;
       }
 
       // Only make request if there are changes
       if (Object.keys(updates).length === 0) {
-        toast.info("No changes made");
+        toast.info('No changes made');
+        dispatch({ type: 'reset' });
         onOpenChange(false);
         return;
       }
 
-      const response = await fetch(`/api/organizations/departments/${department.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `/api/organizations/departments/${department.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updates),
         },
-        body: JSON.stringify(updates),
-      });
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to update department");
+        throw new Error(data.error || 'Failed to update department');
       }
 
-      toast.success("Department updated successfully");
+      toast.success('Department updated successfully');
+      dispatch({ type: 'reset' });
       onSuccess();
     } catch (error) {
-      console.error("Error updating department:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to update department");
+      console.error('Error updating department:', error);
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to update department',
+      );
     } finally {
-      setLoading(false);
+      dispatch({ type: 'set-loading', loading: false });
     }
   };
 
   const handleClose = () => {
     if (!loading) {
+      dispatch({ type: 'reset' });
       onOpenChange(false);
     }
   };
 
-  const selectedParent = flatDepartments.find((d) => d.id === selectedParentId);
+  const selectedParent = flatDepartments.find(
+    (d) => d.id === draft.selectedParentId,
+  );
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -218,8 +341,14 @@ export function EditDepartmentModal({
             <Input
               id="name"
               placeholder="e.g., Engineering, Marketing"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={draft.name}
+              onChange={(e) =>
+                dispatch({
+                  type: 'set-name',
+                  value: e.target.value,
+                  fallback: fallbackDraft,
+                })
+              }
               disabled={loading}
             />
           </div>
@@ -234,7 +363,7 @@ export function EditDepartmentModal({
                 disabled
                 className="bg-muted"
               />
-              <Info className="w-4 h-4 text-muted-foreground" />
+              <Info className="size-4 text-muted-foreground" />
             </div>
             <p className="text-xs text-muted-foreground">
               Slug cannot be changed after creation to maintain URL consistency.
@@ -246,9 +375,15 @@ export function EditDepartmentModal({
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
-              placeholder="Describe the purpose of this department..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the purpose of this department…"
+              value={draft.description}
+              onChange={(e) =>
+                dispatch({
+                  type: 'set-description',
+                  value: e.target.value,
+                  fallback: fallbackDraft,
+                })
+              }
               disabled={loading}
               rows={3}
             />
@@ -257,20 +392,32 @@ export function EditDepartmentModal({
           {/* Parent Department */}
           <div className="space-y-2">
             <Label>Parent Department</Label>
-            <Popover open={parentSelectorOpen} onOpenChange={setParentSelectorOpen}>
+            <Popover
+              open={parentSelectorOpen}
+              onOpenChange={(nextOpen) =>
+                dispatch({
+                  type: 'set-parent-selector-open',
+                  open: nextOpen,
+                })
+              }
+            >
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   role="combobox"
                   aria-expanded={parentSelectorOpen}
+                  aria-controls="edit-department-parent-list"
                   className="w-full justify-between"
                   disabled={loading}
                 >
                   {selectedParent ? (
                     <div className="flex items-center gap-1 truncate">
                       {selectedParent.path.map((p, i) => (
-                        <span key={i} className="flex items-center gap-1">
-                          {i > 0 && <ChevronRight className="w-3 h-3" />}
+                        <span
+                          key={JSON.stringify(p)}
+                          className="flex items-center gap-1"
+                        >
+                          {i > 0 && <ChevronRight className="size-3" />}
                           <span>{p}</span>
                         </span>
                       ))}
@@ -281,20 +428,29 @@ export function EditDepartmentModal({
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[400px] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search departments..." />
+                <Command id="edit-department-parent-list">
+                  <CommandInput placeholder="Search departments…" />
                   <CommandEmpty>No department found.</CommandEmpty>
                   <CommandGroup>
                     <CommandItem
                       onSelect={() => {
-                        setSelectedParentId(null);
-                        setParentSelectorOpen(false);
+                        dispatch({
+                          type: 'set-parent',
+                          value: null,
+                          fallback: fallbackDraft,
+                        });
+                        dispatch({
+                          type: 'set-parent-selector-open',
+                          open: false,
+                        });
                       }}
                     >
                       <Check
                         className={cn(
-                          "mr-2 h-4 w-4",
-                          selectedParentId === null ? "opacity-100" : "opacity-0"
+                          'mr-2 size-4',
+                          draft.selectedParentId === null
+                            ? 'opacity-100'
+                            : 'opacity-0',
                         )}
                       />
                       <span>No parent (top-level)</span>
@@ -304,26 +460,35 @@ export function EditDepartmentModal({
                         key={dept.id}
                         onSelect={() => {
                           if (!dept.disabled) {
-                            setSelectedParentId(dept.id);
-                            setParentSelectorOpen(false);
+                            dispatch({
+                              type: 'set-parent',
+                              value: dept.id,
+                              fallback: fallbackDraft,
+                            });
+                            dispatch({
+                              type: 'set-parent-selector-open',
+                              open: false,
+                            });
                           }
                         }}
                         disabled={dept.disabled}
                       >
                         <Check
                           className={cn(
-                            "mr-2 h-4 w-4",
-                            selectedParentId === dept.id ? "opacity-100" : "opacity-0"
+                            'mr-2 size-4',
+                            draft.selectedParentId === dept.id
+                              ? 'opacity-100'
+                              : 'opacity-0',
                           )}
                         />
                         <div
                           className={cn(
-                            "flex items-center gap-1",
-                            dept.disabled && "opacity-50"
+                            'flex items-center gap-1',
+                            dept.disabled && 'opacity-50',
                           )}
                           style={{ marginLeft: `${dept.level * 12}px` }}
                         >
-                          <Building2 className="w-3 h-3" />
+                          <Building2 className="size-3" />
                           <span>{dept.name}</span>
                           {dept.disabled && (
                             <span className="text-xs text-muted-foreground ml-2">
@@ -345,7 +510,17 @@ export function EditDepartmentModal({
           {/* Default Visibility */}
           <div className="space-y-2">
             <Label htmlFor="visibility">Default Visibility</Label>
-            <Select value={visibility} onValueChange={(value: any) => setVisibility(value)} disabled={loading}>
+            <Select
+              value={draft.visibility}
+              onValueChange={(value) =>
+                dispatch({
+                  type: 'set-visibility',
+                  value: value as DepartmentVisibility,
+                  fallback: fallbackDraft,
+                })
+              }
+              disabled={loading}
+            >
               <SelectTrigger id="visibility">
                 <SelectValue />
               </SelectTrigger>
@@ -365,12 +540,12 @@ export function EditDepartmentModal({
           </div>
 
           {/* Warning for public visibility */}
-          {visibility === "public" && (
+          {draft.visibility === 'public' && (
             <Alert>
-              <AlertCircle className="h-4 w-4" />
+              <AlertCircle className="size-4" />
               <AlertDescription>
-                Public departments can be accessed by anyone with the link. Make sure this is
-                intended before proceeding.
+                Public departments can be accessed by anyone with the link. Make
+                sure this is intended before proceeding.
               </AlertDescription>
             </Alert>
           )}
@@ -382,7 +557,7 @@ export function EditDepartmentModal({
             variant="outline"
             onClick={handleClose}
             disabled={loading}
-            className={cn(loading && "opacity-50 cursor-not-allowed")}
+            className={cn(loading && 'opacity-50 cursor-not-allowed')}
           >
             Cancel
           </Button>
@@ -393,11 +568,11 @@ export function EditDepartmentModal({
           >
             {loading ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Updating...
+                <Loader2 className="size-4 mr-2 animate-spin" />
+                Updating…
               </>
             ) : (
-              "Update Department"
+              'Update Department'
             )}
           </Button>
         </div>

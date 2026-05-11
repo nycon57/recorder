@@ -53,6 +53,7 @@ export async function POST() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ ttl_seconds: TOKEN_TTL_SECONDS }),
+        cache: 'no-store',
       });
     } catch (networkError) {
       console.error('[extension/deepgram-token] Network error:', networkError);

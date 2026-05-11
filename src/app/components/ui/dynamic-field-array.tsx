@@ -27,7 +27,7 @@ export interface SingleValue {
 /**
  * Props for the DynamicFieldArray component
  */
-export interface DynamicFieldArrayProps<T = KeyValuePair> {
+interface DynamicFieldArrayProps<T = KeyValuePair> {
   // Data
   value: T[];
   onChange: (value: T[]) => void;
@@ -82,7 +82,12 @@ function isKeyValuePair(item: unknown): item is KeyValuePair {
  * Type guard to check if the type is single value
  */
 function isSingleValue(item: unknown): item is SingleValue {
-  return typeof item === 'object' && item !== null && 'value' in item && !('key' in item);
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    'value' in item &&
+    !('key' in item)
+  );
 }
 
 /**
@@ -119,7 +124,7 @@ function isSingleValue(item: unknown): item is SingleValue {
  *   minItems={0}
  * />
  */
-export function DynamicFieldArray<T = KeyValuePair>({
+function DynamicFieldArray<T = KeyValuePair>({
   value,
   onChange,
   type = 'key-value',
@@ -174,7 +179,7 @@ export function DynamicFieldArray<T = KeyValuePair>({
       const updated = value.filter((_, i) => i !== index);
       onChange(updated);
     },
-    [value, onChange, minItems]
+    [value, onChange, minItems],
   );
 
   /**
@@ -190,7 +195,7 @@ export function DynamicFieldArray<T = KeyValuePair>({
         onChange(updated);
       }
     },
-    [value, onChange]
+    [value, onChange],
   );
 
   /**
@@ -206,14 +211,14 @@ export function DynamicFieldArray<T = KeyValuePair>({
         onChange(updated);
       }
     },
-    [value, onChange]
+    [value, onChange],
   );
 
   const canRemove = value.length > minItems;
   const canAdd = !maxItems || value.length < maxItems;
 
-  const removeIconElement = removeIcon || <Trash2 className="h-4 w-4" />;
-  const addIconElement = addIcon || <Plus className="h-4 w-4 mr-2" />;
+  const removeIconElement = removeIcon || <Trash2 className="size-4" />;
+  const addIconElement = addIcon || <Plus className="size-4 mr-2" />;
 
   return (
     <fieldset
@@ -237,7 +242,7 @@ export function DynamicFieldArray<T = KeyValuePair>({
       <div className="space-y-2">
         {value.map((item, index) => (
           <div
-            key={index}
+            key={JSON.stringify(item)}
             className={cn('flex gap-2 items-start', fieldClassName)}
           >
             {type === 'key-value' ? (
@@ -320,7 +325,7 @@ export function DynamicFieldArray<T = KeyValuePair>({
  * Filters out empty pairs
  */
 export function keyValuePairsToObject(
-  pairs: KeyValuePair[]
+  pairs: KeyValuePair[],
 ): Record<string, string> {
   return pairs.reduce(
     (acc, { key, value }) => {
@@ -329,14 +334,16 @@ export function keyValuePairsToObject(
       }
       return acc;
     },
-    {} as Record<string, string>
+    {} as Record<string, string>,
   );
 }
 
 /**
  * Helper function to convert object to key-value pairs
  */
-export function objectToKeyValuePairs(obj: Record<string, string>): KeyValuePair[] {
+export function objectToKeyValuePairs(
+  obj: Record<string, string>,
+): KeyValuePair[] {
   return Object.entries(obj).map(([key, value]) => ({ key, value }));
 }
 
@@ -345,7 +352,7 @@ export function objectToKeyValuePairs(obj: Record<string, string>): KeyValuePair
  * Filters out empty values
  */
 export function singleValuesToArray(values: SingleValue[]): string[] {
-  return values.map(({ value }) => value).filter(Boolean);
+  return values.flatMap(({ value }) => (value ? [value] : []));
 }
 
 /**

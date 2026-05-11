@@ -30,7 +30,7 @@ const buildChain = (singleResult: unknown) => {
 const mockFrom = jest.fn();
 
 jest.mock('@/lib/utils/api', () => ({
-  apiHandler: (fn: Function) => fn,
+  apiHandler: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
   requireSystemAdmin: (...args: unknown[]) => mockRequireSystemAdmin(...args),
   successResponse: (data: unknown) =>
     new Response(JSON.stringify({ data }), {
@@ -61,10 +61,10 @@ jest.mock('@/lib/utils/logger', () => ({
 
 // ---- Helpers ---------------------------------------------------------------
 
-function makeRequest(id: string): [NextRequest, { params: { id: string } }] {
+function makeRequest(id: string): [NextRequest, { params: Promise<{ id: string }> }] {
   return [
     new NextRequest(`http://localhost/api/admin/vendor-sources/pages/${id}`),
-    { params: { id } },
+    { params: Promise.resolve({ id }) },
   ];
 }
 

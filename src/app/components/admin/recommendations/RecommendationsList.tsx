@@ -1,9 +1,23 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+} from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Skeleton } from '@/app/components/ui/skeleton';
@@ -27,25 +41,20 @@ interface Recommendation {
 }
 
 export default function RecommendationsList() {
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'immediate' | 'short-term' | 'long-term'>('all');
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const fetchRecommendations = useCallback(async () => {
-    // Abort previous request if it exists
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // Create new AbortController for this fetch
-    abortControllerRef.current = new AbortController();
-
-    try {
+  const [filter, setFilter] = useState<
+    'all' | 'immediate' | 'short-term' | 'long-term'
+  >('all');
+  const {
+    data: recommendations = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery<Recommendation[], Error>({
+    queryKey: ['analytics', 'recommendations'],
+    queryFn: async ({ signal }) => {
       const response = await fetch('/api/analytics/recommendations', {
-        signal: abortControllerRef.current.signal,
+        signal,
       });
 
       if (!response.ok) {
@@ -53,37 +62,19 @@ export default function RecommendationsList() {
       }
 
       const { data } = await response.json();
-      setRecommendations(data.recommendations || []);
-      setError(null);
-    } catch (err) {
-      // Ignore abort errors
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
-      }
+      return data.recommendations || [];
+    },
+  });
 
-      console.error('Error fetching recommendations:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load recommendations');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchRecommendations();
-
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [fetchRecommendations]);
-
-  const handleAction = async (id: string, action: 'implement' | 'defer' | 'dismiss') => {
+  const handleAction = async (
+    id: string,
+    action: 'implement' | 'defer' | 'dismiss',
+  ) => {
     try {
       // TODO: Implement actual API call
       console.log(`Action ${action} for recommendation ${id}`);
       // Refresh recommendations after action
-      await fetchRecommendations();
+      await refetch();
     } catch (err) {
       console.error('Error performing action:', err);
     }
@@ -115,7 +106,9 @@ export default function RecommendationsList() {
     }
   };
 
-  const getTimeframeBadgeVariant = (timeframe: string): 'default' | 'secondary' | 'destructive' => {
+  const getTimeframeBadgeVariant = (
+    timeframe: string,
+  ): 'default' | 'secondary' | 'destructive' => {
     switch (timeframe) {
       case 'immediate':
         return 'destructive';
@@ -128,11 +121,12 @@ export default function RecommendationsList() {
     }
   };
 
-  const filteredRecommendations = filter === 'all'
-    ? recommendations
-    : recommendations.filter((r) => r.timeframe === filter);
+  const filteredRecommendations =
+    filter === 'all'
+      ? recommendations
+      : recommendations.filter((r) => r.timeframe === filter);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -141,8 +135,12 @@ export default function RecommendationsList() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-32 w-full" />
+            {[
+              'recommendation-skeleton-1',
+              'recommendation-skeleton-2',
+              'recommendation-skeleton-3',
+            ].map((skeletonId) => (
+              <Skeleton key={skeletonId} className="h-32 w-full" />
             ))}
           </div>
         </CardContent>
@@ -154,7 +152,9 @@ export default function RecommendationsList() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading recommendations: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading recommendations: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -167,7 +167,8 @@ export default function RecommendationsList() {
           <div>
             <CardTitle>Optimization Recommendations</CardTitle>
             <CardDescription>
-              {filteredRecommendations.length} recommendation{filteredRecommendations.length !== 1 ? 's' : ''} available
+              {filteredRecommendations.length} recommendation
+              {filteredRecommendations.length !== 1 ? 's' : ''} available
             </CardDescription>
           </div>
           <div className="flex gap-2">
@@ -205,8 +206,10 @@ export default function RecommendationsList() {
       <CardContent>
         {filteredRecommendations.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-600" />
-            <p className="text-sm">No {filter !== 'all' ? filter : ''} recommendations at this time</p>
+            <CheckCircle2 className="size-12 mx-auto mb-4 text-green-600" />
+            <p className="text-sm">
+              No {filter !== 'all' ? filter : ''} recommendations at this time
+            </p>
             <p className="text-xs mt-1">Your storage is well optimized!</p>
           </div>
         ) : (
@@ -223,38 +226,52 @@ export default function RecommendationsList() {
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-medium text-sm">{rec.title}</h3>
-                        <Badge variant={getTimeframeBadgeVariant(rec.timeframe)}>
+                        <Badge
+                          variant={getTimeframeBadgeVariant(rec.timeframe)}
+                        >
                           {rec.timeframe.replace('-', ' ').toUpperCase()}
                         </Badge>
                         {rec.status === 'completed' && (
                           <Badge variant="outline" className="text-green-600">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            <CheckCircle2 className="size-3 mr-1" />
                             Completed
                           </Badge>
                         )}
                         {rec.status === 'in-progress' && (
                           <Badge variant="outline" className="text-blue-600">
-                            <Clock className="h-3 w-3 mr-1" />
+                            <Clock className="size-3 mr-1" />
                             In Progress
                           </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">{rec.description}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {rec.description}
+                      </p>
                       <div className="flex items-center gap-4 text-xs">
                         <div>
-                          <span className="text-muted-foreground">Impact: </span>
-                          <span className={`font-medium ${getImpactColor(rec.impact)}`}>
+                          <span className="text-muted-foreground">
+                            Impact:{' '}
+                          </span>
+                          <span
+                            className={`font-medium ${getImpactColor(rec.impact)}`}
+                          >
                             {rec.impact.toUpperCase()}
                           </span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Effort: </span>
-                          <span className={`font-medium ${getEffortColor(rec.effort)}`}>
+                          <span className="text-muted-foreground">
+                            Effort:{' '}
+                          </span>
+                          <span
+                            className={`font-medium ${getEffortColor(rec.effort)}`}
+                          >
                             {rec.effort.toUpperCase()}
                           </span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Savings: </span>
+                          <span className="text-muted-foreground">
+                            Savings:{' '}
+                          </span>
                           <span className="font-medium text-green-600">
                             {formatCurrency(rec.savings)}/year
                           </span>
@@ -265,9 +282,9 @@ export default function RecommendationsList() {
                     <CollapsibleTrigger asChild>
                       <Button variant="ghost" size="sm">
                         {expandedId === rec.id ? (
-                          <ChevronUp className="h-4 w-4" />
+                          <ChevronUp className="size-4" />
                         ) : (
-                          <ChevronDown className="h-4 w-4" />
+                          <ChevronDown className="size-4" />
                         )}
                       </Button>
                     </CollapsibleTrigger>
@@ -277,11 +294,13 @@ export default function RecommendationsList() {
                   <CollapsibleContent className="space-y-3 pt-3 border-t">
                     <div>
                       <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
+                        <FileText className="size-4" />
                         Implementation Guide
                       </h4>
                       <div className="bg-muted/50 rounded-lg p-3">
-                        <p className="text-xs whitespace-pre-line">{rec.implementation}</p>
+                        <p className="text-xs whitespace-pre-line">
+                          {rec.implementation}
+                        </p>
                       </div>
                     </div>
 

@@ -8,16 +8,16 @@ import {
   type PendingReviewPage,
 } from '@/lib/services/wiki-review';
 
-export type ReviewQueueKind = 'contradiction' | 'routing';
+type ReviewQueueKind = 'contradiction' | 'routing';
 
-export interface RoutingReviewSourceLink {
+interface RoutingReviewSourceLink {
   sourceId: string;
   sourceType: KnowledgeSourceType;
   contributedAt: string;
   sourceTitle?: string | null;
 }
 
-export interface RoutingReviewCandidate {
+interface RoutingReviewCandidate {
   pageId: string;
   topic: string;
   app: string | null;
@@ -67,7 +67,13 @@ export type ReviewQueueItem =
 
 type RoutingPageRow = Pick<
   Database['public']['Tables']['org_wiki_pages']['Row'],
-  'id' | 'topic' | 'app' | 'screen' | 'created_at' | 'updated_at' | 'compilation_log'
+  | 'id'
+  | 'topic'
+  | 'app'
+  | 'screen'
+  | 'created_at'
+  | 'updated_at'
+  | 'compilation_log'
 >;
 
 interface RoutingSourceRow {
@@ -88,15 +94,23 @@ function toTimestamp(value: string | null | undefined): number {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+function pluralize(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+): string {
   return count === 1 ? singular : plural;
 }
 
 function sortReviewQueueItems(items: ReviewQueueItem[]): ReviewQueueItem[] {
-  return [...items].sort((left, right) => toTimestamp(right.sortAt) - toTimestamp(left.sortAt));
+  return items.toSorted(
+    (left, right) => toTimestamp(right.sortAt) - toTimestamp(left.sortAt),
+  );
 }
 
-function describeRoutingGap(candidate: Pick<RoutingReviewCandidate, 'app' | 'screen'>): string {
+function describeRoutingGap(
+  candidate: Pick<RoutingReviewCandidate, 'app' | 'screen'>,
+): string {
   if (!candidate.app && !candidate.screen) {
     return 'This page is missing both an app and screen assignment.';
   }
@@ -112,8 +126,8 @@ function describeRoutingGap(candidate: Pick<RoutingReviewCandidate, 'app' | 'scr
   return 'This routing decision still needs reviewer confirmation.';
 }
 
-export async function listPendingRoutingReviewCandidates(
-  orgId: string
+async function listPendingRoutingReviewCandidates(
+  orgId: string,
 ): Promise<RoutingReviewCandidate[]> {
   const { data: pages, error: pagesError } = await supabaseAdmin
     .from('org_wiki_pages')
@@ -124,13 +138,16 @@ export async function listPendingRoutingReviewCandidates(
     .order('updated_at', { ascending: false });
 
   if (pagesError) {
-    console.warn('[wiki-review] Failed to load routing review candidates:', pagesError.message);
+    console.warn(
+      '[wiki-review] Failed to load routing review candidates:',
+      pagesError.message,
+    );
     return [];
   }
 
   const routingPages = ((pages ?? []) as RoutingPageRow[]).filter((page) => {
     const pendingContradictions = extractPendingContradictions(
-      readCompilationLog(page.compilation_log)
+      readCompilationLog(page.compilation_log),
     );
     return pendingContradictions.length === 0;
   });
@@ -146,12 +163,20 @@ export async function listPendingRoutingReviewCandidates(
     .in('page_id', pageIds);
 
   if (sourceLinksError) {
-    console.warn('[wiki-review] Failed to load routing source links:', sourceLinksError.message);
+    console.warn(
+      '[wiki-review] Failed to load routing source links:',
+      sourceLinksError.message,
+    );
   }
 
   const normalizedSourceLinks = (sourceLinks ?? []) as RoutingSourceRow[];
   const contentIds = Array.from(
-    new Set(normalizedSourceLinks.map((link) => link.source_id).filter(Boolean))
+    new Set(
+      normalizedSourceLinks.flatMap((__item, __index, __array) => {
+        const __mapped = __item.source_id;
+        return __mapped ? [__mapped] : [];
+      }),
+    ),
   );
 
   const contentTitles = new Map<string, string | null>();
@@ -162,7 +187,10 @@ export async function listPendingRoutingReviewCandidates(
       .in('id', contentIds);
 
     if (contentError) {
-      console.warn('[wiki-review] Failed to load routing source titles:', contentError.message);
+      console.warn(
+        '[wiki-review] Failed to load routing source titles:',
+        contentError.message,
+      );
     } else {
       for (const row of (contentRows ?? []) as ContentTitleRow[]) {
         contentTitles.set(row.id, row.title);
@@ -177,23 +205,27 @@ export async function listPendingRoutingReviewCandidates(
     screen: page.screen,
     createdAt: page.created_at,
     updatedAt: page.updated_at,
-    sourceLinks: normalizedSourceLinks
-      .filter((link) => link.page_id === page.id)
-      .map((link) => ({
-        sourceId: link.source_id,
-        sourceType: link.source_type,
-        contributedAt: link.contributed_at,
-        sourceTitle: contentTitles.get(link.source_id) ?? null,
-      })),
+    sourceLinks: normalizedSourceLinks.flatMap((__item, __index, __array) =>
+      __item.page_id === page.id
+        ? [
+            {
+              sourceId: __item.source_id,
+              sourceType: __item.source_type,
+              contributedAt: __item.contributed_at,
+              sourceTitle: contentTitles.get(__item.source_id) ?? null,
+            },
+          ]
+        : [],
+    ),
   }));
 }
 
-export function buildReviewQueueItems(input: {
+function buildReviewQueueItems(input: {
   contradictions: PendingReviewPage[];
   routing: RoutingReviewCandidate[];
 }): ReviewQueueItem[] {
-  const contradictionItems: ReviewQueueContradictionItem[] = input.contradictions.flatMap(
-    ({ page, pendingEntries }) =>
+  const contradictionItems: ReviewQueueContradictionItem[] =
+    input.contradictions.flatMap(({ page, pendingEntries }) =>
       pendingEntries.map(({ entryIndex, entry }) => ({
         kind: 'contradiction',
         id: `contradiction:${page.id}:${entryIndex}`,
@@ -209,37 +241,43 @@ export function buildReviewQueueItems(input: {
         contradictions: entry.contradictions ?? [],
         additions: entry.additions,
         mergedContentPreview: entry.merged_content ?? null,
-      }))
-  );
-
-  const routingItems: ReviewQueueRoutingItem[] = input.routing.map((candidate) => {
-    const [latestSource] = [...candidate.sourceLinks].sort(
-      (left, right) => toTimestamp(right.contributedAt) - toTimestamp(left.contributedAt)
+      })),
     );
 
-    const sourceCount = candidate.sourceLinks.length;
-    const sourceSummary =
-      sourceCount > 0
-        ? `${sourceCount} linked ${pluralize(sourceCount, 'source')} available for review.`
-        : 'No linked source context has been attached yet.';
+  const routingItems: ReviewQueueRoutingItem[] = input.routing.map(
+    (candidate) => {
+      const [latestSource] = candidate.sourceLinks.toSorted(
+        (left, right) =>
+          toTimestamp(right.contributedAt) - toTimestamp(left.contributedAt),
+      );
 
-    return {
-      kind: 'routing',
-      id: `routing:${candidate.pageId}`,
-      sortAt: latestSource?.contributedAt ?? candidate.updatedAt ?? candidate.createdAt,
-      pageId: candidate.pageId,
-      title: candidate.topic,
-      topic: candidate.topic,
-      app: candidate.app,
-      screen: candidate.screen,
-      sourceCount,
-      summary: `${describeRoutingGap(candidate)} ${sourceSummary}`,
-      latestSourceId: latestSource?.sourceId ?? null,
-      latestSourceTitle: latestSource?.sourceTitle ?? null,
-      latestSourceType: latestSource?.sourceType ?? null,
-      latestSourceAt: latestSource?.contributedAt ?? null,
-    };
-  });
+      const sourceCount = candidate.sourceLinks.length;
+      const sourceSummary =
+        sourceCount > 0
+          ? `${sourceCount} linked ${pluralize(sourceCount, 'source')} available for review.`
+          : 'No linked source context has been attached yet.';
+
+      return {
+        kind: 'routing',
+        id: `routing:${candidate.pageId}`,
+        sortAt:
+          latestSource?.contributedAt ??
+          candidate.updatedAt ??
+          candidate.createdAt,
+        pageId: candidate.pageId,
+        title: candidate.topic,
+        topic: candidate.topic,
+        app: candidate.app,
+        screen: candidate.screen,
+        sourceCount,
+        summary: `${describeRoutingGap(candidate)} ${sourceSummary}`,
+        latestSourceId: latestSource?.sourceId ?? null,
+        latestSourceTitle: latestSource?.sourceTitle ?? null,
+        latestSourceType: latestSource?.sourceType ?? null,
+        latestSourceAt: latestSource?.contributedAt ?? null,
+      };
+    },
+  );
 
   return sortReviewQueueItems([...contradictionItems, ...routingItems]);
 }
@@ -260,11 +298,13 @@ export function splitReviewQueueItemsByKind(items: ReviewQueueItem[]): {
       }
       return groups;
     },
-    { contradiction: [], routing: [] }
+    { contradiction: [], routing: [] },
   );
 }
 
-export async function listReviewQueueItems(orgId: string): Promise<ReviewQueueItem[]> {
+export async function listReviewQueueItems(
+  orgId: string,
+): Promise<ReviewQueueItem[]> {
   const [contradictions, routing] = await Promise.all([
     listPendingReviewPages(orgId),
     listPendingRoutingReviewCandidates(orgId),

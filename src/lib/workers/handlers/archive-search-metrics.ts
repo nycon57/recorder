@@ -60,7 +60,11 @@ export async function handleArchiveSearchMetrics(job: Job): Promise<void> {
   const redis = getRedis();
 
   logger.info('Starting search metrics archival', {
-    context: { jobId: job.id, organizationId: payload.organizationId, retentionDays },
+    context: {
+      jobId: job.id,
+      organizationId: payload.organizationId,
+      retentionDays,
+    },
   });
 
   if (!redis) {
@@ -89,18 +93,20 @@ export async function handleArchiveSearchMetrics(job: Job): Promise<void> {
     let totalCleaned = 0;
 
     // Step 2: Archive metrics for each organization
-    for (const org of organizations) {
-      try {
-        const archived = await archiveMetricsForOrg(supabase, redis, org.id);
-        totalArchived += archived;
-      } catch (error) {
-        logger.error('Failed to archive metrics for organization', {
-          context: { organizationId: org.id },
-          error: error as Error,
-        });
-        // Continue with other organizations
-      }
-    }
+    await Promise.all(
+      Array.from(organizations).map(async (org) => {
+        try {
+          const archived = await archiveMetricsForOrg(supabase, redis, org.id);
+          totalArchived += archived;
+        } catch (error) {
+          logger.error('Failed to archive metrics for organization', {
+            context: { organizationId: org.id },
+            error: error as Error,
+          });
+          // Continue with other organizations
+        }
+      }),
+    );
 
     // Step 3: Clean up old metrics (older than retention period)
     try {
@@ -110,7 +116,11 @@ export async function handleArchiveSearchMetrics(job: Job): Promise<void> {
     }
 
     logger.info('Search metrics archival completed', {
-      data: { totalArchived, totalCleaned, organizationsProcessed: organizations.length },
+      data: {
+        totalArchived,
+        totalCleaned,
+        organizationsProcessed: organizations.length,
+      },
     });
   } catch (error) {
     logger.error('Search metrics archival failed', { error: error as Error });
@@ -124,7 +134,7 @@ export async function handleArchiveSearchMetrics(job: Job): Promise<void> {
 async function archiveMetricsForOrg(
   supabase: ReturnType<typeof createAdminClient>,
   redis: NonNullable<ReturnType<typeof getRedis>>,
-  orgId: string
+  orgId: string,
 ): Promise<number> {
   const listKey = `search_metrics:list:${orgId}`;
 
@@ -138,89 +148,101 @@ async function archiveMetricsForOrg(
     return 0;
   }
 
-  logger.debug(`Found ${keys.length} metrics to archive for org ${orgId.substring(0, 8)}`);
+  logger.debug(
+    `Found ${keys.length} metrics to archive for org ${orgId.substring(0, 8)}`,
+  );
 
   // Fetch all metrics data
   const metricsData = await Promise.all(
-    (keys as string[]).map((key: string) => redis.get(key))
+    (keys as string[]).map((key: string) => redis.get(key)),
   );
 
   // Parse and transform metrics for database insertion
-  const metricsToInsert: Array<{
-    query_id: string;
-    org_id: string;
-    user_id: string | null;
-    search_timestamp: string;
-    query_text: string;
-    query_length: number;
-    query_word_count: number;
-    strategy: string | null;
-    similarity_threshold: number | null;
-    use_hybrid: boolean;
-    use_agentic: boolean;
-    sources_found: number;
-    avg_similarity: number | null;
-    min_similarity: number | null;
-    max_similarity: number | null;
-    embedding_time_ms: number | null;
-    search_time_ms: number | null;
-    total_time_ms: number;
-    retrieval_attempts: number;
-    retried_with_lower_threshold: boolean;
-    retried_with_hybrid: boolean;
-    retried_with_keyword: boolean;
-    success: boolean;
-    used_tool_fallback: boolean;
-  }> = [];
+  const metricsToInsert = (
+    await Promise.all(
+      metricsData.map(
+        async (
+          data,
+        ): Promise<{
+          query_id: string;
+          org_id: string;
+          user_id: string | null;
+          search_timestamp: string;
+          query_text: string;
+          query_length: number;
+          query_word_count: number;
+          strategy: string | null;
+          similarity_threshold: number | null;
+          use_hybrid: boolean;
+          use_agentic: boolean;
+          sources_found: number;
+          avg_similarity: number | null;
+          min_similarity: number | null;
+          max_similarity: number | null;
+          embedding_time_ms: number | null;
+          search_time_ms: number | null;
+          total_time_ms: number;
+          retrieval_attempts: number;
+          retried_with_lower_threshold: boolean;
+          retried_with_hybrid: boolean;
+          retried_with_keyword: boolean;
+          success: boolean;
+          used_tool_fallback: boolean;
+        } | null> => {
+          if (typeof data !== 'string') return null;
 
-  for (const data of metricsData) {
-    if (typeof data !== 'string') continue;
+          try {
+            const metric = JSON.parse(data) as RedisSearchMetric;
 
-    try {
-      const metric = JSON.parse(data) as RedisSearchMetric;
+            // Check if this metric was already archived (by query_id)
+            const { data: existing } = await supabase
+              .from('search_metrics_archive')
+              .select('id')
+              .eq('query_id', metric.queryId)
+              .limit(1);
 
-      // Check if this metric was already archived (by query_id)
-      const { data: existing } = await supabase
-        .from('search_metrics_archive')
-        .select('id')
-        .eq('query_id', metric.queryId)
-        .limit(1);
+            if (existing && existing.length > 0) {
+              // Already archived, skip
+              return null;
+            }
 
-      if (existing && existing.length > 0) {
-        // Already archived, skip
-        continue;
-      }
-
-      metricsToInsert.push({
-        query_id: metric.queryId,
-        org_id: metric.orgId,
-        user_id: metric.userId || null,
-        search_timestamp: metric.timestamp,
-        query_text: metric.query,
-        query_length: metric.queryLength,
-        query_word_count: metric.queryWordCount,
-        strategy: metric.strategy || null,
-        similarity_threshold: metric.threshold || null,
-        use_hybrid: metric.useHybrid || false,
-        use_agentic: metric.useAgentic || false,
-        sources_found: metric.sourcesFound || 0,
-        avg_similarity: metric.avgSimilarity || null,
-        min_similarity: metric.minSimilarity || null,
-        max_similarity: metric.maxSimilarity || null,
-        embedding_time_ms: metric.embeddingTimeMs || null,
-        search_time_ms: metric.searchTimeMs || null,
-        total_time_ms: metric.totalTimeMs || 0,
-        retrieval_attempts: metric.retrievalAttempts || 1,
-        retried_with_lower_threshold: metric.retriedWithLowerThreshold || false,
-        retried_with_hybrid: metric.retriedWithHybrid || false,
-        retried_with_keyword: metric.retriedWithKeyword || false,
-        success: metric.success || false,
-        used_tool_fallback: metric.usedToolFallback || false,
-      });
-    } catch (error) {
-      logger.warn('Failed to parse metric data', { error: error as Error });
-    }
-  }
+            return {
+              query_id: metric.queryId,
+              org_id: metric.orgId,
+              user_id: metric.userId || null,
+              search_timestamp: metric.timestamp,
+              query_text: metric.query,
+              query_length: metric.queryLength,
+              query_word_count: metric.queryWordCount,
+              strategy: metric.strategy || null,
+              similarity_threshold: metric.threshold || null,
+              use_hybrid: metric.useHybrid || false,
+              use_agentic: metric.useAgentic || false,
+              sources_found: metric.sourcesFound || 0,
+              avg_similarity: metric.avgSimilarity || null,
+              min_similarity: metric.minSimilarity || null,
+              max_similarity: metric.maxSimilarity || null,
+              embedding_time_ms: metric.embeddingTimeMs || null,
+              search_time_ms: metric.searchTimeMs || null,
+              total_time_ms: metric.totalTimeMs || 0,
+              retrieval_attempts: metric.retrievalAttempts || 1,
+              retried_with_lower_threshold:
+                metric.retriedWithLowerThreshold || false,
+              retried_with_hybrid: metric.retriedWithHybrid || false,
+              retried_with_keyword: metric.retriedWithKeyword || false,
+              success: metric.success || false,
+              used_tool_fallback: metric.usedToolFallback || false,
+            };
+          } catch (error) {
+            logger.warn('Failed to parse metric data', {
+              error: error as Error,
+            });
+            return null;
+          }
+        },
+      ),
+    )
+  ).filter((metric): metric is NonNullable<typeof metric> => Boolean(metric));
 
   if (metricsToInsert.length === 0) {
     logger.debug('No new metrics to archive (all already archived)', {
@@ -237,7 +259,7 @@ async function archiveMetricsForOrg(
   if (insertError) {
     if (insertError.code === '42P01') {
       throw new Error(
-        'search_metrics_archive table does not exist. Please apply the migration.'
+        'search_metrics_archive table does not exist. Please apply the migration.',
       );
     }
     throw new Error(`Failed to insert metrics: ${insertError.message}`);
@@ -256,7 +278,7 @@ async function archiveMetricsForOrg(
  */
 async function cleanupOldMetrics(
   supabase: ReturnType<typeof createAdminClient>,
-  retentionDays: number
+  retentionDays: number,
 ): Promise<number> {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
@@ -275,7 +297,11 @@ async function cleanupOldMetrics(
 
   if (deletedCount > 0) {
     logger.info('Cleaned up old metrics', {
-      data: { deletedCount, cutoffDate: cutoffDate.toISOString(), retentionDays },
+      data: {
+        deletedCount,
+        cutoffDate: cutoffDate.toISOString(),
+        retentionDays,
+      },
     });
   }
 

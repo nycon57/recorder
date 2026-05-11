@@ -1,6 +1,5 @@
 import type {
   PostgrestBuilder,
-  PostgrestFilterBuilder,
   PostgrestQueryBuilder,
   SupabaseClient,
 } from '@supabase/supabase-js';
@@ -10,7 +9,6 @@ import type { Database } from '@/lib/types/database';
 type AnySupabaseClient = SupabaseClient<any, any, any>;
 type AnyPostgrestBuilder<TResult> = PostgrestBuilder<any, TResult>;
 type AnyQueryBuilder = PostgrestQueryBuilder<any, any, any, any, any>;
-type AnyFilterBuilder = PostgrestFilterBuilder<any, any, any, any, any, any, any>;
 
 type QueryCount = 'exact' | 'planned' | 'estimated';
 type TableName = Extract<keyof Database['public']['Tables'], string>;
@@ -116,15 +114,15 @@ interface FluentFilterChain<TSelf> {
   ): TSelf;
 }
 
-export interface LightweightSelectedRowsBuilder<TRow extends Record<string, unknown>>
-  extends Omit<PostgrestFilterBuilder<any, any, TRow, TRow[], any, any, any>, 'single' | 'maybeSingle'>,
+interface LightweightSelectedRowsBuilder<TRow extends Record<string, unknown>>
+  extends AnyPostgrestBuilder<TRow[]>,
     FluentFilterChain<LightweightSelectedRowsBuilder<TRow>> {
   single(): AnyPostgrestBuilder<TRow>;
   maybeSingle(): AnyPostgrestBuilder<TRow | null>;
 }
 
-export interface LightweightMutationBuilder<TRow extends Record<string, unknown>>
-  extends Omit<PostgrestFilterBuilder<any, any, TRow, null, any, any, any>, 'select'>,
+interface LightweightMutationBuilder<TRow extends Record<string, unknown>>
+  extends AnyPostgrestBuilder<null>,
     FluentFilterChain<LightweightMutationBuilder<TRow>> {
   select<TResult extends Record<string, unknown> = TRow>(
     columns?: string,
@@ -132,7 +130,7 @@ export interface LightweightMutationBuilder<TRow extends Record<string, unknown>
   ): LightweightSelectedRowsBuilder<TResult>;
 }
 
-export interface LightweightReadQueryBuilder<
+interface LightweightReadQueryBuilder<
   TRow extends Record<string, unknown>,
   TInsert,
   TUpdate,
@@ -146,7 +144,7 @@ export interface LightweightReadQueryBuilder<
   ): LightweightSelectedRowsBuilder<TResult>;
 }
 
-export interface LightweightViewReadQueryBuilder<TRow extends Record<string, unknown>>
+interface LightweightViewReadQueryBuilder<TRow extends Record<string, unknown>>
   extends Omit<PostgrestQueryBuilder<any, any, GenericViewLike<TRow>, any, []>, 'select'> {
   select<TResult extends Record<string, unknown> = TRow>(
     columns?: string,
@@ -154,7 +152,7 @@ export interface LightweightViewReadQueryBuilder<TRow extends Record<string, unk
   ): LightweightSelectedRowsBuilder<TResult>;
 }
 
-export interface LightweightTableQueryBuilder<TTable extends TableName>
+interface LightweightTableQueryBuilder<TTable extends TableName>
   extends LightweightReadQueryBuilder<
     TableRow<TTable>,
     TableInsert<TTable>,
@@ -174,8 +172,8 @@ export interface LightweightTableQueryBuilder<TTable extends TableName>
   ): LightweightMutationBuilder<TableRow<TTable>>;
 }
 
-export interface LightweightViewQueryBuilder<TView extends ViewName>
-  extends LightweightViewReadQueryBuilder<ViewRow<TView>> {}
+type LightweightViewQueryBuilder<TView extends ViewName> =
+  LightweightViewReadQueryBuilder<ViewRow<TView>>;
 
 export type LightweightSupabaseClient = Omit<AnySupabaseClient, 'from' | 'rpc'> & {
   from<TTable extends TableName>(relation: TTable): LightweightTableQueryBuilder<TTable>;
@@ -185,8 +183,12 @@ export type LightweightSupabaseClient = Omit<AnySupabaseClient, 'from' | 'rpc'> 
     fn: TFunction,
     args?: FunctionArgs<TFunction>,
     options?: RpcOptions
-  ): AnyFilterBuilder;
-  rpc(fn: string, args?: Record<string, unknown>, options?: RpcOptions): AnyFilterBuilder;
+  ): AnyPostgrestBuilder<any>;
+  rpc(
+    fn: string,
+    args?: Record<string, unknown>,
+    options?: RpcOptions
+  ): AnyPostgrestBuilder<any>;
 };
 
 export function asLightweightSupabaseClient(

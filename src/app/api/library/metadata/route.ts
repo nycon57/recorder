@@ -159,7 +159,11 @@ async function fetchTags(
     throw new Error('Failed to fetch tags');
   }
 
-  let tagsWithCounts: CachedTag[] = tags || [];
+  let tagsWithCounts: CachedTag[] = (tags || []).map((tag) => ({
+    id: tag.id,
+    name: tag.name,
+    color: tag.color ?? '#64748b',
+  }));
 
   // If usage counts requested, fetch them
   if (includeUsageCount && tags && tags.length > 0) {
@@ -182,7 +186,7 @@ async function fetchTags(
       tagsWithCounts = tags.map((tag) => ({
         id: tag.id,
         name: tag.name,
-        color: tag.color,
+        color: tag.color ?? '#64748b',
         usage_count: usageMap[tag.id] || 0,
       }));
     }
@@ -213,7 +217,13 @@ async function fetchCollections(
     throw new Error('Failed to fetch collections');
   }
 
-  let collectionsWithCounts: CachedCollection[] = collections || [];
+  let collectionsWithCounts: CachedCollection[] = (collections || []).map(
+    (collection) => ({
+      id: collection.id,
+      name: collection.name,
+      description: collection.description ?? undefined,
+    }),
+  );
 
   // If item counts requested, fetch them
   if (includeItemCount && collections && collections.length > 0) {
@@ -236,7 +246,7 @@ async function fetchCollections(
       collectionsWithCounts = collections.map((collection) => ({
         id: collection.id,
         name: collection.name,
-        description: collection.description,
+        description: collection.description ?? undefined,
         item_count: itemMap[collection.id] || 0,
       }));
     }

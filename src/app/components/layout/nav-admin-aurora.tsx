@@ -1,11 +1,11 @@
-"use client"
+'use client';
 
-import * as React from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import * as motion from "motion/react-client"
-import { HugeiconsIcon } from "@hugeicons/react"
-import type { IconSvgElement } from "@hugeicons/react"
+import * as React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import * as motion from 'motion/react-client';
+import { HugeiconsIcon } from '@hugeicons/react';
+import type { IconSvgElement } from '@hugeicons/react';
 import {
   SecurityCheckIcon,
   Analytics02Icon,
@@ -14,9 +14,9 @@ import {
   Package01Icon,
   Edit02Icon,
   Database01Icon,
-} from "@hugeicons/core-free-icons"
+} from '@hugeicons/core-free-icons';
 
-import { Badge } from "@/app/components/ui/badge"
+import { Badge } from '@/app/components/ui/badge';
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -25,7 +25,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
-} from "@/app/components/ui/sidebar"
+} from '@/app/components/ui/sidebar';
 
 /**
  * NavAdminAurora Component
@@ -40,59 +40,59 @@ import {
  */
 
 interface AdminItem {
-  title: string
-  url: string
-  icon: IconSvgElement
-  description: string
+  title: string;
+  url: string;
+  icon: IconSvgElement;
+  description: string;
   /** When set, the item key that this badge count applies to (e.g. "reviewQueue"). */
-  badgeKey?: "reviewQueue"
+  badgeKey?: 'reviewQueue';
 }
 
 const adminItems: AdminItem[] = [
   {
-    title: "Dashboard",
-    url: "/admin",
+    title: 'Dashboard',
+    url: '/admin',
     icon: SecurityCheckIcon,
-    description: "System overview",
+    description: 'System overview',
   },
   {
-    title: "Metrics",
-    url: "/admin/metrics",
+    title: 'Metrics',
+    url: '/admin/metrics',
     icon: Analytics02Icon,
-    description: "Real-time metrics",
+    description: 'Real-time metrics',
   },
   {
-    title: "Jobs",
-    url: "/admin/jobs",
+    title: 'Jobs',
+    url: '/admin/jobs',
     icon: ZapIcon,
-    description: "Job queue status",
+    description: 'Job queue status',
   },
   {
-    title: "Alerts",
-    url: "/admin/alerts",
+    title: 'Alerts',
+    url: '/admin/alerts',
     icon: Alert02Icon,
-    description: "System alerts",
+    description: 'System alerts',
   },
   {
-    title: "Quotas",
-    url: "/admin/quotas",
+    title: 'Quotas',
+    url: '/admin/quotas',
     icon: Package01Icon,
-    description: "Quota management",
+    description: 'Quota management',
   },
   {
-    title: "Review Queue",
-    url: "/admin/wiki-review",
+    title: 'Review Queue',
+    url: '/admin/wiki-review',
     icon: Edit02Icon,
-    description: "Knowledge items awaiting review",
-    badgeKey: "reviewQueue",
+    description: 'Knowledge items awaiting review',
+    badgeKey: 'reviewQueue',
   },
   {
-    title: "Vendor Sources",
-    url: "/admin/vendor-sources",
+    title: 'Vendor Sources',
+    url: '/admin/vendor-sources',
     icon: Database01Icon,
-    description: "Canonical vendor corpus health",
+    description: 'Canonical vendor corpus health',
   },
-]
+];
 
 // Motion variants for staggered entrance
 const containerVariants = {
@@ -104,7 +104,7 @@ const containerVariants = {
       delayChildren: 0.3,
     },
   },
-}
+};
 
 const itemVariants = {
   hidden: { opacity: 0, x: -12 },
@@ -112,12 +112,12 @@ const itemVariants = {
     opacity: 1,
     x: 0,
     transition: {
-      type: "spring" as const,
+      type: 'spring' as const,
       stiffness: 400,
       damping: 30,
     },
   },
-}
+};
 
 const labelVariants = {
   hidden: { opacity: 0, y: -8 },
@@ -125,75 +125,63 @@ const labelVariants = {
     opacity: 1,
     y: 0,
     transition: {
-      type: "spring" as const,
+      type: 'spring' as const,
       stiffness: 400,
       damping: 30,
       delay: 0.25,
     },
   },
-}
+};
 
 interface NavAdminAuroraProps {
   /** TRIB-110: pending review-queue count for the current org. */
-  reviewQueueCount?: number
+  reviewQueueCount?: number;
 }
 
-export function NavAdminAurora({ reviewQueueCount = 0 }: NavAdminAuroraProps = {}) {
-  const pathname = usePathname()
-  const [mounted, setMounted] = React.useState(false)
+export function NavAdminAurora({
+  reviewQueueCount = 0,
+}: NavAdminAuroraProps = {}) {
+  const pathname = usePathname();
+  const MotionDiv = motion.div;
 
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  const MotionDiv = mounted ? motion.div : "div"
-
-  const badgeCounts: Record<NonNullable<AdminItem["badgeKey"]>, number> = {
+  const badgeCounts: Record<NonNullable<AdminItem['badgeKey']>, number> = {
     reviewQueue: reviewQueueCount,
-  }
+  };
 
   return (
     <SidebarGroup>
-      <MotionDiv
-        {...(mounted ? {
-          initial: "hidden",
-          animate: "visible",
-          variants: labelVariants,
-        } : {})}
-      >
+      <MotionDiv initial="hidden" animate="visible" variants={labelVariants}>
         <SidebarGroupLabel>Admin</SidebarGroupLabel>
       </MotionDiv>
       <SidebarGroupContent>
         <SidebarMenu>
           <SidebarMenuSub>
             <MotionDiv
-              {...(mounted ? {
-                variants: containerVariants,
-                initial: "hidden",
-                animate: "visible",
-              } : {})}
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
               className="space-y-0.5"
             >
               {adminItems.map((item, index) => {
-                const isActive = pathname === item.url
-                const badgeCount = item.badgeKey ? badgeCounts[item.badgeKey] : 0
+                const isActive = pathname === item.url;
+                const badgeCount = item.badgeKey
+                  ? badgeCounts[item.badgeKey]
+                  : 0;
 
                 return (
                   <MotionDiv
                     key={item.title}
-                    {...(mounted ? {
-                      variants: itemVariants,
-                      custom: index,
-                    } : {})}
+                    variants={itemVariants}
+                    custom={index}
                   >
                     <SidebarMenuSubItem>
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={isActive}
-                      >
+                      <SidebarMenuSubButton asChild isActive={isActive}>
                         <Link href={item.url} className="group/nav-item">
                           <span className="inline-flex transition-transform duration-200 group-hover/nav-item:scale-110">
-                            <HugeiconsIcon icon={item.icon} className="size-4" />
+                            <HugeiconsIcon
+                              icon={item.icon}
+                              className="size-4"
+                            />
                           </span>
                           <span className="flex-1">{item.title}</span>
                           {badgeCount > 0 && (
@@ -202,19 +190,19 @@ export function NavAdminAurora({ reviewQueueCount = 0 }: NavAdminAuroraProps = {
                               className="ml-auto h-5 min-w-5 justify-center px-1 text-[10px]"
                               aria-label={`${badgeCount} pending`}
                             >
-                              {badgeCount > 99 ? "99+" : badgeCount}
+                              {badgeCount > 99 ? '99+' : badgeCount}
                             </Badge>
                           )}
                         </Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
                   </MotionDiv>
-                )
+                );
               })}
             </MotionDiv>
           </SidebarMenuSub>
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  )
+  );
 }

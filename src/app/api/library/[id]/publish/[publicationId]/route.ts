@@ -63,28 +63,26 @@ export const dynamic = 'force-dynamic';
 export const DELETE = apiHandler(
   async (
     request: NextRequest,
-    {
-      params,
-    }: { params: Promise<{ id: string; publicationId: string }> }
+    { params }: { params: Promise<{ id: string; publicationId: string }> },
   ) => {
     const requestId = generateRequestId();
-    const { orgId, userId } = await requireOrg();
-    const { id: contentId, publicationId } = await params;
+    const [{ orgId, userId }, { id: contentId, publicationId }] =
+      await Promise.all([requireOrg(), params]);
 
     console.log(
-      `[Publication Delete API] Request for publication ${publicationId}, content ${contentId}, org ${orgId}`
+      `[Publication Delete API] Request for publication ${publicationId}, content ${contentId}, org ${orgId}`,
     );
 
     try {
       // 1. Parse query parameters
       const queryParams = parseSearchParams(
         request,
-        deletePublicationQuerySchema
+        deletePublicationQuerySchema,
       );
       const deleteExternal = queryParams.deleteExternal || false;
 
       console.log(
-        `[Publication Delete API] Delete external: ${deleteExternal}`
+        `[Publication Delete API] Delete external: ${deleteExternal}`,
       );
 
       // 2. Verify publication exists and belongs to org and content
@@ -98,7 +96,7 @@ export const DELETE = apiHandler(
       if (fetchError || !publication) {
         console.error(
           '[Publication Delete API] Publication not found:',
-          fetchError
+          fetchError,
         );
         return errors.notFound('Publication', requestId);
       }
@@ -106,19 +104,19 @@ export const DELETE = apiHandler(
       // Verify publication belongs to specified content
       if (publication.content_id !== contentId) {
         console.error(
-          '[Publication Delete API] Publication does not belong to content'
+          '[Publication Delete API] Publication does not belong to content',
         );
         return errors.badRequest(
           'Publication does not belong to this content',
           { publicationId, contentId },
-          requestId
+          requestId,
         );
       }
 
       // Check if already deleted (idempotent)
       if (publication.deleted_at) {
         console.log(
-          `[Publication Delete API] Publication already deleted: ${publicationId}`
+          `[Publication Delete API] Publication already deleted: ${publicationId}`,
         );
         return successResponse(
           {
@@ -126,7 +124,7 @@ export const DELETE = apiHandler(
             message: 'Publication already deleted',
             deletedAt: publication.deleted_at,
           },
-          requestId
+          requestId,
         );
       }
 
@@ -136,7 +134,7 @@ export const DELETE = apiHandler(
         publicationId,
         orgId,
         userId,
-        deleteExternal
+        deleteExternal,
       );
 
       if (!result.success) {
@@ -145,7 +143,7 @@ export const DELETE = apiHandler(
       }
 
       console.log(
-        `[Publication Delete API] Successfully deleted publication ${publicationId}${deleteExternal ? ' (including external)' : ''}`
+        `[Publication Delete API] Successfully deleted publication ${publicationId}${deleteExternal ? ' (including external)' : ''}`,
       );
 
       return successResponse(
@@ -156,7 +154,7 @@ export const DELETE = apiHandler(
             : 'Publication deleted from database',
           deletedAt: new Date().toISOString(),
         },
-        requestId
+        requestId,
       );
     } catch (error: any) {
       console.error('[Publication Delete API] Request error:', error);
@@ -168,5 +166,5 @@ export const DELETE = apiHandler(
 
       return errors.internalError(requestId);
     }
-  }
+  },
 );

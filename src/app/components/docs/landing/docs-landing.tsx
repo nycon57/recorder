@@ -18,7 +18,7 @@ export function DocsLanding({ audience, sections }: DocsLandingProps) {
     <div className="mx-auto max-w-4xl px-6 py-12">
       {/* Hero */}
       <header className="mb-12">
-        <h1 className="mb-3 font-[family-name:var(--font-space-grotesk)] text-4xl font-bold tracking-tight text-[color:var(--docs-text-primary)]">
+        <h1 className="mb-3 font-[family-name:var(--font-space-grotesk)] text-4xl font-semibold tracking-tight text-[color:var(--docs-text-primary)]">
           Tribora Documentation
         </h1>
         <p className="max-w-2xl text-lg leading-relaxed text-[color:var(--docs-text-secondary)]">

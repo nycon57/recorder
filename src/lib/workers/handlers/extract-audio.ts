@@ -5,10 +5,11 @@
  * Saves the extracted audio to Supabase Storage and enqueues transcription job.
  */
 
-import { writeFile, unlink } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+import { readFile, writeFile, unlink } from 'fs/promises';
+import { createRequire } from 'module';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 import ffmpeg from 'fluent-ffmpeg';
 
@@ -23,9 +24,13 @@ import {
 
 import type { ProgressCallback } from '../job-processor';
 
+const loadOptionalPackage = createRequire(import.meta.url);
+
 // Import ffmpeg binary path if installed via @ffmpeg-installer/ffmpeg
 try {
-  const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+  const ffmpegInstaller = loadOptionalPackage('@ffmpeg-installer/ffmpeg') as {
+    path?: string;
+  };
   if (ffmpegInstaller && ffmpegInstaller.path) {
     ffmpeg.setFfmpegPath(ffmpegInstaller.path);
   }
@@ -176,7 +181,7 @@ export async function handleExtractAudio(
     );
 
     // Upload audio to Supabase Storage
-    const audioBuffer = await require('fs').promises.readFile(tempAudioPath);
+    const audioBuffer = await readFile(tempAudioPath);
     const audioStoragePath = videoPath.replace(/\.[^.]+$/, '.mp3');
 
     const { error: uploadError } = await supabase.storage

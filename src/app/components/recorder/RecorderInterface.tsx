@@ -63,7 +63,7 @@ export default function RecorderInterface() {
                   </h3>
                   {isRecording && (
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
+                      <div className="size-2 bg-destructive rounded-full animate-pulse" />
                       <span className="text-xs text-muted-foreground">Live</span>
                     </div>
                   )}

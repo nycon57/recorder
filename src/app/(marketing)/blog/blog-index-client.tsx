@@ -1,0 +1,1029 @@
+'use client';
+
+import { useReducer, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import * as motion from 'motion/react-client';
+import type { Variants } from 'motion/react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { HugeiconsIcon } from '@hugeicons/react';
+import {
+  ArrowRight01Icon,
+  Clock01Icon,
+  SparklesIcon,
+  BookOpen01Icon,
+  Search01Icon,
+  SortingAZ01Icon,
+  Cancel01Icon,
+  CheckmarkSquare01Icon,
+  SquareIcon,
+  ArrowDown01Icon,
+  Folder01Icon,
+  Tag01Icon,
+} from '@hugeicons/core-free-icons';
+
+import { cn } from '@/lib/utils';
+import { Badge } from '@/app/components/ui/badge';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/app/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/app/components/ui/command';
+import type { BlogPostCard, BlogPostCategory } from '@/lib/types/database';
+
+// Animation variants
+const fadeInUp: Variants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring',
+      stiffness: 400,
+      damping: 30,
+    },
+  },
+};
+
+const staggerContainer: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+const cardVariants: Variants = {
+  hidden: { opacity: 0, y: 30, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      type: 'spring',
+      stiffness: 400,
+      damping: 25,
+    },
+  },
+};
+
+const CATEGORIES: { value: BlogPostCategory | 'all'; label: string }[] = [
+  { value: 'all', label: 'All Posts' },
+  { value: 'product', label: 'Product' },
+  { value: 'insights', label: 'Insights' },
+  { value: 'tutorials', label: 'Tutorials' },
+];
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest First' },
+  { value: 'oldest', label: 'Oldest First' },
+  { value: 'title', label: 'Title A-Z' },
+  { value: 'reading_time', label: 'Reading Time' },
+];
+
+const CATEGORY_COLORS: Record<BlogPostCategory, string> = {
+  product: 'bg-accent/10 text-accent border-accent/30',
+  insights: 'bg-secondary/10 text-secondary border-secondary/30',
+  tutorials: 'bg-primary/10 text-primary border-primary/30',
+  general: 'bg-muted text-muted-foreground border-border',
+};
+
+interface BlogFilterState {
+  searchQuery: string;
+  selectedCategories: BlogPostCategory[];
+  selectedTags: string[];
+  sortBy: string;
+  categoryOpen: boolean;
+  tagOpen: boolean;
+}
+
+type BlogFilterAction =
+  | Partial<BlogFilterState>
+  | ((state: BlogFilterState) => BlogFilterState);
+
+const initialBlogFilterState: BlogFilterState = {
+  searchQuery: '',
+  selectedCategories: [],
+  selectedTags: [],
+  sortBy: 'newest',
+  categoryOpen: false,
+  tagOpen: false,
+};
+
+const blogFilterReducer = (
+  state: BlogFilterState,
+  action: BlogFilterAction,
+): BlogFilterState =>
+  typeof action === 'function' ? action(state) : { ...state, ...action };
+
+/**
+ * Blog Archive Page - Premium blog listing with aurora styling
+ *
+ * Features:
+ * - Featured posts section with hero card
+ * - Search functionality
+ * - Category filtering
+ * - Sort options
+ * - Tag filtering
+ * - Aurora gradient backgrounds
+ * - Glass-effect cards
+ * - Responsive grid layout
+ */
+export default function BlogPage() {
+  return useBlogPageImplementation();
+}
+
+function useBlogPageImplementation() {
+  const [
+    {
+      searchQuery,
+      selectedCategories,
+      selectedTags,
+      sortBy,
+      categoryOpen,
+      tagOpen,
+    },
+    updateFilters,
+  ] = useReducer(blogFilterReducer, initialBlogFilterState);
+
+  const { data: blogData, isLoading } = useQuery<{
+    posts: BlogPostCard[];
+    featuredPost: BlogPostCard | null;
+  }>({
+    queryKey: ['blog', 'index'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch('/api/blog?limit=50', { signal });
+      if (!response.ok) {
+        throw new Error('Failed to fetch blog posts');
+      }
+      const data = await response.json();
+      const posts = data.posts || [];
+      return {
+        posts,
+        featuredPost: posts.find((p: BlogPostCard) => p.is_featured) || null,
+      };
+    },
+  });
+
+  const posts = blogData?.posts ?? [];
+  const featuredPost = blogData?.featuredPost ?? null;
+
+  // Extract all unique tags from posts
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    posts.forEach((post) => {
+      post.tags?.forEach((tag) => tagSet.add(tag));
+    });
+    return Array.from(tagSet).sort();
+  }, [posts]);
+
+  // Filter and sort posts
+  const filteredPosts = useMemo(() => {
+    let result = posts.filter((p) => !p.is_featured);
+
+    // Category filter (multi-select)
+    if (selectedCategories.length > 0) {
+      result = result.filter((p) => selectedCategories.includes(p.category));
+    }
+
+    // Tag filter (multi-select)
+    if (selectedTags.length > 0) {
+      result = result.filter((p) =>
+        p.tags?.some((tag) => selectedTags.includes(tag)),
+      );
+    }
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.title.toLowerCase().includes(query) ||
+          p.excerpt?.toLowerCase().includes(query) ||
+          p.author_name.toLowerCase().includes(query) ||
+          p.tags?.some((tag) => tag.toLowerCase().includes(query)),
+      );
+    }
+
+    // Sort
+    switch (sortBy) {
+      case 'oldest':
+        result.sort(
+          (a, b) =>
+            new Date(a.published_at || 0).getTime() -
+            new Date(b.published_at || 0).getTime(),
+        );
+        break;
+      case 'title':
+        result.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'reading_time':
+        result.sort(
+          (a, b) =>
+            (a.reading_time_minutes ?? 0) - (b.reading_time_minutes ?? 0),
+        );
+        break;
+      case 'newest':
+      default:
+        result.sort(
+          (a, b) =>
+            new Date(b.published_at || 0).getTime() -
+            new Date(a.published_at || 0).getTime(),
+        );
+        break;
+    }
+
+    return result;
+  }, [posts, selectedCategories, selectedTags, searchQuery, sortBy]);
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const clearFilters = () => {
+    updateFilters({
+      searchQuery: '',
+      selectedCategories: [],
+      selectedTags: [],
+      sortBy: 'newest',
+    });
+  };
+
+  const hasActiveFilters =
+    searchQuery || selectedCategories.length > 0 || selectedTags.length > 0;
+
+  // Toggle category selection
+  const toggleCategory = (category: BlogPostCategory) => {
+    updateFilters((state) => ({
+      ...state,
+      selectedCategories: state.selectedCategories.includes(category)
+        ? state.selectedCategories.filter((c) => c !== category)
+        : [...state.selectedCategories, category],
+    }));
+  };
+
+  // Toggle tag selection
+  const toggleTag = (tag: string) => {
+    updateFilters((state) => ({
+      ...state,
+      selectedTags: state.selectedTags.includes(tag)
+        ? state.selectedTags.filter((t) => t !== tag)
+        : [...state.selectedTags, tag],
+    }));
+  };
+
+  return (
+    <main className="relative min-h-screen bg-background">
+      {/* === BACKGROUND LAYERS === */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Aurora orbs */}
+        <div
+          className="absolute top-[-10%] right-[10%] size-[600px] rounded-full
+            bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.12)_0%,transparent_70%)]
+            blur-[100px] animate-float"
+          style={{ animationDelay: '0s' }}
+        />
+        <div
+          className="absolute bottom-[20%] left-[5%] size-[400px] rounded-full
+            bg-[radial-gradient(ellipse_at_center,rgba(44,194,149,0.08)_0%,transparent_70%)]
+            blur-[80px] animate-float"
+          style={{ animationDelay: '2s' }}
+        />
+
+        {/* Radial gradient from top */}
+        <div
+          className="absolute inset-0
+            bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(0,223,130,0.08),transparent_60%)]"
+        />
+
+        {/* Dot pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.3]
+            bg-[radial-gradient(rgba(0,223,130,0.4)_1px,transparent_1px)]
+            [background-size:24px_24px]
+            [mask-image:radial-gradient(ellipse_80%_60%_at_50%_20%,black_10%,transparent_60%)]"
+        />
+
+        {/* Grid lines */}
+        <div
+          className="absolute inset-0 opacity-[0.015]"
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, rgba(0,223,130,0.5) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(0,223,130,0.5) 1px, transparent 1px)
+            `,
+            backgroundSize: '60px 60px',
+          }}
+        />
+      </div>
+
+      {/* === CONTENT === */}
+      <div className="relative z-10 container px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28 lg:pt-32 pb-20">
+        {/* Header */}
+        <motion.div
+          className="text-center max-w-3xl mx-auto mb-12 sm:mb-16"
+          initial="hidden"
+          animate="visible"
+          variants={staggerContainer}
+        >
+          <motion.div variants={fadeInUp}>
+            <Badge
+              variant="outline"
+              className="mb-6 px-4 py-2 rounded-full
+                bg-accent/5 backdrop-blur-sm
+                border-accent/30"
+            >
+              <HugeiconsIcon
+                icon={BookOpen01Icon}
+                size={14}
+                className="mr-2 text-accent"
+              />
+              <span className="text-sm font-medium text-accent">Blog</span>
+            </Badge>
+          </motion.div>
+
+          <motion.h1
+            className="font-outfit text-4xl sm:text-5xl lg:text-6xl font-light
+              leading-tight tracking-tight mb-4 sm:mb-6"
+            variants={fadeInUp}
+          >
+            Insights & <span className=" text-primary">Knowledge</span>
+          </motion.h1>
+
+          <motion.p
+            className="text-lg sm:text-xl text-muted-foreground font-light max-w-2xl mx-auto"
+            variants={fadeInUp}
+          >
+            Explore the latest in knowledge management, AI, and team
+            productivity. Learn how leading teams capture and share expertise.
+          </motion.p>
+        </motion.div>
+
+        {/* Featured Post - Single Hero */}
+        {featuredPost && (
+          <motion.section
+            className="mb-16 sm:mb-20"
+            initial="hidden"
+            animate="visible"
+            variants={staggerContainer}
+          >
+            <motion.div
+              className="flex items-center gap-2 mb-6"
+              variants={fadeInUp}
+            >
+              <HugeiconsIcon
+                icon={SparklesIcon}
+                size={20}
+                className="text-accent"
+              />
+              <h2 className="text-lg font-medium text-foreground">Featured</h2>
+            </motion.div>
+
+            <motion.article
+              variants={cardVariants}
+              whileHover={{
+                y: -8,
+                transition: { type: 'spring', stiffness: 400, damping: 25 },
+              }}
+            >
+              <Link
+                href={`/blog/${featuredPost.slug}`}
+                className={cn(
+                  'group block relative rounded-2xl overflow-hidden',
+                  'bg-card/50 backdrop-blur-sm',
+                  'border border-accent/30',
+                  'hover:border-accent/50 hover:shadow-[0_0_50px_rgba(0,223,130,0.15)]',
+                  'transition-all duration-500',
+                )}
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-2">
+                  {/* Featured image area - larger on single featured */}
+                  <div className="aspect-[16/10] lg:aspect-auto lg:min-h-[400px] bg-gradient-to-br from-accent/10 via-card to-secondary/10 relative">
+                    {featuredPost.featured_image_url ? (
+                      <Image
+                        src={featuredPost.featured_image_url}
+                        alt={featuredPost.title}
+                        fill
+                        sizes="(min-width: 1024px) 50vw, 100vw"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <HugeiconsIcon
+                          icon={BookOpen01Icon}
+                          size={64}
+                          className="text-accent/30"
+                        />
+                      </div>
+                    )}
+                    {/* Featured badge */}
+                    <div className="absolute top-4 left-4">
+                      <Badge className="bg-accent text-accent-foreground border-0">
+                        <HugeiconsIcon
+                          icon={SparklesIcon}
+                          size={12}
+                          className="mr-1"
+                        />
+                        Featured
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-8 lg:p-10 flex flex-col justify-center">
+                    <div className="flex items-center gap-3 mb-4">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-xs',
+                          CATEGORY_COLORS[featuredPost.category],
+                        )}
+                      >
+                        {featuredPost.category}
+                      </Badge>
+                      <span className="flex items-center text-sm text-muted-foreground">
+                        <HugeiconsIcon
+                          icon={Clock01Icon}
+                          size={14}
+                          className="mr-1"
+                        />
+                        {featuredPost.reading_time_minutes} min read
+                      </span>
+                    </div>
+
+                    <h3 className="font-outfit text-2xl lg:text-3xl font-medium text-foreground mb-4 group-hover:text-accent transition-colors">
+                      {featuredPost.title}
+                    </h3>
+
+                    {featuredPost.excerpt && (
+                      <p className="text-base text-muted-foreground line-clamp-3 mb-6">
+                        {featuredPost.excerpt}
+                      </p>
+                    )}
+
+                    {/* Tags preview */}
+                    {featuredPost.tags && featuredPost.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-6">
+                        {featuredPost.tags.slice(0, 4).map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-xs text-muted-foreground/70 bg-muted/30 px-2.5 py-1 rounded-full"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-4 border-t border-border/30">
+                      <div className="flex items-center gap-3">
+                        <div className="size-10 rounded-full bg-accent/10 flex items-center justify-center">
+                          <span className="text-sm font-medium text-accent">
+                            {featuredPost.author_name
+                              .split(' ')
+                              .map((n) => n[0])
+                              .join('')}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {featuredPost.author_name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(featuredPost.published_at)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span className="flex items-center text-sm font-medium text-accent group-hover:translate-x-1 transition-transform">
+                        Read article
+                        <HugeiconsIcon
+                          icon={ArrowRight01Icon}
+                          size={18}
+                          className="ml-2"
+                        />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            </motion.article>
+          </motion.section>
+        )}
+
+        {/* Search, Filter & Sort Bar */}
+        <motion.div
+          className="mb-8 space-y-4"
+          initial="hidden"
+          animate="visible"
+          variants={fadeInUp}
+        >
+          {/* All Controls Row */}
+          <div className="flex flex-col lg:flex-row gap-3">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-0">
+              <HugeiconsIcon
+                icon={Search01Icon}
+                size={18}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                type="text"
+                placeholder="Search posts..."
+                value={searchQuery}
+                onChange={(e) => updateFilters({ searchQuery: e.target.value })}
+                className="pl-10 bg-card/50 border-border/50 focus:border-accent/50
+                  placeholder:text-muted-foreground/50"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => updateFilters({ searchQuery: '' })}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <HugeiconsIcon icon={Cancel01Icon} size={16} />
+                </button>
+              )}
+            </div>
+
+            {/* Filters Group */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Category Multi-Select */}
+              <Popover
+                open={categoryOpen}
+                onOpenChange={(isOpen) =>
+                  updateFilters({ categoryOpen: isOpen })
+                }
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={categoryOpen}
+                    aria-controls="blog-category-filter-list"
+                    className={cn(
+                      'w-[200px] justify-between bg-card/50 border-border/50',
+                      'hover:border-accent/30 transition-all duration-300',
+                      selectedCategories.length > 0 &&
+                        'border-accent/50 text-foreground',
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <HugeiconsIcon
+                        icon={Folder01Icon}
+                        size={16}
+                        className="text-muted-foreground shrink-0"
+                      />
+                      <span className="truncate">
+                        {selectedCategories.length === 0
+                          ? 'All Categories'
+                          : selectedCategories.length === 1
+                            ? CATEGORIES.find(
+                                (c) => c.value === selectedCategories[0],
+                              )?.label
+                            : `${selectedCategories.length} categories`}
+                      </span>
+                    </div>
+                    <HugeiconsIcon
+                      icon={ArrowDown01Icon}
+                      size={16}
+                      className={cn(
+                        'ml-2 shrink-0 text-muted-foreground transition-transform duration-200',
+                        categoryOpen && 'rotate-180',
+                      )}
+                    />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[200px] p-0 bg-card/95 backdrop-blur-sm border-border/50"
+                  align="start"
+                >
+                  <Command
+                    id="blog-category-filter-list"
+                    className="bg-transparent"
+                  >
+                    <CommandInput
+                      placeholder="Search categories..."
+                      className="h-9 border-0"
+                    />
+                    <CommandList>
+                      <CommandEmpty>No category found.</CommandEmpty>
+                      <CommandGroup>
+                        {CATEGORIES.flatMap((__item, __index, __array) =>
+                          __item.value !== 'all'
+                            ? [
+                                <CommandItem
+                                  key={__item.value}
+                                  value={__item.value}
+                                  onSelect={() =>
+                                    toggleCategory(
+                                      __item.value as BlogPostCategory,
+                                    )
+                                  }
+                                  className="cursor-pointer"
+                                >
+                                  <HugeiconsIcon
+                                    icon={
+                                      selectedCategories.includes(
+                                        __item.value as BlogPostCategory,
+                                      )
+                                        ? CheckmarkSquare01Icon
+                                        : SquareIcon
+                                    }
+                                    size={16}
+                                    className={cn(
+                                      'mr-2',
+                                      selectedCategories.includes(
+                                        __item.value as BlogPostCategory,
+                                      )
+                                        ? 'text-accent'
+                                        : 'text-muted-foreground',
+                                    )}
+                                  />
+                                  {__item.label}
+                                </CommandItem>,
+                              ]
+                            : [],
+                        )}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+
+              {/* Tags Multi-Select */}
+              {allTags.length > 0 && (
+                <Popover
+                  open={tagOpen}
+                  onOpenChange={(isOpen) => updateFilters({ tagOpen: isOpen })}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={tagOpen}
+                      aria-controls="blog-tag-filter-list"
+                      className={cn(
+                        'w-[200px] justify-between bg-card/50 border-border/50',
+                        'hover:border-accent/30 transition-all duration-300',
+                        selectedTags.length > 0 &&
+                          'border-accent/50 text-foreground',
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <HugeiconsIcon
+                          icon={Tag01Icon}
+                          size={16}
+                          className="text-muted-foreground shrink-0"
+                        />
+                        <span className="truncate">
+                          {selectedTags.length === 0
+                            ? 'All Tags'
+                            : selectedTags.length === 1
+                              ? selectedTags[0]
+                              : `${selectedTags.length} tags`}
+                        </span>
+                      </div>
+                      <HugeiconsIcon
+                        icon={ArrowDown01Icon}
+                        size={16}
+                        className={cn(
+                          'ml-2 shrink-0 text-muted-foreground transition-transform duration-200',
+                          tagOpen && 'rotate-180',
+                        )}
+                      />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[220px] p-0 bg-card/95 backdrop-blur-sm border-border/50"
+                    align="start"
+                  >
+                    <Command
+                      id="blog-tag-filter-list"
+                      className="bg-transparent"
+                    >
+                      <CommandInput
+                        placeholder="Search tags..."
+                        className="h-9 border-0"
+                      />
+                      <CommandList className="max-h-[250px]">
+                        <CommandEmpty>No tag found.</CommandEmpty>
+                        <CommandGroup>
+                          {allTags.map((tag) => (
+                            <CommandItem
+                              key={tag}
+                              value={tag}
+                              onSelect={() => toggleTag(tag)}
+                              className="cursor-pointer"
+                            >
+                              <HugeiconsIcon
+                                icon={
+                                  selectedTags.includes(tag)
+                                    ? CheckmarkSquare01Icon
+                                    : SquareIcon
+                                }
+                                size={16}
+                                className={cn(
+                                  'mr-2',
+                                  selectedTags.includes(tag)
+                                    ? 'text-accent'
+                                    : 'text-muted-foreground',
+                                )}
+                              />
+                              {tag}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+
+              {/* Sort Select */}
+              <Select
+                value={sortBy}
+                onValueChange={(nextSort) =>
+                  updateFilters({ sortBy: nextSort })
+                }
+              >
+                <SelectTrigger className="w-[170px] bg-card/50 border-border/50">
+                  <HugeiconsIcon
+                    icon={SortingAZ01Icon}
+                    size={16}
+                    className="mr-2 text-muted-foreground shrink-0"
+                  />
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Clear Filters Button */}
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={clearFilters}
+                >
+                  <HugeiconsIcon
+                    icon={Cancel01Icon}
+                    size={14}
+                    className="mr-1"
+                  />
+                  Clear filters
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Active Filters Display */}
+          {(selectedCategories.length > 0 || selectedTags.length > 0) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedCategories.map((cat) => (
+                <Badge
+                  key={cat}
+                  variant="outline"
+                  className="bg-accent/10 border-accent/30 text-accent cursor-pointer hover:bg-accent/20"
+                  onClick={() => toggleCategory(cat)}
+                >
+                  {CATEGORIES.find((c) => c.value === cat)?.label}
+                  <HugeiconsIcon
+                    icon={Cancel01Icon}
+                    size={12}
+                    className="ml-1"
+                  />
+                </Badge>
+              ))}
+              {selectedTags.map((tag) => (
+                <Badge
+                  key={tag}
+                  variant="outline"
+                  className="bg-secondary/10 border-secondary/30 text-secondary cursor-pointer hover:bg-secondary/20"
+                  onClick={() => toggleTag(tag)}
+                >
+                  {tag}
+                  <HugeiconsIcon
+                    icon={Cancel01Icon}
+                    size={12}
+                    className="ml-1"
+                  />
+                </Badge>
+              ))}
+            </div>
+          )}
+        </motion.div>
+
+        {/* Results count */}
+        {!isLoading && (
+          <motion.p
+            className="text-sm text-muted-foreground mb-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            {filteredPosts.length}{' '}
+            {filteredPosts.length === 1 ? 'post' : 'posts'} found
+            {hasActiveFilters && ' (filtered)'}
+          </motion.p>
+        )}
+
+        {/* Posts Grid */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[
+              'post-card-1',
+              'post-card-2',
+              'post-card-3',
+              'post-card-4',
+              'post-card-5',
+              'post-card-6',
+            ].map((skeletonId) => (
+              <div
+                key={skeletonId}
+                className="rounded-2xl bg-card/30 border border-border/30 animate-pulse"
+              >
+                <div className="aspect-[16/10] bg-muted/20" />
+                <div className="p-5 space-y-3">
+                  <div className="h-4 w-20 bg-muted/20 rounded" />
+                  <div className="h-6 w-3/4 bg-muted/20 rounded" />
+                  <div className="h-4 w-full bg-muted/20 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            initial="hidden"
+            animate="visible"
+            variants={staggerContainer}
+            key={`${selectedCategories.join(',')}-${selectedTags.join(',')}-${searchQuery}-${sortBy}`}
+          >
+            {filteredPosts.map((post) => (
+              <motion.article
+                key={post.id}
+                variants={cardVariants}
+                whileHover={{
+                  y: -6,
+                  transition: { type: 'spring', stiffness: 400, damping: 25 },
+                }}
+              >
+                <Link
+                  href={`/blog/${post.slug}`}
+                  className={cn(
+                    'group block relative rounded-xl overflow-hidden h-full',
+                    'bg-card/30 backdrop-blur-sm',
+                    'border border-border/50',
+                    'hover:border-accent/30 hover:shadow-[0_0_30px_rgba(0,223,130,0.1)]',
+                    'transition-all duration-500',
+                  )}
+                >
+                  {/* Image area */}
+                  <div className="aspect-[16/10] bg-gradient-to-br from-accent/5 via-card to-secondary/5 relative">
+                    {post.featured_image_url ? (
+                      <Image
+                        src={post.featured_image_url}
+                        alt={post.title}
+                        fill
+                        sizes="(min-width: 1024px) 33vw, 100vw"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <HugeiconsIcon
+                          icon={BookOpen01Icon}
+                          size={32}
+                          className="text-accent/20"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-xs',
+                          CATEGORY_COLORS[post.category],
+                        )}
+                      >
+                        {post.category}
+                      </Badge>
+                      <span className="flex items-center text-xs text-muted-foreground">
+                        <HugeiconsIcon
+                          icon={Clock01Icon}
+                          size={12}
+                          className="mr-1"
+                        />
+                        {post.reading_time_minutes} min
+                      </span>
+                    </div>
+
+                    <h3 className="font-outfit text-lg font-medium text-foreground mb-2 line-clamp-2 group-hover:text-accent transition-colors">
+                      {post.title}
+                    </h3>
+
+                    {post.excerpt && (
+                      <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                        {post.excerpt}
+                      </p>
+                    )}
+
+                    {/* Tags preview */}
+                    {post.tags && post.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {post.tags.slice(0, 2).map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-xs text-muted-foreground/70 bg-muted/30 px-2 py-0.5 rounded"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        {post.tags.length > 2 && (
+                          <span className="text-xs text-muted-foreground/50">
+                            +{post.tags.length - 2}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-4 border-t border-border/30">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                          {post.author_name}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDate(post.published_at)}
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              </motion.article>
+            ))}
+          </motion.div>
+        )}
+
+        {/* Empty State */}
+        {!isLoading && filteredPosts.length === 0 && (
+          <motion.div
+            className="text-center py-16"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <HugeiconsIcon
+              icon={BookOpen01Icon}
+              size={48}
+              className="mx-auto text-muted-foreground/30 mb-4"
+            />
+            <p className="text-lg text-muted-foreground mb-4">
+              No posts found.
+            </p>
+            {hasActiveFilters && (
+              <Button
+                variant="outline"
+                className="rounded-full"
+                onClick={clearFilters}
+              >
+                Clear all filters
+              </Button>
+            )}
+          </motion.div>
+        )}
+      </div>
+    </main>
+  );
+}

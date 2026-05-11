@@ -63,7 +63,7 @@ export function getGoogleAuth(): GoogleAuth {
 /**
  * Get the project ID from credentials
  */
-export async function getProjectId(): Promise<string> {
+async function getProjectId(): Promise<string> {
   const auth = getGoogleAuth();
   const projectId = await auth.getProjectId();
 

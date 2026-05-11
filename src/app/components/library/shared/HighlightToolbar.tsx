@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { ChevronLeft, ChevronRight, Eye, EyeOff, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 
 import { Button } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -69,6 +69,11 @@ export function HighlightToolbar({
   onClose,
   className,
 }: HighlightToolbarProps) {
+  const onNextEvent = React.useEffectEvent(onNext);
+  const onPreviousEvent = React.useEffectEvent(onPrevious);
+  const onToggleEvent = React.useEffectEvent(onToggle);
+  const onCloseEvent = React.useEffectEvent(onClose);
+
   // Keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -84,30 +89,30 @@ export function HighlightToolbar({
       switch (e.key.toLowerCase()) {
         case 'n':
           e.preventDefault();
-          onNext();
+          onNextEvent();
           break;
         case 'p':
           e.preventDefault();
-          onPrevious();
+          onPreviousEvent();
           break;
         case 't':
           e.preventDefault();
-          onToggle();
+          onToggleEvent();
           break;
         case 'escape':
           e.preventDefault();
-          onClose();
+          onCloseEvent();
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onNext, onPrevious, onToggle, onClose]);
+  }, []);
 
   return (
     <AnimatePresence>
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 20 }}
@@ -115,7 +120,7 @@ export function HighlightToolbar({
           'fixed bottom-6 right-6 z-50',
           'rounded-lg border border-border bg-card shadow-lg',
           'flex items-center gap-2 p-2',
-          className
+          className,
         )}
       >
         {/* Highlight info */}
@@ -124,9 +129,7 @@ export function HighlightToolbar({
             {currentIndex + 1}
           </span>
           <span>of</span>
-          <span className="font-medium text-foreground">
-            {totalHighlights}
-          </span>
+          <span className="font-medium text-foreground">{totalHighlights}</span>
           <span className="text-xs">highlights</span>
         </div>
 
@@ -138,25 +141,25 @@ export function HighlightToolbar({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="size-8"
             onClick={onPrevious}
             disabled={currentIndex === 0}
             aria-label="Previous highlight (P)"
             title="Previous (P)"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="size-4" />
           </Button>
 
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="size-8"
             onClick={onNext}
             disabled={currentIndex === totalHighlights - 1}
             aria-label="Next highlight (N)"
             title="Next (N)"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="size-4" />
           </Button>
         </div>
 
@@ -167,15 +170,17 @@ export function HighlightToolbar({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="size-8"
           onClick={onToggle}
-          aria-label={highlightsEnabled ? 'Hide highlights (T)' : 'Show highlights (T)'}
+          aria-label={
+            highlightsEnabled ? 'Hide highlights (T)' : 'Show highlights (T)'
+          }
           title={highlightsEnabled ? 'Hide (T)' : 'Show (T)'}
         >
           {highlightsEnabled ? (
-            <Eye className="h-4 w-4" />
+            <Eye className="size-4" />
           ) : (
-            <EyeOff className="h-4 w-4" />
+            <EyeOff className="size-4" />
           )}
         </Button>
 
@@ -186,14 +191,14 @@ export function HighlightToolbar({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="size-8"
           onClick={onClose}
           aria-label="Close toolbar (Esc)"
           title="Close (Esc)"
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
         </Button>
-      </motion.div>
+      </m.div>
     </AnimatePresence>
   );
 }

@@ -34,7 +34,7 @@ export interface WikiRoutingReviewDecision {
   reasons: string[];
 }
 
-export interface WikiRoutingAuditEntry {
+interface WikiRoutingAuditEntry {
   kind: 'queued' | 'approved' | 'rejected' | 'compiled';
   at: string;
   route: WikiRoute;
@@ -80,7 +80,7 @@ const ROUTING_METADATA_KEY = 'wiki_routing_review';
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.75;
 const DEFAULT_JOB_PRIORITY = 2;
 
-export const WIKI_ROUTING_APPROVAL_ACTION = 'review_wiki_routing';
+const WIKI_ROUTING_APPROVAL_ACTION = 'review_wiki_routing';
 
 function isJsonObject(value: unknown): value is Record<string, Json | undefined> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -339,7 +339,7 @@ export function approveWikiRoutingOverrideMetadata(
   return writeRoutingState(metadata, nextState);
 }
 
-export function rejectWikiRoutingReviewMetadata(
+function rejectWikiRoutingReviewMetadata(
   metadata: Json | null | undefined,
   input: {
     rejectedAt: string;
@@ -495,7 +495,7 @@ async function updateContentMetadata(input: {
   }
 }
 
-export async function requestWikiRoutingReview(input: {
+async function requestWikiRoutingReview(input: {
   supabase?: SupabaseAdminClient;
   orgId: string;
   recordingId: string;
@@ -548,7 +548,7 @@ export async function requestWikiRoutingReview(input: {
   return { approvalId, metadata: nextMetadata };
 }
 
-export async function markWikiRoutingCompileCompleted(input: {
+async function markWikiRoutingCompileCompleted(input: {
   supabase?: SupabaseAdminClient;
   orgId: string;
   recordingId: string;
@@ -574,7 +574,7 @@ export async function markWikiRoutingCompileCompleted(input: {
   return nextMetadata;
 }
 
-export async function enqueueCompileWikiJob(input: {
+async function enqueueCompileWikiJob(input: {
   supabase?: SupabaseAdminClient;
   recordingId: string;
   orgId: string;

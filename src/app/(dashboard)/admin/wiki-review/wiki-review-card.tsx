@@ -18,12 +18,24 @@
  */
 
 import * as React from 'react';
-import { CheckIcon, XIcon, PencilIcon, Loader2, AlertTriangle } from 'lucide-react';
+import {
+  CheckIcon,
+  XIcon,
+  PencilIcon,
+  Loader2,
+  AlertTriangle,
+} from 'lucide-react';
 
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Textarea } from '@/app/components/ui/textarea';
 import { cn } from '@/lib/utils/cn';
 
@@ -71,7 +83,10 @@ export function WikiReviewCard({
 }: WikiReviewCardProps) {
   const [view, setView] = React.useState<ViewState>({ kind: 'idle' });
   const [showFullContent, setShowFullContent] = React.useState(false);
-  const [editedContent, setEditedContent] = React.useState(currentContent);
+  const [editedContentDraft, setEditedContentDraft] = React.useState<
+    string | null
+  >(null);
+  const editedContent = editedContentDraft ?? currentContent;
 
   const isSubmitting = view.kind === 'submitting';
   const isEditing = view.kind === 'editing';
@@ -126,6 +141,7 @@ export function WikiReviewCard({
       setView({ kind: 'error', message: result.error ?? 'Failed to save' });
       return;
     }
+    setEditedContentDraft(null);
     setView({ kind: 'idle' });
   };
 
@@ -138,7 +154,9 @@ export function WikiReviewCard({
             <CardDescription className="mt-1 flex flex-wrap items-center gap-2 text-xs">
               {app ? <Badge variant="outline">{app}</Badge> : null}
               {screen ? <Badge variant="outline">{screen}</Badge> : null}
-              <span className="text-muted-foreground">Detected {detectedLabel}</span>
+              <span className="text-muted-foreground">
+                Detected {detectedLabel}
+              </span>
               <span className="text-muted-foreground">
                 · Recording{' '}
                 <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
@@ -147,8 +165,12 @@ export function WikiReviewCard({
               </span>
             </CardDescription>
           </div>
-          <Badge variant="outline" className="border-yellow-500/40 text-yellow-700 dark:text-yellow-400">
-            {contradictions.length} conflict{contradictions.length === 1 ? '' : 's'}
+          <Badge
+            variant="outline"
+            className="border-yellow-500/40 text-yellow-700 dark:text-yellow-400"
+          >
+            {contradictions.length} conflict
+            {contradictions.length === 1 ? '' : 's'}
           </Badge>
         </div>
       </CardHeader>
@@ -156,7 +178,7 @@ export function WikiReviewCard({
       <CardContent className="space-y-6">
         {view.kind === 'error' && (
           <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle className="size-4" />
             <AlertDescription>{view.message}</AlertDescription>
           </Alert>
         )}
@@ -199,9 +221,9 @@ export function WikiReviewCard({
                 </pre>
               ) : (
                 <div className="space-y-3">
-                  {contradictions.map((c, i) => (
+                  {contradictions.map((c) => (
                     <div
-                      key={`${pageId}-${logEntryIndex}-c-${i}`}
+                      key={`${pageId}-${logEntryIndex}-c-${c.field ?? 'content'}-${c.old}-${c.new}`}
                       className="space-y-1 rounded border border-border/50 p-2"
                     >
                       {c.field && (
@@ -210,11 +232,17 @@ export function WikiReviewCard({
                         </div>
                       )}
                       <div className="text-xs">
-                        <span className="font-medium text-red-700 dark:text-red-400">Old:</span>{' '}
-                        <span className="text-muted-foreground line-through">{c.old}</span>
+                        <span className="font-medium text-red-700 dark:text-red-400">
+                          Old:
+                        </span>{' '}
+                        <span className="text-muted-foreground line-through">
+                          {c.old}
+                        </span>
                       </div>
                       <div className="text-xs">
-                        <span className="font-medium text-green-700 dark:text-green-400">New:</span>{' '}
+                        <span className="font-medium text-green-700 dark:text-green-400">
+                          New:
+                        </span>{' '}
                         <span>{c.new}</span>
                       </div>
                     </div>
@@ -227,8 +255,8 @@ export function WikiReviewCard({
                     Additions
                   </div>
                   <ul className="list-disc space-y-0.5 pl-4 text-xs">
-                    {additions.map((a, i) => (
-                      <li key={`${pageId}-${logEntryIndex}-a-${i}`}>{a}</li>
+                    {additions.map((a) => (
+                      <li key={`${pageId}-${logEntryIndex}-a-${a}`}>{a}</li>
                     ))}
                   </ul>
                 </div>
@@ -249,13 +277,13 @@ export function WikiReviewCard({
             <Textarea
               id={`edit-${pageId}-${logEntryIndex}`}
               value={editedContent}
-              onChange={(e) => setEditedContent(e.target.value)}
+              onChange={(e) => setEditedContentDraft(e.target.value)}
               className="min-h-[240px] font-mono text-xs"
               disabled={isSubmitting}
             />
             <p className="text-xs text-muted-foreground">
-              Your edits replace the existing page content. The prior row is superseded
-              and kept for audit.
+              Your edits replace the existing page content. The prior row is
+              superseded and kept for audit.
             </p>
           </div>
         )}
@@ -271,9 +299,9 @@ export function WikiReviewCard({
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <CheckIcon className="h-4 w-4" />
+                  <CheckIcon className="size-4" />
                 )}
                 Approve
               </Button>
@@ -281,12 +309,12 @@ export function WikiReviewCard({
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  setEditedContent(currentContent);
+                  setEditedContentDraft(currentContent);
                   setView({ kind: 'editing' });
                 }}
                 disabled={isSubmitting}
               >
-                <PencilIcon className="h-4 w-4" />
+                <PencilIcon className="size-4" />
                 Edit &amp; Approve
               </Button>
               <Button
@@ -295,7 +323,7 @@ export function WikiReviewCard({
                 onClick={handleReject}
                 disabled={isSubmitting}
               >
-                <XIcon className="h-4 w-4" />
+                <XIcon className="size-4" />
                 Reject
               </Button>
             </>
@@ -304,7 +332,10 @@ export function WikiReviewCard({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setView({ kind: 'idle' })}
+                onClick={() => {
+                  setEditedContentDraft(null);
+                  setView({ kind: 'idle' });
+                }}
                 disabled={isSubmitting}
               >
                 Cancel
@@ -316,9 +347,9 @@ export function WikiReviewCard({
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <CheckIcon className="h-4 w-4" />
+                  <CheckIcon className="size-4" />
                 )}
                 Save &amp; Approve
               </Button>

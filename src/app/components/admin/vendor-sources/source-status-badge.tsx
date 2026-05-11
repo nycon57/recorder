@@ -32,7 +32,7 @@ export function SourceStatusBadge({ status }: { status: VendorSourceOpsStatus })
       return <Badge variant="destructive">Failing</Badge>;
     case 'never_synced':
       return (
-        <Badge variant="outline" className="border-slate-500/40 text-slate-700">
+        <Badge variant="outline" className="border-zinc-500/40 text-zinc-700">
           Never synced
         </Badge>
       );
@@ -50,7 +50,7 @@ export function JobStatusBadge({ status }: { status: string }) {
       return <Badge variant="secondary">Processing</Badge>;
     case 'pending':
       return (
-        <Badge variant="outline" className="border-slate-500/40 text-slate-600">
+        <Badge variant="outline" className="border-zinc-500/40 text-zinc-600">
           Pending
         </Badge>
       );

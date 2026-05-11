@@ -28,6 +28,10 @@ interface TextChunk {
   strategy?: string;
 }
 
+function findTextFromOffset(text: string, searchText: string, offset: number) {
+  return text.indexOf(searchText, offset);
+}
+
 /**
  * Estimate token count (rough approximation: 1 token ≈ 4 characters)
  */
@@ -51,10 +55,13 @@ function splitIntoSentences(text: string): string[] {
   }
 
   // Common abbreviations that shouldn't end sentences (bounded for security)
-  const abbreviations = /\b(Dr|Mr|Mrs|Ms|Prof|Jr|Sr|vs|etc|Inc|Ltd|Corp|Co|No|Vol|pp|ed|Rev|St|Ave|Blvd|Rd|Fig|e\.g|i\.e|a\.m|p\.m|U\.S|U\.K)\./gi;
+  const abbreviations =
+    /\b(Dr|Mr|Mrs|Ms|Prof|Jr|Sr|vs|etc|Inc|Ltd|Corp|Co|No|Vol|pp|ed|Rev|St|Ave|Blvd|Rd|Fig|e\.g|i\.e|a\.m|p\.m|U\.S|U\.K)\./gi;
 
   // Preserve abbreviations by replacing with placeholder
-  const preserved = text.replace(abbreviations, (match) => match.replace(/\./g, '<<DOT>>'));
+  const preserved = text.replace(abbreviations, (match) =>
+    match.replace(/\./g, '<<DOT>>'),
+  );
 
   // Preserve decimal numbers (e.g., 3.14, $19.99)
   const preservedDecimals = preserved.replace(/(\d)\.(\d)/g, '$1<<DOT>>$2');
@@ -62,13 +69,13 @@ function splitIntoSentences(text: string): string[] {
   // Preserve URLs (simplified pattern with bounded quantifiers)
   const preservedUrls = preservedDecimals.replace(
     /https?:\/\/[^\s]{1,500}/gi,
-    (match) => match.replace(/\./g, '<<DOT>>')
+    (match) => match.replace(/\./g, '<<DOT>>'),
   );
 
   // Preserve email addresses (simplified pattern with bounded quantifiers)
   const preservedEmails = preservedUrls.replace(
     /[a-zA-Z0-9._%+-]{1,100}@[a-zA-Z0-9.-]{1,100}\.[a-zA-Z]{2,10}/g,
-    (match) => match.replace(/\./g, '<<DOT>>')
+    (match) => match.replace(/\./g, '<<DOT>>'),
   );
 
   // Now split on sentence boundaries
@@ -76,14 +83,16 @@ function splitIntoSentences(text: string): string[] {
   // - One or more whitespace characters
   // - OR end of string
   // - OR a capital letter (new sentence start)
-  const sentencePattern = /(?<=[.!?])\s+(?=[A-Z"])|(?<=[.!?])(?=\s*$)|(?<=\.{3})\s+|(?<=\n\n+)/g;
+  const sentencePattern =
+    /(?<=[.!?])\s+(?=[A-Z"])|(?<=[.!?])(?=\s*$)|(?<=\.{3})\s+|(?<=\n\n+)/g;
 
   const sentences = preservedEmails.split(sentencePattern);
 
   // Restore dots in abbreviations/decimals/URLs
-  return sentences
-    .map(s => s.replace(/<<DOT>>/g, '.').trim())
-    .filter(s => s.length > 0);
+  return sentences.flatMap((__item, __index, __array) => {
+    const __mapped = __item.replace(/<<DOT>>/g, '.').trim();
+    return __mapped.length > 0 ? [__mapped] : [];
+  });
 }
 
 /**
@@ -92,7 +101,10 @@ function splitIntoSentences(text: string): string[] {
 function splitIntoParagraphs(text: string): string[] {
   // Split on double newlines or more
   const paragraphs = text.split(/\n\s*\n+/);
-  return paragraphs.map(p => p.trim()).filter(p => p.length > 0);
+  return paragraphs.flatMap((__item, __index, __array) => {
+    const __mapped = __item.trim();
+    return __mapped.length > 0 ? [__mapped] : [];
+  });
 }
 
 /**
@@ -116,7 +128,7 @@ function chunkByParagraphs(text: string): TextChunk[] {
 
     // Find the actual start position in the original text
     // Account for the paragraph separators we split on
-    const startChar = text.indexOf(paragraph, charPosition);
+    const startChar = findTextFromOffset(text, paragraph, charPosition);
     const endChar = startChar + paragraph.length;
 
     chunks.push({
@@ -144,10 +156,7 @@ function chunkByParagraphs(text: string): TextChunk[] {
  *   NOTE: Paragraph mode ignores maxTokens/overlapTokens/minTokens - paragraphs are returned as-is.
  * - 'hybrid': Reserved for future implementation combining sentence and paragraph strategies.
  */
-export function chunkText(
-  text: string,
-  options: ChunkOptions = {}
-): TextChunk[] {
+function chunkText(text: string, options: ChunkOptions = {}): TextChunk[] {
   const {
     maxTokens = 500,
     overlapTokens = 50,
@@ -238,14 +247,14 @@ export function chunkTranscriptWithSegments(
     end: number;
     text: string;
   }>,
-  options: ChunkOptions = {}
+  options: ChunkOptions = {},
 ): Array<TextChunk & { startTime?: number; endTime?: number }> {
   const chunks = chunkText(text, options);
 
   // Enrich chunks with timing information
-  return chunks.map(chunk => {
+  return chunks.map((chunk) => {
     // Find segments that overlap with this chunk
-    const overlappingSegments = segments.filter(segment => {
+    const overlappingSegments = segments.filter((segment) => {
       const segmentStart = text.indexOf(segment.text);
       const segmentEnd = segmentStart + segment.text.length;
 
@@ -259,12 +268,12 @@ export function chunkTranscriptWithSegments(
     // Calculate start and end times from overlapping segments
     const startTime =
       overlappingSegments.length > 0
-        ? Math.min(...overlappingSegments.map(s => s.start))
+        ? Math.min(...overlappingSegments.map((s) => s.start))
         : undefined;
 
     const endTime =
       overlappingSegments.length > 0
-        ? Math.max(...overlappingSegments.map(s => s.end))
+        ? Math.max(...overlappingSegments.map((s) => s.end))
         : undefined;
 
     return {
@@ -278,9 +287,9 @@ export function chunkTranscriptWithSegments(
 /**
  * Chunk markdown document preserving structure
  */
-export function chunkMarkdown(
+function chunkMarkdown(
   markdown: string,
-  options: ChunkOptions = {}
+  options: ChunkOptions = {},
 ): TextChunk[] {
   const { maxTokens = 500 } = options;
 
@@ -305,7 +314,7 @@ export function chunkMarkdown(
     } else {
       // Section is too large, chunk it normally
       const subChunks = chunkText(section, options);
-      subChunks.forEach(subChunk => {
+      subChunks.forEach((subChunk) => {
         chunks.push({
           ...subChunk,
           index: chunks.length,
@@ -377,16 +386,18 @@ export function chunkVideoTranscript(
   audioTranscript: string,
   audioSegments: AudioSegment[],
   visualEvents: VisualEvent[],
-  options: ChunkOptions = {}
+  options: ChunkOptions = {},
 ): VideoTranscriptChunk[] {
   const { maxTokens = 500, overlapTokens = 50, minTokens = 100 } = options;
 
   const chunks: VideoTranscriptChunk[] = [];
 
   // Sort audio segments and visual events by timestamp
-  const sortedAudio = [...audioSegments].sort((a, b) => a.startTime - b.startTime);
-  const sortedVisual = [...visualEvents].sort(
-    (a, b) => timestampToSeconds(a.timestamp) - timestampToSeconds(b.timestamp)
+  const sortedAudio = audioSegments.toSorted(
+    (a, b) => a.startTime - b.startTime,
+  );
+  const sortedVisual = visualEvents.toSorted(
+    (a, b) => timestampToSeconds(a.timestamp) - timestampToSeconds(b.timestamp),
   );
 
   // Group audio segments into chunks
@@ -398,18 +409,27 @@ export function chunkVideoTranscript(
     const segmentTokens = estimateTokens(segment.text);
 
     // Check if adding this segment exceeds maxTokens
-    if (currentTokens + segmentTokens > maxTokens && currentAudioChunk.length > 0) {
+    if (
+      currentTokens + segmentTokens > maxTokens &&
+      currentAudioChunk.length > 0
+    ) {
       // Finalize current chunk
       const chunk = createCombinedChunk(
         currentAudioChunk,
         sortedVisual,
-        chunks.length
+        chunks.length,
       );
       chunks.push(chunk);
 
       // Start new chunk with overlap (keep last segment)
-      currentAudioChunk = currentAudioChunk.length > 0 ? [currentAudioChunk[currentAudioChunk.length - 1]] : [];
-      currentTokens = currentAudioChunk.length > 0 ? estimateTokens(currentAudioChunk[0].text) : 0;
+      currentAudioChunk =
+        currentAudioChunk.length > 0
+          ? [currentAudioChunk[currentAudioChunk.length - 1]]
+          : [];
+      currentTokens =
+        currentAudioChunk.length > 0
+          ? estimateTokens(currentAudioChunk[0].text)
+          : 0;
     }
 
     currentAudioChunk.push(segment);
@@ -421,7 +441,7 @@ export function chunkVideoTranscript(
     const chunk = createCombinedChunk(
       currentAudioChunk,
       sortedVisual,
-      chunks.length
+      chunks.length,
     );
     chunks.push(chunk);
   }
@@ -431,7 +451,7 @@ export function chunkVideoTranscript(
     sortedVisual,
     sortedAudio,
     chunks.length,
-    maxTokens
+    maxTokens,
   );
   chunks.push(...visualOnlyChunks);
 
@@ -444,26 +464,26 @@ export function chunkVideoTranscript(
 function createCombinedChunk(
   audioSegments: AudioSegment[],
   allVisualEvents: VisualEvent[],
-  index: number
+  index: number,
 ): VideoTranscriptChunk {
   const startTime = audioSegments[0].startTime;
   const endTime = audioSegments[audioSegments.length - 1].endTime;
 
   // Find visual events that overlap with this time range
-  const overlappingVisual = allVisualEvents.filter(event => {
+  const overlappingVisual = allVisualEvents.filter((event) => {
     const eventTime = timestampToSeconds(event.timestamp);
     return eventTime >= startTime && eventTime <= endTime;
   });
 
   // Merge audio and visual into combined text
-  const audioText = audioSegments.map(seg => seg.text).join(' ');
+  const audioText = audioSegments.map((seg) => seg.text).join(' ');
 
   let combinedText = audioText;
   let visualDescription = '';
 
   if (overlappingVisual.length > 0) {
     visualDescription = overlappingVisual
-      .map(event => {
+      .map((event) => {
         const parts = [
           event.target || event.type,
           event.location ? `at ${event.location}` : '',
@@ -501,15 +521,15 @@ function createVisualOnlyChunks(
   allVisualEvents: VisualEvent[],
   audioSegments: AudioSegment[],
   startIndex: number,
-  maxTokens: number
+  maxTokens: number,
 ): VideoTranscriptChunk[] {
   const chunks: VideoTranscriptChunk[] = [];
 
   // Find visual events that don't overlap with any audio
-  const visualOnlyEvents = allVisualEvents.filter(event => {
+  const visualOnlyEvents = allVisualEvents.filter((event) => {
     const eventTime = timestampToSeconds(event.timestamp);
     return !audioSegments.some(
-      seg => eventTime >= seg.startTime && eventTime <= seg.endTime
+      (seg) => eventTime >= seg.startTime && eventTime <= seg.endTime,
     );
   });
 
@@ -523,7 +543,9 @@ function createVisualOnlyChunks(
     const eventTokens = estimateTokens(event.description);
 
     if (currentTokens + eventTokens > maxTokens && currentGroup.length > 0) {
-      chunks.push(createVisualOnlyChunk(currentGroup, chunks.length + startIndex));
+      chunks.push(
+        createVisualOnlyChunk(currentGroup, chunks.length + startIndex),
+      );
       currentGroup = [];
       currentTokens = 0;
     }
@@ -533,7 +555,9 @@ function createVisualOnlyChunks(
   }
 
   if (currentGroup.length > 0) {
-    chunks.push(createVisualOnlyChunk(currentGroup, chunks.length + startIndex));
+    chunks.push(
+      createVisualOnlyChunk(currentGroup, chunks.length + startIndex),
+    );
   }
 
   return chunks;
@@ -544,13 +568,13 @@ function createVisualOnlyChunks(
  */
 function createVisualOnlyChunk(
   events: VisualEvent[],
-  index: number
+  index: number,
 ): VideoTranscriptChunk {
   const startTime = timestampToSeconds(events[0].timestamp);
   const endTime = timestampToSeconds(events[events.length - 1].timestamp);
 
   const visualText = events
-    .map(event => {
+    .map((event) => {
       const parts = [
         `[${event.timestamp}]`,
         event.target || event.type,

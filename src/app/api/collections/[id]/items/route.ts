@@ -38,26 +38,16 @@ interface CollectionItemContentRow {
  * - sort: Sort order (created_asc, created_desc, title_asc, title_desc)
  */
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const { orgId } = await requireOrg();
     const query = parseSearchParams<ListCollectionItemsQueryInput>(
       request,
-      listCollectionItemsQuerySchema
+      listCollectionItemsQuerySchema,
     );
     const { id: collectionId } = await params;
-
-    // Verify collection exists and belongs to this org
-    const { data: collection, error: collectionError } = await supabaseAdmin
-      .from('collections')
-      .select('id')
-      .eq('id', collectionId)
-      .eq('org_id', orgId)
-      .is('deleted_at', null)
-      .single();
-
-    if (collectionError || !collection) {
-      return errors.notFound('Collection', undefined);
-    }
 
     // Build query for collection items with content
     let itemsQuery = supabaseAdmin
@@ -74,7 +64,7 @@ export const GET = apiHandler(
           deleted_at
         )
       `,
-        { count: 'exact' }
+        { count: 'exact' },
       )
       .eq('collection_id', collectionId)
       .is('content.deleted_at', null);
@@ -87,10 +77,14 @@ export const GET = apiHandler(
     // Apply sorting
     switch (query.sort) {
       case 'created_asc':
-        itemsQuery = itemsQuery.order('content(created_at)', { ascending: true });
+        itemsQuery = itemsQuery.order('content(created_at)', {
+          ascending: true,
+        });
         break;
       case 'created_desc':
-        itemsQuery = itemsQuery.order('content(created_at)', { ascending: false });
+        itemsQuery = itemsQuery.order('content(created_at)', {
+          ascending: false,
+        });
         break;
       case 'title_asc':
         itemsQuery = itemsQuery.order('content(title)', { ascending: true });
@@ -103,13 +97,28 @@ export const GET = apiHandler(
     }
 
     // Apply pagination
+    const { data: collection, error: collectionError } = await supabaseAdmin
+      .from('collections')
+      .select('id')
+      .eq('id', collectionId)
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .single();
+
+    if (collectionError || !collection) {
+      return errors.notFound('Collection', undefined);
+    }
+
     const { data: items, error, count } = await itemsQuery.range(
       query.offset,
-      query.offset + query.limit - 1
+      query.offset + query.limit - 1,
     );
 
     if (error) {
-      console.error('[GET /api/collections/[id]/items] Error fetching items:', error);
+      console.error(
+        '[GET /api/collections/[id]/items] Error fetching items:',
+        error,
+      );
       throw new Error('Failed to fetch collection items');
     }
 
@@ -133,7 +142,7 @@ export const GET = apiHandler(
         hasMore: (count || 0) > query.offset + query.limit,
       },
     });
-  }
+  },
 );
 
 /**
@@ -143,12 +152,16 @@ export const GET = apiHandler(
  * - item_ids: Array of recording IDs to add (1-100 items)
  */
 export const POST = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId, userId } = await requireOrg();
-    const body = await parseBody<AddCollectionItemsInput>(request, addCollectionItemsSchema);
-    const { id: collectionId } = await params;
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId, userId }, body, { id: collectionId }] = await Promise.all([
+      requireOrg(),
+      parseBody<AddCollectionItemsInput>(request, addCollectionItemsSchema),
+      params,
+    ]);
 
-    // Verify collection exists and belongs to this org
     const { data: collection, error: collectionError } = await supabaseAdmin
       .from('collections')
       .select('id, name')
@@ -161,7 +174,6 @@ export const POST = apiHandler(
       return errors.notFound('Collection', undefined);
     }
 
-    // Verify all recordings exist and belong to this org
     const { data: recordings, error: recordingsError } = await supabaseAdmin
       .from('content')
       .select('id')
@@ -170,12 +182,17 @@ export const POST = apiHandler(
       .is('deleted_at', null);
 
     if (recordingsError) {
-      console.error('[POST /api/collections/[id]/items] Error verifying recordings:', recordingsError);
+      console.error(
+        '[POST /api/collections/[id]/items] Error verifying recordings:',
+        recordingsError,
+      );
       throw new Error('Failed to verify recordings');
     }
 
     if (!recordings || recordings.length !== body.item_ids.length) {
-      return errors.badRequest('One or more recordings not found or do not belong to this organization');
+      return errors.badRequest(
+        'One or more recordings not found or do not belong to this organization',
+      );
     }
 
     // Insert collection items (ignore duplicates)
@@ -194,7 +211,10 @@ export const POST = apiHandler(
       .select();
 
     if (insertError) {
-      console.error('[POST /api/collections/[id]/items] Error adding items:', insertError);
+      console.error(
+        '[POST /api/collections/[id]/items] Error adding items:',
+        insertError,
+      );
       throw new Error('Failed to add items to collection');
     }
 
@@ -215,7 +235,7 @@ export const POST = apiHandler(
       added: inserted?.length || 0,
       skipped: body.item_ids.length - (inserted?.length || 0),
     });
-  }
+  },
 );
 
 /**
@@ -225,12 +245,19 @@ export const POST = apiHandler(
  * - item_ids: Array of recording IDs to remove (1-100 items)
  */
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId, userId } = await requireOrg();
-    const body = await parseBody<RemoveCollectionItemsInput>(request, removeCollectionItemsSchema);
-    const { id: collectionId } = await params;
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId, userId }, body, { id: collectionId }] = await Promise.all([
+      requireOrg(),
+      parseBody<RemoveCollectionItemsInput>(
+        request,
+        removeCollectionItemsSchema,
+      ),
+      params,
+    ]);
 
-    // Verify collection exists and belongs to this org
     const { data: collection, error: collectionError } = await supabaseAdmin
       .from('collections')
       .select('id, name')
@@ -243,15 +270,17 @@ export const DELETE = apiHandler(
       return errors.notFound('Collection', undefined);
     }
 
-    // Remove items from collection
     const { error: deleteError } = await supabaseAdmin
       .from('collection_items')
       .delete()
-      .eq('collection_id', collectionId)
+      .eq('collection_id', collection.id)
       .in('content_id', body.item_ids);
 
     if (deleteError) {
-      console.error('[DELETE /api/collections/[id]/items] Error removing items:', deleteError);
+      console.error(
+        '[DELETE /api/collections/[id]/items] Error removing items:',
+        deleteError,
+      );
       throw new Error('Failed to remove items from collection');
     }
 
@@ -269,5 +298,5 @@ export const DELETE = apiHandler(
     });
 
     return successResponse({ removed: body.item_ids.length });
-  }
+  },
 );

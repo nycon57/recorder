@@ -52,7 +52,7 @@ export const updateMemberSchema = z.object({
 });
 
 // Organization stats query schema
-export const organizationStatsQuerySchema = z.object({
+const organizationStatsQuerySchema = z.object({
   include_quotas: z
     .preprocess(
       (val) => (typeof val === 'string' ? val === 'true' : val),

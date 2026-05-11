@@ -1,7 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useQuery } from '@tanstack/react-query';
+
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from '@/app/components/analytics/dynamic-recharts';
 
 interface SearchLatencyChartProps {
   timeRange: string;
@@ -13,53 +22,34 @@ interface ChartDataPoint {
   p95Latency: number;
 }
 
-export default function SearchLatencyChart({ timeRange }: SearchLatencyChartProps) {
-  const [data, setData] = useState<ChartDataPoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function SearchLatencyChart({
+  timeRange,
+}: SearchLatencyChartProps) {
+  const {
+    data = [],
+    isLoading,
+    error,
+  } = useQuery<ChartDataPoint[], Error>({
+    queryKey: ['analytics', 'user', 'charts', 'latency', timeRange],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        `/api/analytics/user/charts/latency?timeRange=${timeRange}`,
+        { signal },
+      );
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(
-          `/api/analytics/user/charts/latency?timeRange=${timeRange}`,
-          { signal: controller.signal }
-        );
-        if (!response.ok) {
-          setError('Failed to load latency data');
-          return;
-        }
-        const result = await response.json();
-        setData(result.data || []);
-      } catch (err) {
-        // Don't update state if request was aborted
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-        console.error('Error fetching chart data:', err);
-        setError('An error occurred while loading data');
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
+      if (!response.ok) {
+        throw new Error('Failed to load latency data');
       }
-    };
 
-    fetchData();
+      const result = await response.json();
+      return result.data || [];
+    },
+  });
 
-    return () => {
-      controller.abort();
-    };
-  }, [timeRange]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="h-[300px] w-full flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="size-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -67,7 +57,7 @@ export default function SearchLatencyChart({ timeRange }: SearchLatencyChartProp
   if (error) {
     return (
       <div className="h-[300px] w-full flex items-center justify-center">
-        <p className="text-sm text-destructive">{error}</p>
+        <p className="text-sm text-destructive">{error.message}</p>
       </div>
     );
   }

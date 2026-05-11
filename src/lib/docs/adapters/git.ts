@@ -25,7 +25,7 @@ const logger = createLogger({});
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface DocsPageWithBody extends DocsPage {
+interface DocsPageWithBody extends DocsPage {
   bodyHtml: string;
 }
 
@@ -54,7 +54,7 @@ export async function loadGitPages(): Promise<DocsPage[]> {
 }
 
 /** Load all git-backed pages including compiled HTML. Used by the page renderer. */
-export async function loadGitPagesWithBody(): Promise<DocsPageWithBody[]> {
+async function loadGitPagesWithBody(): Promise<DocsPageWithBody[]> {
   if (cached) return cached;
 
   const manifestPath = join(
@@ -117,6 +117,6 @@ export function findGitPageBody(slug: string): string | undefined {
 }
 
 /** Clear the module-level cache. Useful in tests. */
-export function clearGitPageCache(): void {
+function clearGitPageCache(): void {
   cached = null;
 }

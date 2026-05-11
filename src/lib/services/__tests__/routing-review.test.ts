@@ -1,5 +1,12 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { expect, test } from '@jest/globals';
+
+const assert = {
+  deepEqual: (actual: unknown, expected: unknown) => expect(actual).toEqual(expected),
+  equal: (actual: unknown, expected: unknown) => expect(actual).toBe(expected),
+  ok(actual: unknown): asserts actual {
+    expect(actual).toBeTruthy();
+  },
+};
 
 import {
   buildRoutingCompileWikiDedupeKey,
@@ -93,7 +100,7 @@ test('writeRoutingReviewState round-trips approved overrides', () => {
   );
 
   const parsed = parseRoutingReviewState(metadata);
-  assert.ok(parsed);
+  if (!parsed) throw new Error('Expected routing review state');
   assert.equal(parsed.status, 'approved');
   assert.equal(parsed.decisionVersion, 1);
   assert.equal(parsed.lastAction, 'reroute');
@@ -124,7 +131,7 @@ test('parseRoutingReviewProposedAction validates the approval payload shape', ()
     },
   });
 
-  assert.ok(parsed);
+  if (!parsed) throw new Error('Expected routing review proposed action');
   assert.equal(parsed.contentId, 'content-1');
   assert.equal(parsed.routeConfidence, 0.42);
   assert.deepEqual(parsed.proposedRoute, {

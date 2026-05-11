@@ -38,7 +38,7 @@ export function PagesPageClient() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="trbd-page-title flex items-center gap-2">
-            <BookOpen className="h-7 w-7" />
+            <BookOpen className="size-7" />
             Vendor Pages
           </h1>
           <p className="text-muted-foreground">
@@ -47,7 +47,7 @@ export function PagesPageClient() {
         </div>
         <Button size="sm" className="gap-2" asChild>
           <Link href="/admin/vendor-sources/new">
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
             New ingest
           </Link>
         </Button>

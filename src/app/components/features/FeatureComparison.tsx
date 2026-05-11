@@ -41,51 +41,57 @@ interface FeatureComparisonProps {
   data: ComparisonData;
 }
 
-export function FeatureComparison({ data }: FeatureComparisonProps) {
-  const renderCellValue = (value: boolean | string, isTriboraColumn = false) => {
-    if (typeof value === 'boolean') {
-      return value ? (
-        <div
-          className={cn(
-            'w-6 h-6 rounded-full mx-auto',
-            'flex items-center justify-center',
-            isTriboraColumn ? 'bg-accent/20' : 'bg-muted/30'
-          )}
-        >
-          <Check
-            className={cn(
-              'h-4 w-4',
-              isTriboraColumn ? 'text-accent' : 'text-muted-foreground'
-            )}
-          />
-        </div>
-      ) : (
-        <X className="h-4 w-4 text-muted-foreground/50 mx-auto" />
-      );
-    }
-
-    if (value === 'N/A') {
-      return <span className="text-muted-foreground/50">N/A</span>;
-    }
-
-    return (
-      <span
+function FeatureComparisonCell({
+  value,
+  isTriboraColumn = false,
+}: {
+  value: boolean | string;
+  isTriboraColumn?: boolean;
+}) {
+  if (typeof value === 'boolean') {
+    return value ? (
+      <div
         className={cn(
-          'text-sm',
-          isTriboraColumn ? 'font-semibold text-accent' : 'text-muted-foreground'
+          'size-6 rounded-full mx-auto',
+          'flex items-center justify-center',
+          isTriboraColumn ? 'bg-accent/20' : 'bg-muted/30',
         )}
       >
-        {value}
-      </span>
+        <Check
+          className={cn(
+            'size-4',
+            isTriboraColumn ? 'text-accent' : 'text-muted-foreground',
+          )}
+        />
+      </div>
+    ) : (
+      <X className="size-4 text-muted-foreground/50 mx-auto" />
     );
-  };
+  }
 
+  if (value === 'N/A') {
+    return <span className="text-muted-foreground/50">N/A</span>;
+  }
+
+  return (
+    <span
+      className={cn(
+        'text-sm',
+        isTriboraColumn ? 'font-semibold text-accent' : 'text-muted-foreground',
+      )}
+    >
+      {value}
+    </span>
+  );
+}
+
+export function FeatureComparison({ data }: FeatureComparisonProps) {
   return (
     <section className="relative py-16 sm:py-20 lg:py-24 overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 pointer-events-none">
         <div
-          className="absolute bottom-[30%] right-[10%] w-[500px] h-[500px] rounded-full
+          className="absolute bottom-[30%] right-[10%] size-[500px] rounded-full
             bg-[radial-gradient(ellipse_at_center,rgba(0,223,130,0.06)_0%,transparent_70%)]
             blur-[100px]"
         />
@@ -106,8 +112,10 @@ export function FeatureComparison({ data }: FeatureComparisonProps) {
               className="mb-6 px-4 py-2 rounded-full
                 bg-accent/5 backdrop-blur-sm border-accent/30"
             >
-              <Zap className="h-4 w-4 mr-2 text-accent" />
-              <span className="text-sm font-medium text-accent">Comparison</span>
+              <Zap className="size-4 mr-2 text-accent" />
+              <span className="text-sm font-medium text-accent">
+                Comparison
+              </span>
             </Badge>
 
             <h2
@@ -129,7 +137,7 @@ export function FeatureComparison({ data }: FeatureComparisonProps) {
               'rounded-2xl overflow-hidden',
               'bg-card/50 backdrop-blur-sm',
               'border border-border/50',
-              'shadow-[0_0_60px_rgba(0,223,130,0.05)]'
+              'shadow-[0_0_60px_rgba(0,223,130,0.05)]',
             )}
           >
             <div className="overflow-x-auto">
@@ -142,10 +150,12 @@ export function FeatureComparison({ data }: FeatureComparisonProps) {
                     <th className="text-center p-4 sm:p-6 font-medium text-sm w-[20%]">
                       <div className="flex items-center justify-center gap-2">
                         <div
-                          className="w-6 h-6 rounded-lg bg-gradient-to-br from-accent to-secondary
+                          className="size-6 rounded-lg bg-gradient-to-br from-accent to-secondary
                             flex items-center justify-center"
                         >
-                          <span className="text-accent-foreground font-bold text-xs">T</span>
+                          <span className="text-accent-foreground font-bold text-xs">
+                            T
+                          </span>
                         </div>
                         <span className="text-accent">Tribora</span>
                       </div>
@@ -161,25 +171,28 @@ export function FeatureComparison({ data }: FeatureComparisonProps) {
                 <tbody>
                   {data.rows.map((row, index) => (
                     <motion.tr
-                      key={index}
+                      key={JSON.stringify(row)}
                       variants={itemVariants}
                       className={cn(
                         'border-b border-border/30 last:border-0',
                         'transition-colors duration-300',
-                        'hover:bg-accent/5'
+                        'hover:bg-accent/5',
                       )}
                     >
                       <td className="p-4 sm:p-6 text-sm font-medium">
                         {row.feature}
                       </td>
                       <td className="p-4 sm:p-6 text-center">
-                        {renderCellValue(row.tribora, true)}
+                        <FeatureComparisonCell
+                          value={row.tribora}
+                          isTriboraColumn
+                        />
                       </td>
                       <td className="p-4 sm:p-6 text-center">
-                        {renderCellValue(row.competitor1)}
+                        <FeatureComparisonCell value={row.competitor1} />
                       </td>
                       <td className="p-4 sm:p-6 text-center">
-                        {renderCellValue(row.competitor2)}
+                        <FeatureComparisonCell value={row.competitor2} />
                       </td>
                     </motion.tr>
                   ))}

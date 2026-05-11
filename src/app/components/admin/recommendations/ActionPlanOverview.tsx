@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, Clock, TrendingUp, DollarSign } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Skeleton } from '@/app/components/ui/skeleton';
 import { formatCurrency } from '@/lib/utils/formatting';
@@ -16,64 +22,46 @@ interface ActionPlan {
 }
 
 export default function ActionPlanOverview() {
-  const [plan, setPlan] = useState<ActionPlan | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const {
+    data: plan,
+    isLoading,
+    error,
+  } = useQuery<ActionPlan, Error>({
+    queryKey: ['analytics', 'recommendations', 'action-plan'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        '/api/analytics/recommendations/action-plan',
+        { signal },
+      );
 
-  useEffect(() => {
-    const fetchActionPlan = async () => {
-      // Create new AbortController for this fetch
-      abortControllerRef.current = new AbortController();
-
-      try {
-        const response = await fetch('/api/analytics/recommendations/action-plan', {
-          signal: abortControllerRef.current.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch action plan');
-        }
-
-        const { data } = await response.json();
-
-        setPlan({
-          immediate: data.immediate?.count || 0,
-          shortTerm: data.shortTerm?.count || 0,
-          longTerm: data.longTerm?.count || 0,
-          totalSavings: data.totalPotentialSavings || 0,
-        });
-        setError(null);
-      } catch (err) {
-        // Ignore abort errors
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-
-        console.error('Error fetching action plan:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load action plan');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch action plan');
       }
-    };
 
-    fetchActionPlan();
+      const { data } = await response.json();
 
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+      return {
+        immediate: data.immediate?.count || 0,
+        shortTerm: data.shortTerm?.count || 0,
+        longTerm: data.longTerm?.count || 0,
+        totalSavings: data.totalPotentialSavings || 0,
+      };
+    },
+  });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Card key={i}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        {[
+          'action-card-1',
+          'action-card-2',
+          'action-card-3',
+          'action-card-4',
+        ].map((skeletonId) => (
+          <Card key={skeletonId}>
+            <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
               <Skeleton className="h-4 w-[100px]" />
-              <Skeleton className="h-4 w-4 rounded-full" />
+              <Skeleton className="size-4 rounded-full" />
             </CardHeader>
             <CardContent>
               <Skeleton className="h-8 w-[60px]" />
@@ -88,7 +76,9 @@ export default function ActionPlanOverview() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading action plan: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading action plan: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -102,12 +92,16 @@ export default function ActionPlanOverview() {
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {/* Immediate Actions */}
       <Card className="border-red-200 dark:border-red-900">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Immediate Actions</CardTitle>
-          <AlertCircle className="h-4 w-4 text-red-600" />
+        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">
+            Immediate Actions
+          </CardTitle>
+          <AlertCircle className="size-4 text-red-600" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-red-600">{plan.immediate}</div>
+          <div className="text-2xl font-bold text-red-600">
+            {plan.immediate}
+          </div>
           <p className="text-xs text-muted-foreground mt-1">
             Implement within 24 hours
           </p>
@@ -116,12 +110,16 @@ export default function ActionPlanOverview() {
 
       {/* Short-Term Actions */}
       <Card className="border-yellow-200 dark:border-yellow-900">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Short-Term Actions</CardTitle>
-          <Clock className="h-4 w-4 text-yellow-600" />
+        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">
+            Short-Term Actions
+          </CardTitle>
+          <Clock className="size-4 text-yellow-600" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-yellow-600">{plan.shortTerm}</div>
+          <div className="text-2xl font-bold text-yellow-600">
+            {plan.shortTerm}
+          </div>
           <p className="text-xs text-muted-foreground mt-1">
             Implement within 1 week
           </p>
@@ -130,12 +128,16 @@ export default function ActionPlanOverview() {
 
       {/* Long-Term Strategic */}
       <Card className="border-blue-200 dark:border-blue-900">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Long-Term Strategic</CardTitle>
-          <TrendingUp className="h-4 w-4 text-blue-600" />
+        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">
+            Long-Term Strategic
+          </CardTitle>
+          <TrendingUp className="size-4 text-blue-600" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-blue-600">{plan.longTerm}</div>
+          <div className="text-2xl font-bold text-blue-600">
+            {plan.longTerm}
+          </div>
           <p className="text-xs text-muted-foreground mt-1">
             Plan for next quarter
           </p>
@@ -144,9 +146,11 @@ export default function ActionPlanOverview() {
 
       {/* Total Potential Savings */}
       <Card className="border-green-200 dark:border-green-900">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Potential Savings</CardTitle>
-          <DollarSign className="h-4 w-4 text-green-600" />
+        <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">
+            Potential Savings
+          </CardTitle>
+          <DollarSign className="size-4 text-green-600" />
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-green-600">

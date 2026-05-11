@@ -1,9 +1,15 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { DollarSign, AlertTriangle, TrendingUp } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/app/components/ui/card';
 import { Progress } from '@/app/components/ui/progress';
 import { Badge } from '@/app/components/ui/badge';
 import { Skeleton } from '@/app/components/ui/skeleton';
@@ -25,72 +31,21 @@ interface BudgetData {
 }
 
 export default function BudgetTracker() {
-  const [data, setData] = useState<BudgetData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const { data, isLoading, error } = useQuery<BudgetData, Error>({
+    queryKey: ['analytics', 'costs', 'budget'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch('/api/analytics/costs/budget', { signal });
 
-  useEffect(() => {
-    let errorCount = 0;
-
-    const fetchBudgetData = async () => {
-      // Abort previous request if it exists
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      if (!response.ok) {
+        throw new Error('Failed to fetch budget data');
       }
 
-      // Create new AbortController for this fetch
-      abortControllerRef.current = new AbortController();
-
-      try {
-        const response = await fetch('/api/analytics/costs/budget', {
-          signal: abortControllerRef.current.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch budget data');
-        }
-
-        const { data: budgetData } = await response.json();
-        setData(budgetData);
-        setError(null);
-        errorCount = 0; // Reset error count on success
-      } catch (err) {
-        // Ignore abort errors
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-
-        console.error('Error fetching budget data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load budget data');
-
-        // Stop auto-refresh after persistent errors
-        errorCount++;
-        if (errorCount >= 3 && intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-          console.warn('Auto-refresh stopped due to persistent errors');
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchBudgetData();
-
-    // Auto-refresh every 30 seconds
-    intervalRef.current = setInterval(fetchBudgetData, 30000);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+      const { data: budgetData } = await response.json();
+      return budgetData;
+    },
+    refetchInterval: 30000,
+    retry: 2,
+  });
 
   const getStatusColor = (status: string): string => {
     switch (status) {
@@ -105,7 +60,9 @@ export default function BudgetTracker() {
     }
   };
 
-  const getStatusBadge = (status: string): { variant: 'default' | 'secondary' | 'destructive'; label: string } => {
+  const getStatusBadge = (
+    status: string,
+  ): { variant: 'default' | 'secondary' | 'destructive'; label: string } => {
     switch (status) {
       case 'on-track':
         return { variant: 'default', label: 'On Track' };
@@ -118,7 +75,7 @@ export default function BudgetTracker() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -136,7 +93,9 @@ export default function BudgetTracker() {
     return (
       <Card className="border-destructive">
         <CardContent className="pt-6">
-          <p className="text-sm text-destructive">Error loading budget data: {error}</p>
+          <p className="text-sm text-destructive">
+            Error loading budget data: {error.message}
+          </p>
         </CardContent>
       </Card>
     );
@@ -147,9 +106,10 @@ export default function BudgetTracker() {
   }
 
   const statusBadge = getStatusBadge(data.status);
-  const expectedSpend = data.daysInMonth > 0
-    ? (data.monthlyBudget * data.daysIntoMonth) / data.daysInMonth
-    : 0;
+  const expectedSpend =
+    data.daysInMonth > 0
+      ? (data.monthlyBudget * data.daysIntoMonth) / data.daysInMonth
+      : 0;
   const isOverPace = data.currentSpend > expectedSpend;
 
   return (
@@ -158,11 +118,17 @@ export default function BudgetTracker() {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
+              <DollarSign className="size-5" />
               Monthly Budget Tracker
             </CardTitle>
             <CardDescription>
-              Day {data.daysIntoMonth} of {data.daysInMonth} • {formatPercentage(data.daysInMonth > 0 ? (data.daysIntoMonth / data.daysInMonth) * 100 : 0)} through month
+              Day {data.daysIntoMonth} of {data.daysInMonth} •{' '}
+              {formatPercentage(
+                data.daysInMonth > 0
+                  ? (data.daysIntoMonth / data.daysInMonth) * 100
+                  : 0,
+              )}{' '}
+              through month
             </CardDescription>
           </div>
           <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
@@ -174,7 +140,8 @@ export default function BudgetTracker() {
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium">Budget Usage</span>
             <span className={`font-semibold ${getStatusColor(data.status)}`}>
-              {formatCurrency(data.currentSpend)} / {formatCurrency(data.monthlyBudget)}
+              {formatCurrency(data.currentSpend)} /{' '}
+              {formatCurrency(data.monthlyBudget)}
             </span>
           </div>
           <Progress
@@ -183,13 +150,15 @@ export default function BudgetTracker() {
               data.status === 'over-budget'
                 ? '[&>div]:bg-red-600'
                 : data.status === 'warning'
-                ? '[&>div]:bg-yellow-600'
-                : ''
+                  ? '[&>div]:bg-yellow-600'
+                  : ''
             }`}
           />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>{formatPercentage(data.percentUsed)} used</span>
-            <span>{formatCurrency(data.monthlyBudget - data.currentSpend)} remaining</span>
+            <span>
+              {formatCurrency(data.monthlyBudget - data.currentSpend)} remaining
+            </span>
           </div>
         </div>
 
@@ -197,17 +166,23 @@ export default function BudgetTracker() {
         <div className="grid grid-cols-3 gap-4 pt-4 border-t">
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Expected Spend</p>
-            <p className="text-lg font-semibold">{formatCurrency(expectedSpend)}</p>
+            <p className="text-lg font-semibold">
+              {formatCurrency(expectedSpend)}
+            </p>
           </div>
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Actual Spend</p>
-            <p className={`text-lg font-semibold ${isOverPace ? 'text-red-600' : 'text-green-600'}`}>
+            <p
+              className={`text-lg font-semibold ${isOverPace ? 'text-red-600' : 'text-green-600'}`}
+            >
               {formatCurrency(data.currentSpend)}
             </p>
           </div>
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Projected (EOM)</p>
-            <p className="text-lg font-semibold">{formatCurrency(data.projectedSpend)}</p>
+            <p className="text-lg font-semibold">
+              {formatCurrency(data.projectedSpend)}
+            </p>
           </div>
         </div>
 
@@ -215,9 +190,11 @@ export default function BudgetTracker() {
         <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
           {isOverPace ? (
             <>
-              <TrendingUp className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" />
+              <TrendingUp className="size-4 text-orange-600 mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="text-sm font-medium text-orange-600">Spending Above Pace</p>
+                <p className="text-sm font-medium text-orange-600">
+                  Spending Above Pace
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {expectedSpend > 0
                     ? `You're ${formatPercentage(((data.currentSpend - expectedSpend) / expectedSpend) * 100)} ahead of expected spending for day ${data.daysIntoMonth}`
@@ -227,9 +204,11 @@ export default function BudgetTracker() {
             </>
           ) : (
             <>
-              <TrendingUp className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+              <TrendingUp className="size-4 text-green-600 mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="text-sm font-medium text-green-600">Spending On Pace</p>
+                <p className="text-sm font-medium text-green-600">
+                  Spending On Pace
+                </p>
                 <p className="text-xs text-muted-foreground">
                   Your spending is tracking well with the monthly budget
                 </p>
@@ -250,11 +229,11 @@ export default function BudgetTracker() {
                     alert.severity === 'critical'
                       ? 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-400'
                       : alert.severity === 'warning'
-                      ? 'bg-yellow-50 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
-                      : 'bg-blue-50 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+                        ? 'bg-yellow-50 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                        : 'bg-blue-50 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
                   }`}
                 >
-                  <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                  <AlertTriangle className="size-3 mt-0.5 shrink-0" />
                   <p>{alert.message}</p>
                 </div>
               ))}

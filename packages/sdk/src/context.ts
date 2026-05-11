@@ -8,7 +8,7 @@
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface InteractiveElement {
+interface InteractiveElement {
   selector: string;
   label: string;
   type: string;
@@ -110,7 +110,7 @@ const APP_REGISTRY: AppRegistryEntry[] = [
 
 // ─── Detection ──────────────────────────────────────────────────────────────
 
-export function detectApp(
+function detectApp(
   url: string,
   doc: Document,
 ): { app: string; screen: string } {
@@ -172,7 +172,7 @@ function hostnameScreenFromUrl(url: string): string {
 const INTERACTIVE_SELECTORS =
   'button, input, select, textarea, a[href], [role="button"], [role="link"], [role="combobox"], [role="menuitem"]';
 
-export function buildInteractiveElementInventory(
+function buildInteractiveElementInventory(
   doc: Document,
   limit = 50,
 ): InteractiveElement[] {

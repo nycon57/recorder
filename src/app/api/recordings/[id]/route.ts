@@ -13,10 +13,15 @@ import { updateRecordingSchema } from '@/lib/validations/api';
 
 // GET /api/recordings/[id] - Get a specific recording
 export const GET = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId } = await requireOrg();
-    const supabase = await createClient();
-    const { id } = await params;
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId }, supabase, { id }] = await Promise.all([
+      requireOrg(),
+      createClient(),
+      params,
+    ]);
 
     // Check for includeDeleted flag (for trash view)
     const url = new URL(request.url);
@@ -30,7 +35,7 @@ export const GET = apiHandler(
       *,
       transcripts (*),
       documents (*)
-    `
+    `,
       )
       .eq('id', id)
       .eq('org_id', orgId);
@@ -76,17 +81,21 @@ export const GET = apiHandler(
       videoUrl,
       downloadUrl,
     });
-  }
+  },
 );
 
 // PUT /api/recordings/[id] - Update a recording
 export const PUT = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { orgId, userId } = await requireOrg();
-    const supabase = await createClient();
-    const { id } = await params;
-
-    const body = await request.json();
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
+    const [{ orgId, userId }, supabase, { id }, body] = await Promise.all([
+      requireOrg(),
+      createClient(),
+      params,
+      request.json(),
+    ]);
 
     // Validate request body
     const validationResult = updateRecordingSchema.safeParse(body);
@@ -96,7 +105,8 @@ export const PUT = apiHandler(
       });
     }
 
-    const { title, description, metadata, analysisType, skipAnalysis } = validationResult.data;
+    const { title, description, metadata, analysisType, skipAnalysis } =
+      validationResult.data;
 
     // Build update object with only provided fields
     const updateData: Record<string, any> = {
@@ -127,12 +137,15 @@ export const PUT = apiHandler(
     await CacheInvalidation.invalidateContent(orgId);
 
     return successResponse(recording);
-  }
+  },
 );
 
 // DELETE /api/recordings/[id] - Delete a recording (soft delete by default)
 export const DELETE = apiHandler(
-  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+  ) => {
     const { orgId, userId } = await requireOrg();
     const supabase = supabaseAdmin;
     const { id } = await params;
@@ -155,7 +168,9 @@ export const DELETE = apiHandler(
     // Check if content exists and belongs to org
     const { data: recording, error: fetchError } = await supabase
       .from('content')
-      .select('id, org_id, storage_path_raw, storage_path_processed, deleted_at')
+      .select(
+        'id, org_id, storage_path_raw, storage_path_processed, deleted_at',
+      )
       .eq('id', id)
       .eq('org_id', orgId)
       .single();
@@ -190,11 +205,14 @@ export const DELETE = apiHandler(
     if (permanent) {
       // Enforce that permanent deletions are only allowed on trashed items
       if (!recording.deleted_at) {
-        logger.info('DELETE Recording - Permanent delete attempted on non-trashed item');
+        logger.info(
+          'DELETE Recording - Permanent delete attempted on non-trashed item',
+        );
         return new Response(
           JSON.stringify({
             error: {
-              message: 'Permanent deletion is only allowed for items in trash. Move to trash first.',
+              message:
+                'Permanent deletion is only allowed for items in trash. Move to trash first.',
               code: 'NOT_IN_TRASH',
             },
           }),
@@ -203,7 +221,7 @@ export const DELETE = apiHandler(
             headers: {
               'Content-Type': 'application/json',
             },
-          }
+          },
         );
       }
 
@@ -233,9 +251,12 @@ export const DELETE = apiHandler(
       }
 
       if (!deletedData || deletedData.length === 0) {
-        logger.warn('DELETE Recording - DELETE executed but no rows were affected', {
-          data: { deletedData },
-        });
+        logger.warn(
+          'DELETE Recording - DELETE executed but no rows were affected',
+          {
+            data: { deletedData },
+          },
+        );
       } else {
         logger.info('DELETE Recording - Database record successfully deleted', {
           data: { deletedRowCount: deletedData.length },
@@ -246,7 +267,9 @@ export const DELETE = apiHandler(
       const filesToDelete = [
         recording.storage_path_raw,
         recording.storage_path_processed,
-      ].filter(Boolean);
+      ].filter(
+        (path): path is string => typeof path === 'string' && path.length > 0,
+      );
 
       if (filesToDelete.length > 0) {
         try {
@@ -259,18 +282,21 @@ export const DELETE = apiHandler(
             console.error(
               '[DELETE Recording] Error deleting storage files (DB record already deleted):',
               storageError,
-              { recordingId: id, files: filesToDelete }
+              { recordingId: id, files: filesToDelete },
             );
             // TODO: Consider enqueueing a cleanup job for retry
           } else {
-            console.log('[DELETE Recording] Storage files deleted:', filesToDelete);
+            console.log(
+              '[DELETE Recording] Storage files deleted:',
+              filesToDelete,
+            );
           }
         } catch (err) {
           // Log but don't fail - DB record is already deleted
           console.error(
             '[DELETE Recording] Exception deleting storage files:',
             err,
-            { recordingId: id, files: filesToDelete }
+            { recordingId: id, files: filesToDelete },
           );
         }
       }
@@ -278,12 +304,23 @@ export const DELETE = apiHandler(
       console.log('[DELETE Recording] Permanently deleted (complete):', id);
 
       // QUOTA MANAGEMENT: Release recording quota back to organization
-      const { QuotaManager } = await import('@/lib/services/quotas/quota-manager');
-      const quotaReleased = await QuotaManager.releaseQuota(orgId, 'recording', 1);
+      const { QuotaManager } = await import(
+        '@/lib/services/quotas/quota-manager'
+      );
+      const quotaReleased = await QuotaManager.releaseQuota(
+        orgId,
+        'recording',
+        1,
+      );
       if (quotaReleased) {
-        console.log('[DELETE Recording] Released recording quota for org:', orgId);
+        console.log(
+          '[DELETE Recording] Released recording quota for org:',
+          orgId,
+        );
       } else {
-        console.warn('[DELETE Recording] Failed to release recording quota (non-fatal)');
+        console.warn(
+          '[DELETE Recording] Failed to release recording quota (non-fatal)',
+        );
       }
 
       // PERFORMANCE OPTIMIZATION: Invalidate stats cache
@@ -326,12 +363,23 @@ export const DELETE = apiHandler(
 
     // QUOTA MANAGEMENT: Release recording quota when moving to trash
     // User should get quota back immediately, not wait for permanent deletion
-    const { QuotaManager } = await import('@/lib/services/quotas/quota-manager');
-    const quotaReleased = await QuotaManager.releaseQuota(orgId, 'recording', 1);
+    const { QuotaManager } = await import(
+      '@/lib/services/quotas/quota-manager'
+    );
+    const quotaReleased = await QuotaManager.releaseQuota(
+      orgId,
+      'recording',
+      1,
+    );
     if (quotaReleased) {
-      console.log('[DELETE Recording] Released recording quota for org:', orgId);
+      console.log(
+        '[DELETE Recording] Released recording quota for org:',
+        orgId,
+      );
     } else {
-      console.warn('[DELETE Recording] Failed to release recording quota (non-fatal)');
+      console.warn(
+        '[DELETE Recording] Failed to release recording quota (non-fatal)',
+      );
     }
 
     // PERFORMANCE OPTIMIZATION: Invalidate stats cache
@@ -342,7 +390,7 @@ export const DELETE = apiHandler(
       success: true,
       message: 'Recording moved to trash',
       permanent: false,
-      canRestore: true
+      canRestore: true,
     });
-  }
+  },
 );

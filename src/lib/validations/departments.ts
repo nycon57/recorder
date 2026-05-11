@@ -32,7 +32,7 @@ export const updateDepartmentSchema = z.object({
 });
 
 // Delete department schema
-export const deleteDepartmentSchema = z.object({
+const deleteDepartmentSchema = z.object({
   reassignUsersTo: z.string().uuid().nullable().optional(),
 });
 

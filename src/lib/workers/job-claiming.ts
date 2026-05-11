@@ -6,7 +6,7 @@ type JobStatus = JobRow['status'];
 type ClaimedJobRpcRow =
   Database['public']['Functions']['claim_pending_jobs']['Returns'][number];
 
-export interface PrefetchedContent {
+interface PrefetchedContent {
   id: string;
   org_id: string;
   title: string | null;

@@ -10,15 +10,17 @@ import { createVendorSourceRegistryService } from '@/lib/services/vendor-source-
 import { vendorSourceRetireSchema } from '@/lib/schemas/vendor-source';
 
 export const POST = apiHandler(
-  async (request: NextRequest, context: { params: { id: string } }) => {
-    const session = await requireSystemAdmin();
-    const { id } = await Promise.resolve(context.params);
+  async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
+    const { id } = await context.params;
 
     if (!id || typeof id !== 'string') {
       return errors.badRequest('Missing source id');
     }
 
-    const rawBody = await request.json().catch(() => null);
+    const [session, rawBody] = await Promise.all([
+      requireSystemAdmin(),
+      request.json().catch(() => null),
+    ]);
     const parsed = vendorSourceRetireSchema.safeParse(rawBody);
 
     if (!parsed.success) {

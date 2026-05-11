@@ -1,11 +1,9 @@
 ---
-slug: platform-runbooks/incident-response
 title: Incident response
 description: Triage and mitigation guide for vendor-source incidents that spill into platform operations.
 audience: system-admin
 section: platform-runbooks
 order: 10
-updatedAt: "2026-04-20"
 related:
   - vendor-sources/failure-handling
   - vendor-sources/sync-lifecycle

@@ -389,7 +389,7 @@ export function getAnalysisPrompt(
  * @param type - Analysis type
  * @returns Display label
  */
-export function getAnalysisTypeLabel(type: AnalysisType): string {
+function getAnalysisTypeLabel(type: AnalysisType): string {
   const labels: Record<AnalysisType, string> = {
     none: 'No Analysis',
     meeting: 'Meeting Notes',
@@ -461,7 +461,7 @@ export const ANALYSIS_TYPES: readonly AnalysisTypeOption[] = [
  * @param type - Analysis type to look up
  * @returns Analysis type option with metadata
  */
-export function getAnalysisTypeOption(
+function getAnalysisTypeOption(
   type: AnalysisType
 ): AnalysisTypeOption | undefined {
   return ANALYSIS_TYPES.find((option) => option.value === type);
@@ -473,7 +473,7 @@ export function getAnalysisTypeOption(
  * @param value - String to validate
  * @returns True if valid analysis type
  */
-export function isValidAnalysisType(value: string): value is AnalysisType {
+function isValidAnalysisType(value: string): value is AnalysisType {
   const validTypes: AnalysisType[] = [
     'none',
     'meeting',
@@ -494,7 +494,7 @@ export function isValidAnalysisType(value: string): value is AnalysisType {
  * @param options - Content characteristics
  * @returns Recommended analysis type
  */
-export function getRecommendedAnalysisType(options: {
+function getRecommendedAnalysisType(options: {
   /** Content title or filename */
   title?: string;
   /** Content length in characters */

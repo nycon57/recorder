@@ -7,7 +7,7 @@ export interface InteractiveElement {
   label: string; // Visible text label
   type: string; // "button" | "input" | "select" | "link"
   ariaLabel?: string; // Accessibility label if present
-  // eslint-disable-next-line no-undef
+
   boundingRect?: DOMRect; // Position for cursor targeting
   rect?: ContextRect; // Serializable position for voice/API tooling
   priority?: number; // Semantic ranking score (higher = more important)
@@ -236,6 +236,7 @@ export interface PageRegionInspectionResult {
 
 export type KnowledgeMatchBasis =
   | 'exact'
+  | 'app_signature'
   | 'screen_alias'
   | 'app_only'
   | 'domain_alias'

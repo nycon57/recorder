@@ -15,15 +15,19 @@ interface TagInputProps {
   onTagsChange: (tags: Tag[]) => void;
 }
 
-export default function TagInput({ recordingId, tags, onTagsChange }: TagInputProps) {
+export default function TagInput({
+  recordingId,
+  tags,
+  onTagsChange,
+}: TagInputProps) {
   const [isAdding, setIsAdding] = React.useState(false);
   const [newTagName, setNewTagName] = React.useState('');
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [isTagSavePending, setIsTagSavePending] = React.useState(false);
 
   const handleAddTag = async () => {
     if (!newTagName.trim()) return;
 
-    setIsLoading(true);
+    setIsTagSavePending(true);
     try {
       const response = await fetch(`/api/recordings/${recordingId}/tags`, {
         method: 'POST',
@@ -42,26 +46,29 @@ export default function TagInput({ recordingId, tags, onTagsChange }: TagInputPr
     } catch (error) {
       console.error('Error adding tag:', error);
     } finally {
-      setIsLoading(false);
+      setIsTagSavePending(false);
     }
   };
 
   const handleRemoveTag = async (tagId: string) => {
-    setIsLoading(true);
+    setIsTagSavePending(true);
     try {
-      const response = await fetch(`/api/recordings/${recordingId}/tags/${tagId}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `/api/recordings/${recordingId}/tags/${tagId}`,
+        {
+          method: 'DELETE',
+        },
+      );
 
       if (!response.ok) {
         throw new Error('Failed to remove tag');
       }
 
-      onTagsChange(tags.filter(t => t.id !== tagId));
+      onTagsChange(tags.filter((t) => t.id !== tagId));
     } catch (error) {
       console.error('Error removing tag:', error);
     } finally {
-      setIsLoading(false);
+      setIsTagSavePending(false);
     }
   };
 
@@ -101,27 +108,26 @@ export default function TagInput({ recordingId, tags, onTagsChange }: TagInputPr
                 }
               }}
               className="h-7 w-32 text-xs"
-              autoFocus
-              disabled={isLoading}
+              disabled={isTagSavePending}
             />
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 w-7 p-0"
+              className="size-7 p-0"
               onClick={handleAddTag}
-              disabled={!newTagName.trim() || isLoading}
+              disabled={!newTagName.trim() || isTagSavePending}
             >
               <Plus className="size-3" />
             </Button>
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 w-7 p-0"
+              className="size-7 p-0"
               onClick={() => {
                 setIsAdding(false);
                 setNewTagName('');
               }}
-              disabled={isLoading}
+              disabled={isTagSavePending}
             >
               <X className="size-3" />
             </Button>
@@ -132,7 +138,7 @@ export default function TagInput({ recordingId, tags, onTagsChange }: TagInputPr
             variant="outline"
             className="h-7 px-2 text-xs"
             onClick={() => setIsAdding(true)}
-            disabled={isLoading}
+            disabled={isTagSavePending}
           >
             <Plus className="size-3 mr-1" />
             Add Tag

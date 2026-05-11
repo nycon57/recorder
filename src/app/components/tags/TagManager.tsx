@@ -1,6 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useReducer } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  Search,
+  Tag as TagIcon,
+  Loader2,
+} from 'lucide-react';
+import { toast } from 'sonner';
+
 import {
   Dialog,
   DialogContent,
@@ -19,10 +30,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/app/components/ui/table';
-import { Plus, Edit2, Trash2, Search, Tag as TagIcon, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { TAG_COLORS } from '@/lib/validations/tags';
+import { formatStableDate } from '@/lib/utils/formatting';
 
 interface Tag {
   id: string;
@@ -41,38 +51,64 @@ interface TagManagerProps {
 /**
  * TagManager - Modal for managing organization tags
  */
-export function TagManager({ open, onOpenChange }: TagManagerProps) {
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [editingTag, setEditingTag] = useState<Tag | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const [newTagName, setNewTagName] = useState('');
-  const [selectedColor, setSelectedColor] = useState(TAG_COLORS[0]);
-  const [isSaving, setIsSaving] = useState(false);
+export function TagManager(
+  props: Parameters<typeof useTagManagerImplementation>[0],
+) {
+  return useTagManagerImplementation(props);
+}
 
-  // Fetch tags when modal opens
-  useEffect(() => {
-    if (open) {
-      fetchTags();
-    }
-  }, [open]);
-
-  const fetchTags = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/tags?includeUsageCount=true&limit=100');
+function useTagManagerImplementation({ open, onOpenChange }: TagManagerProps) {
+  const queryClient = useQueryClient();
+  const tagQueryKey = ['tags', 'manager'];
+  const { data: tags = [], isLoading } = useQuery<Tag[]>({
+    queryKey: tagQueryKey,
+    enabled: open,
+    queryFn: async () => {
+      const response = await fetch(
+        '/api/tags?includeUsageCount=true&limit=100',
+      );
       if (!response.ok) throw new Error('Failed to fetch tags');
 
       const data = await response.json();
-      setTags(data.data.tags);
-    } catch (error) {
-      console.error('Error fetching tags:', error);
-      toast.error('Failed to load tags');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      return data.data.tags;
+    },
+  });
+  const [state, dispatch] = useReducer(
+    (
+      current: {
+        searchQuery: string;
+        editingTag: Tag | null;
+        isCreating: boolean;
+        newTagName: string;
+        selectedColor: string;
+        isSaving: boolean;
+      },
+      patch: Partial<{
+        searchQuery: string;
+        editingTag: Tag | null;
+        isCreating: boolean;
+        newTagName: string;
+        selectedColor: string;
+        isSaving: boolean;
+      }>,
+    ) => ({ ...current, ...patch }),
+    {
+      searchQuery: '',
+      editingTag: null,
+      isCreating: false,
+      newTagName: '',
+      selectedColor: TAG_COLORS[0],
+      isSaving: false,
+    },
+  );
+  const {
+    searchQuery,
+    editingTag,
+    isCreating,
+    newTagName,
+    selectedColor,
+    isSaving,
+  } = state;
 
   const handleCreateTag = async () => {
     if (!newTagName.trim()) {
@@ -80,7 +116,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
       return;
     }
 
-    setIsSaving(true);
+    dispatch({ isSaving: true });
     try {
       const response = await fetch('/api/tags', {
         method: 'POST',
@@ -97,21 +133,23 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
       }
 
       const data = await response.json();
-      setTags([...tags, { ...data.data, usage_count: 0 }]);
-      setNewTagName('');
-      setIsCreating(false);
+      queryClient.setQueryData<Tag[]>(tagQueryKey, (prev = []) => [
+        ...prev,
+        { ...data.data, usage_count: 0 },
+      ]);
+      dispatch({ newTagName: '', isCreating: false });
       toast.success('Tag created successfully');
     } catch (error: any) {
       toast.error(error.message || 'Failed to create tag');
     } finally {
-      setIsSaving(false);
+      dispatch({ isSaving: false });
     }
   };
 
   const handleUpdateTag = async () => {
     if (!editingTag) return;
 
-    setIsSaving(true);
+    dispatch({ isSaving: true });
     try {
       const response = await fetch(`/api/tags/${editingTag.id}`, {
         method: 'PATCH',
@@ -128,22 +166,28 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
       }
 
       const data = await response.json();
-      setTags(tags.map((tag) =>
-        tag.id === editingTag.id
-          ? { ...data.data, usage_count: tag.usage_count }
-          : tag
-      ));
-      setEditingTag(null);
+      queryClient.setQueryData<Tag[]>(tagQueryKey, (prev = []) =>
+        prev.map((tag) =>
+          tag.id === editingTag.id
+            ? { ...data.data, usage_count: tag.usage_count }
+            : tag,
+        ),
+      );
+      dispatch({ editingTag: null });
       toast.success('Tag updated successfully');
     } catch (error: any) {
       toast.error(error.message || 'Failed to update tag');
     } finally {
-      setIsSaving(false);
+      dispatch({ isSaving: false });
     }
   };
 
   const handleDeleteTag = async (tagId: string) => {
-    if (!confirm('Are you sure you want to delete this tag? This will remove it from all items.')) {
+    if (
+      !confirm(
+        'Are you sure you want to delete this tag? This will remove it from all items.',
+      )
+    ) {
       return;
     }
 
@@ -157,7 +201,9 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
         throw new Error(error.message || 'Failed to delete tag');
       }
 
-      setTags(tags.filter((tag) => tag.id !== tagId));
+      queryClient.setQueryData<Tag[]>(tagQueryKey, (prev = []) =>
+        prev.filter((tag) => tag.id !== tagId),
+      );
       toast.success('Tag deleted successfully');
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete tag');
@@ -166,7 +212,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
 
   // Filter tags based on search
   const filteredTags = tags.filter((tag) =>
-    tag.name.toLowerCase().includes(searchQuery.toLowerCase())
+    tag.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   return (
@@ -174,7 +220,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <TagIcon className="h-5 w-5" />
+            <TagIcon className="size-5" />
             Manage Tags
           </DialogTitle>
           <DialogDescription>
@@ -187,19 +233,19 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
           <div className="space-y-4 pb-4">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 <Input
                   placeholder="Search tags..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => dispatch({ searchQuery: e.target.value })}
                   className="pl-9"
                 />
               </div>
               <Button
-                onClick={() => setIsCreating(true)}
+                onClick={() => dispatch({ isCreating: true })}
                 disabled={isCreating}
               >
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="size-4 mr-2" />
                 New Tag
               </Button>
             </div>
@@ -213,16 +259,14 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                     id="new-tag-name"
                     placeholder="Enter tag name..."
                     value={newTagName}
-                    onChange={(e) => setNewTagName(e.target.value)}
+                    onChange={(e) => dispatch({ newTagName: e.target.value })}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         handleCreateTag();
                       } else if (e.key === 'Escape') {
-                        setIsCreating(false);
-                        setNewTagName('');
+                        dispatch({ isCreating: false, newTagName: '' });
                       }
                     }}
-                    autoFocus
                   />
                 </div>
 
@@ -233,11 +277,11 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                       <button
                         key={color}
                         type="button"
-                        onClick={() => setSelectedColor(color as any)}
+                        onClick={() => dispatch({ selectedColor: color })}
                         className={cn(
-                          'w-8 h-8 rounded-full transition-all',
+                          'size-8 rounded-full transition-all',
                           selectedColor === color &&
-                            'ring-2 ring-offset-2 ring-accent'
+                            'ring-2 ring-offset-2 ring-accent',
                         )}
                         style={{ backgroundColor: color }}
                       />
@@ -251,15 +295,16 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                     onClick={handleCreateTag}
                     disabled={isSaving || !newTagName.trim()}
                   >
-                    {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    {isSaving && (
+                      <Loader2 className="size-4 mr-2 animate-spin" />
+                    )}
                     Create
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setIsCreating(false);
-                      setNewTagName('');
+                      dispatch({ isCreating: false, newTagName: '' });
                     }}
                   >
                     Cancel
@@ -273,11 +318,11 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
           <div className="flex-1 overflow-auto border rounded-lg">
             {isLoading ? (
               <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <Loader2 className="size-8 animate-spin text-muted-foreground" />
               </div>
             ) : filteredTags.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-                <TagIcon className="h-12 w-12 mb-2 opacity-20" />
+                <TagIcon className="size-12 mb-2 opacity-20" />
                 <p>No tags found</p>
                 {searchQuery && (
                   <p className="text-sm">Try adjusting your search</p>
@@ -299,7 +344,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                     <TableRow key={tag.id}>
                       <TableCell>
                         <div
-                          className="w-6 h-6 rounded-full"
+                          className="size-6 rounded-full"
                           style={{ backgroundColor: tag.color }}
                         />
                       </TableCell>
@@ -308,17 +353,21 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                           <Input
                             value={editingTag.name}
                             onChange={(e) =>
-                              setEditingTag({ ...editingTag, name: e.target.value })
+                              dispatch({
+                                editingTag: {
+                                  ...editingTag,
+                                  name: e.target.value,
+                                },
+                              })
                             }
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 handleUpdateTag();
                               } else if (e.key === 'Escape') {
-                                setEditingTag(null);
+                                dispatch({ editingTag: null });
                               }
                             }}
                             className="h-8"
-                            autoFocus
                           />
                         ) : (
                           <span className="font-medium">{tag.name}</span>
@@ -327,13 +376,14 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                       <TableCell>
                         {tag.usage_count !== undefined && (
                           <span className="text-sm text-muted-foreground">
-                            {tag.usage_count} {tag.usage_count === 1 ? 'item' : 'items'}
+                            {tag.usage_count}{' '}
+                            {tag.usage_count === 1 ? 'item' : 'items'}
                           </span>
                         )}
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-muted-foreground">
-                          {new Date(tag.created_at).toLocaleDateString()}
+                          {formatStableDate(tag.created_at)}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
@@ -350,7 +400,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => setEditingTag(null)}
+                              onClick={() => dispatch({ editingTag: null })}
                             >
                               Cancel
                             </Button>
@@ -360,9 +410,9 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => setEditingTag(tag)}
+                              onClick={() => dispatch({ editingTag: tag })}
                             >
-                              <Edit2 className="h-4 w-4" />
+                              <Edit2 className="size-4" />
                             </Button>
                             <Button
                               size="sm"
@@ -370,7 +420,7 @@ export function TagManager({ open, onOpenChange }: TagManagerProps) {
                               onClick={() => handleDeleteTag(tag.id)}
                               className="text-red-600 hover:text-red-700"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="size-4" />
                             </Button>
                           </div>
                         )}

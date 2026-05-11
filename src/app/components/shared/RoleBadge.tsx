@@ -151,7 +151,7 @@ export function RoleBadge({
 /**
  * Get the color class for a role (useful for other components)
  */
-export function getRoleColor(role: UserRole): string {
+function getRoleColor(role: UserRole): string {
   const colorMap: Record<UserRole, string> = {
     owner: 'text-primary',
     admin: 'text-accent',
@@ -164,6 +164,6 @@ export function getRoleColor(role: UserRole): string {
 /**
  * Get the role configuration
  */
-export function getRoleConfig(role: UserRole) {
+function getRoleConfig(role: UserRole) {
   return ROLE_CONFIG[role];
 }

@@ -19,13 +19,13 @@ type RouteContext = {
 
 export const GET = apiHandler(
   async (_request: NextRequest, context: RouteContext) => {
-    const { orgId } = await requireAdmin();
-    const { sessionId } = await context.params;
-
-    const review = await getExtensionDebugSessionReview({
-      orgId,
-      sessionId,
-    });
+    const review = await Promise.all([requireAdmin(), context.params]).then(
+      ([{ orgId }, { sessionId }]) =>
+        getExtensionDebugSessionReview({
+          orgId,
+          sessionId,
+        }),
+    );
 
     if (!review) {
       return errors.notFound('Extension debug session');
